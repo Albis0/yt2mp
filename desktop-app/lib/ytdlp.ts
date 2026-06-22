@@ -28,6 +28,7 @@ export interface VideoFormat {
 }
 
 export interface VideoInfo {
+  id: string;
   title: string;
   thumbnail: string;
   duration: number;
@@ -78,6 +79,7 @@ export function parseVideoInfo(raw: string): VideoInfo {
   const formats: VideoFormat[] = data.formats ?? [];
 
   return {
+    id: data.id ?? "",
     title: data.title ?? "Unknown video",
     thumbnail: data.thumbnail ?? "",
     duration: data.duration ?? 0,

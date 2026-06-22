@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build output and bundled binaries — not our source.
+    "release/**",
+    "resources/**",
+    "electron/dist/**",
+    // Node CommonJS build scripts use require() by design.
+    "scripts/**",
   ]),
 ]);
 

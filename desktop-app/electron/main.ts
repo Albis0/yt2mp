@@ -6,6 +6,7 @@
 // mode), and relaunch ourselves with the variable stripped so the real Electron
 // runtime takes over.
 if (process.env.ELECTRON_RUN_AS_NODE) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const cp = require("child_process") as typeof import("child_process");
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;

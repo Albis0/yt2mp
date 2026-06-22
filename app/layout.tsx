@@ -13,8 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "yt2mp — YouTube downloader",
-    description: "Ad-free, fast YouTube MP3/MP4 downloader.",
+    metadataBase: new URL("https://yt2mp.onrender.com"),
+    title: "yt2mp — clean YouTube to MP3 / MP4",
+    description:
+        "A clean, ad-free YouTube downloader that runs on your own computer. No upload limits, no shared server, no waiting.",
+    icons: {icon: "/icon.png"},
+    openGraph: {
+        title: "yt2mp — clean YouTube to MP3 / MP4",
+        description:
+            "A clean, ad-free YouTube downloader that runs on your own computer.",
+        images: ["/icon.png"],
+    },
 };
 
 export default function RootLayout({
