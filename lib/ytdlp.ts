@@ -7,6 +7,26 @@ export function isValidYoutubeUrl(url: string): boolean {
   return YOUTUBE_URL_PATTERN.test(url);
 }
 
+// When set, authenticates yt-dlp as a logged-in user so requests aren't
+// subject to the IP-based bot checks that hit shared cloud-host IPs.
+function cookieArgs(): string[] {
+  const cookiesFile = process.env.COOKIES_FILE;
+  return cookiesFile ? ["--cookies", cookiesFile] : [];
+}
+
+// yt-dlp needs a JS runtime + the EJS challenge-solver script to solve
+// YouTube's signature/n-challenge. Bun ships in the base image but isn't
+// auto-detected, and the solver script itself is fetched on demand from GitHub.
+function commonArgs(): string[] {
+  return [
+    ...cookieArgs(),
+    "--js-runtimes",
+    "bun:/usr/local/bin/bun",
+    "--remote-components",
+    "ejs:github",
+  ];
+}
+
 export interface VideoFormat {
   format_id: string;
   ext: string;
@@ -53,34 +73,41 @@ function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   });
 }
 
-export async function getVideoInfo(url: string): Promise<VideoInfo> {
-  const { stdout } = await runYtDlp(["-J", "--no-playlist", url]);
-  const data = JSON.parse(stdout);
-
-  const formats: VideoFormat[] = data.formats ?? [];
+export function extractAvailableHeights(formats: VideoFormat[]): number[] {
   const heights = new Set<number>();
   for (const f of formats) {
     if (f.vcodec && f.vcodec !== "none" && f.height) {
       heights.add(f.height);
     }
   }
+  return Array.from(heights).sort((a, b) => b - a);
+}
+
+export function parseVideoInfo(raw: string): VideoInfo {
+  const data = JSON.parse(raw);
+  const formats: VideoFormat[] = data.formats ?? [];
 
   return {
     title: data.title ?? "Unknown video",
     thumbnail: data.thumbnail ?? "",
     duration: data.duration ?? 0,
     uploader: data.uploader ?? "",
-    availableHeights: Array.from(heights).sort((a, b) => b - a),
+    availableHeights: extractAvailableHeights(formats),
   };
+}
+
+export async function getVideoInfo(url: string): Promise<VideoInfo> {
+  const { stdout } = await runYtDlp([...commonArgs(), "-J", "--no-playlist", url]);
+  return parseVideoInfo(stdout);
 }
 
 export type DownloadFormat = "mp3" | "mp4";
 
-function buildYtDlpAudioArgs(url: string): string[] {
-  return ["-f", "bestaudio", "--no-playlist", "-o", "-", url];
+export function buildYtDlpAudioArgs(url: string): string[] {
+  return [...commonArgs(), "-f", "bestaudio", "--no-playlist", "-o", "-", url];
 }
 
-function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
+export function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
   const height = quality ? parseInt(quality, 10) : undefined;
   const formatSelector =
     height && Number.isFinite(height)
@@ -89,7 +116,7 @@ function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
 
   // A single pre-muxed "best" stream is required (not bestvideo+bestaudio),
   // since separate streams can't be merged while piping through stdout.
-  return ["-f", formatSelector, "--no-playlist", "-o", "-", url];
+  return [...commonArgs(), "-f", formatSelector, "--no-playlist", "-o", "-", url];
 }
 
 /**
