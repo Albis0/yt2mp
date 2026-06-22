@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# yt2mp
 
-## Getting Started
+An ad-free, clean YouTube → MP3/MP4 download interface. Built with Next.js (App Router),
+using [yt-dlp](https://github.com/yt-dlp/yt-dlp) + ffmpeg as the download engine.
 
-First, run the development server:
+> Open source, intended for personal use. Downloading YouTube content may violate
+> YouTube's Terms of Service; use at your own responsibility.
+
+## How it works
+
+- `app/api/info` — given a YouTube link, fetches the title, thumbnail, duration and
+  available video qualities (`yt-dlp -J`).
+- `app/api/download` — streams the requested format (`mp3` or `mp4`) straight to the
+  browser without writing to disk.
+  - **MP3**: pulls yt-dlp's raw audio stream and pipes it live into an ffmpeg process
+    (yt-dlp's own ffmpeg post-processing doesn't work over stdout pipes).
+  - **MP4**: streams yt-dlp's single pre-muxed `best` format directly.
+
+## Local development
+
+This project uses [Bun](https://bun.sh).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**yt-dlp** and **ffmpeg** must be installed and on your PATH before running the server:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pip install yt-dlp
+# ffmpeg: https://ffmpeg.org/download.html
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Test it at `http://localhost:3000`.
 
-## Learn More
+## Production build
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+bun run build
+bun run start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Running with Docker
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The image bundles the Bun runtime, yt-dlp and ffmpeg — nothing needs to be installed on
+the host machine.
 
-## Deploy on Vercel
+```bash
+docker build -t yt2mp .
+docker run -p 3000:3000 yt2mp
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Visit `http://localhost:3000`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment
+
+Since yt-dlp requires a long-running process, **serverless platforms like Vercel/Netlify
+won't work**. Use a platform that supports Docker images with an always-on server:
+Railway, Render, Fly.io, or your own VPS.
+
+General flow (Railway example):
+1. Push the repo to GitHub.
+2. In Railway, choose "New Project → Deploy from GitHub repo".
+3. Railway auto-detects the `Dockerfile` and builds it.
+4. The `PORT` environment variable is provided automatically by Railway; the app already reads it.
+
+## Notes / limitations
+
+- No rate limiting — designed for personal/small-circle use. Add one if you expect
+  public traffic at scale.
+- The ad slot (`components/AdSidebar.tsx`) is currently an empty placeholder; drop in
+  whatever ad code you want (AdSense, etc.). It's only visible on desktop and hidden on mobile.
+- Only youtube.com / youtu.be links are accepted (see the regex in `lib/ytdlp.ts`).
