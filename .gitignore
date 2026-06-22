@@ -43,3 +43,10 @@ next-env.d.ts
 #claude
 .claude
 cookies.txt
+
+# desktop-app (separate Electron project, own node_modules/build output)
+desktop-app/node_modules
+desktop-app/.next
+desktop-app/dist
+desktop-app/out
+desktop-app/electron/dist
