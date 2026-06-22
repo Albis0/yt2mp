@@ -107,12 +107,18 @@ export function buildYtDlpAudioArgs(url: string): string[] {
   return [...commonArgs(), "-f", "bestaudio", "--no-playlist", "-o", "-", url];
 }
 
+// Resolutions above this need more memory to transcode/stream than the
+// free-tier host this runs on can spare, so requests are clamped here too
+// (the UI already hides higher options, but the API must not trust that).
+const MAX_VIDEO_HEIGHT = 720;
+
 export function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
-  const height = quality ? parseInt(quality, 10) : undefined;
-  const formatSelector =
-    height && Number.isFinite(height)
-      ? `best[height<=${height}][ext=mp4]/best[height<=${height}]`
-      : "best[ext=mp4]/best";
+  const requested = quality ? parseInt(quality, 10) : undefined;
+  const height =
+    requested && Number.isFinite(requested)
+      ? Math.min(requested, MAX_VIDEO_HEIGHT)
+      : MAX_VIDEO_HEIGHT;
+  const formatSelector = `best[height<=${height}][ext=mp4]/best[height<=${height}]`;
 
   // A single pre-muxed "best" stream is required (not bestvideo+bestaudio),
   // since separate streams can't be merged while piping through stdout.
@@ -129,7 +135,7 @@ export function spawnMp3Stream(url: string) {
   const ytdlp = spawn("yt-dlp", buildYtDlpAudioArgs(url), { windowsHide: true });
   const ffmpeg = spawn(
     "ffmpeg",
-    ["-i", "pipe:0", "-vn", "-f", "mp3", "-b:a", "192k", "pipe:1"],
+    ["-i", "pipe:0", "-vn", "-f", "mp3", "-b:a", "128k", "-threads", "1", "pipe:1"],
     { windowsHide: true }
   );
 

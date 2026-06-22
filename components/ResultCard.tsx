@@ -22,7 +22,9 @@ export default function ResultCard({info, url}: ResultCardProps) {
         return `/api/download?${params.toString()}`;
     };
 
-    const topHeights = info.availableHeights.slice(0, 4);
+    // Capped at 720p: higher resolutions need more memory to transcode/stream
+    // than the free-tier host this runs on can spare.
+    const topHeights = info.availableHeights.filter((h) => h <= 720).slice(0, 4);
 
     return (
         <div className="result-card">

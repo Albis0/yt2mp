@@ -6,6 +6,6 @@ if [ -n "$COOKIES_CONTENT" ]; then
   export COOKIES_FILE=/tmp/cookies.txt
 fi
 
-node /opt/bgutil-pot/server/build/main.js &
+node --max-old-space-size=64 /opt/bgutil-pot/server/build/main.js &
 
 exec bun run start

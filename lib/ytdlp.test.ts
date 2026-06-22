@@ -152,10 +152,12 @@ describe("buildYtDlpAudioArgs", () => {
 });
 
 describe("buildYtDlpVideoArgs", () => {
-  test("defaults to best mp4 when no quality is given", () => {
+  test("defaults to the 720p memory cap when no quality is given", () => {
     const args = buildYtDlpVideoArgs("https://youtu.be/abc");
     const formatIndex = args.indexOf("-f");
-    expect(args[formatIndex + 1]).toBe("best[ext=mp4]/best");
+    expect(args[formatIndex + 1]).toBe(
+      "best[height<=720][ext=mp4]/best[height<=720]"
+    );
   });
 
   test("constrains to the requested height when quality is given", () => {
@@ -166,14 +168,24 @@ describe("buildYtDlpVideoArgs", () => {
     );
   });
 
-  test("falls back to default selector for a non-numeric quality", () => {
+  test("clamps a requested height above the memory cap down to 720p", () => {
+    const args = buildYtDlpVideoArgs("https://youtu.be/abc", "1080");
+    const formatIndex = args.indexOf("-f");
+    expect(args[formatIndex + 1]).toBe(
+      "best[height<=720][ext=mp4]/best[height<=720]"
+    );
+  });
+
+  test("falls back to the 720p cap for a non-numeric quality", () => {
     const args = buildYtDlpVideoArgs("https://youtu.be/abc", "not-a-number");
     const formatIndex = args.indexOf("-f");
-    expect(args[formatIndex + 1]).toBe("best[ext=mp4]/best");
+    expect(args[formatIndex + 1]).toBe(
+      "best[height<=720][ext=mp4]/best[height<=720]"
+    );
   });
 
   test("requests a single pre-muxed stream (no separate merge)", () => {
-    const args = buildYtDlpVideoArgs("https://youtu.be/abc", "1080");
+    const args = buildYtDlpVideoArgs("https://youtu.be/abc", "480");
     expect(args).not.toContain("--merge-output-format");
   });
 });
