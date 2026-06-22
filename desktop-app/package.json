@@ -1,0 +1,75 @@
+{
+  "name": "desktop-app",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/dist/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && node scripts/copy-standalone-assets.js",
+    "start": "next start",
+    "lint": "eslint",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:icon": "node scripts/make-icon.js",
+    "electron:dev": "bun run build && bun run build:electron && electron .",
+    "electron:build": "bun run build:icon && bun run build && bun run build:electron && electron-builder"
+  },
+  "dependencies": {
+    "next": "16.2.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "png-to-ico": "^3.0.1",
+    "typescript": "^5"
+  },
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "electron-winstaller",
+    "sharp",
+    "unrs-resolver"
+  ],
+  "build": {
+    "appId": "com.yt2mp.desktop",
+    "productName": "yt2mp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/yt-dlp.exe",
+        "to": "yt-dlp.exe"
+      },
+      {
+        "from": "resources/ffmpeg.exe",
+        "to": "ffmpeg.exe"
+      }
+    ],
+    "afterPack": "scripts/after-pack.js",
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  }
+}
