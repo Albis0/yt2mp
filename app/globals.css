@@ -4,6 +4,7 @@
   --surface-2: #1b1e25;
   --foreground: #f4f5f7;
   --muted: #8b93a0;
+  --muted-2: #6b7280;
   --accent: #ff3b30;
   --accent-2: #ff7a18;
   --accent-hover: #ff5a4f;
@@ -200,6 +201,23 @@ a {
   color: var(--muted);
   font-size: 0.85rem;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+.download-mirror {
+  color: var(--muted-2, #6b7280);
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.download-mirror a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.download-mirror a:hover {
+  color: var(--accent);
 }
 
 /* ---------- Features ---------- */

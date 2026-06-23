@@ -1,11 +1,15 @@
 import Image from "next/image";
 import AdSidebar from "@/components/AdSidebar";
 
-// Direct-download link for the Windows installer, hosted on Google Drive. The
-// installer is large enough that Drive shows a "can't scan for viruses" warning
-// page on the normal link; the drive.usercontent.google.com host with
-// confirm=t skips that and serves the .exe directly as an attachment.
-const DOWNLOAD_URL =
+// Primary download: GitHub Releases. Fast CDN, no size warnings, and "latest"
+// always points at the newest published release.
+const GITHUB_URL =
+    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp.Setup.0.2.0.exe";
+
+// Mirror: Google Drive. The installer is large enough that Drive shows a
+// "can't scan for viruses" page on the normal link; the
+// drive.usercontent.google.com host with confirm=t serves the .exe directly.
+const DRIVE_URL =
     "https://drive.usercontent.google.com/download?id=1RBWQJEYGNC9Fn3WZTvBEprTB5a1dWFqK&export=download&confirm=t";
 
 // A static waveform — bar heights chosen by hand so it reads as audio, not a
@@ -52,7 +56,7 @@ export default function Home() {
                     </p>
 
                     <div className="download-cta">
-                        <a className="download-btn" href={DOWNLOAD_URL}>
+                        <a className="download-btn" href={GITHUB_URL}>
                             <span className="download-btn-icon" aria-hidden="true">
                                 ↓
                             </span>
@@ -60,6 +64,10 @@ export default function Home() {
                         </a>
                         <p className="download-note">
                             Free · Windows 10/11 · ~210&nbsp;MB · yt-dlp + ffmpeg bundled
+                        </p>
+                        <p className="download-mirror">
+                            Download not starting?{" "}
+                            <a href={DRIVE_URL}>Get it from Google Drive</a> instead.
                         </p>
                     </div>
                 </div>
