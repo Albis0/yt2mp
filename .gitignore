@@ -49,3 +49,7 @@ desktop-app/.next
 desktop-app/dist
 desktop-app/out
 desktop-app/electron/dist
+
+# generated audit reports, not meant to be tracked
+/PROJECT_AUDIT.md
+/RELEASE_CANDIDATE_REPORT.md

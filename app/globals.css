@@ -203,21 +203,40 @@ a {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-.download-mirror {
-  color: var(--muted-2, #6b7280);
-  font-size: 0.82rem;
-  margin-top: 2px;
+.source-icons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
 }
 
-.download-mirror a {
+.source-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: color 0.15s ease;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
 
-.download-mirror a:hover {
-  color: var(--accent);
+.source-icon:hover {
+  border-color: var(--accent);
+  color: var(--foreground);
+  transform: translateY(-1px);
+}
+
+.source-icon svg {
+  flex-shrink: 0;
+}
+
+.source-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---------- Features ---------- */
@@ -251,6 +270,66 @@ a {
 .feature p {
   color: var(--muted);
   font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  width: 100%;
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.footer-trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.footer-trust a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.footer-trust a:hover {
+  color: var(--accent);
+}
+
+.footer-muted {
+  color: var(--muted-2);
+}
+
+.footer-dot {
+  color: var(--muted-2);
+}
+
+.footer-hash {
+  max-width: 60ch;
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.footer-hash code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.footer-disclaimer {
+  max-width: 60ch;
+  color: var(--muted-2);
+  font-size: 0.78rem;
   line-height: 1.55;
 }
 

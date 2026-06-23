@@ -1,15 +1,63 @@
 # yt2mp
 
+A clean, ad-free YouTube → MP3 / MP4 downloader. The actual downloading runs as a
+Windows desktop app **on your own computer** — no shared server, no upload limits,
+no ads.
+
 This repo has two independent parts:
 
 - **Root** (this directory): a small Next.js landing page, deployed to Render. It only
   describes the project and links to the desktop app download — it does no downloading
   itself.
-- **`desktop-app/`**: the actual YouTube → MP3/MP4 downloader, an Electron app that runs
-  entirely on the user's machine. See [desktop-app/README.md](desktop-app/README.md).
+- **`desktop-app/`**: the Electron desktop app that does the actual work. See
+  [desktop-app/README.md](desktop-app/README.md).
 
-> Open source, intended for personal use. Downloading YouTube content may violate
-> YouTube's Terms of Service; use at your own responsibility.
+## Download
+
+- **[Latest release](https://github.com/Albis0/yt2mp/releases/latest)** — grab the
+  Windows installer (`yt2mp Setup x.y.z.exe`) and run it.
+- A Google Drive mirror is linked on the landing page as a fallback.
+
+## ⚠️ Disclaimer — use at your own risk
+
+This is free, open-source software provided **"as is", without any warranty** (see the
+[license](#license)). By downloading, building, or using it you agree that:
+
+- **You are solely responsible** for how you use this tool and for any content you
+  download with it.
+- Downloading content from YouTube may violate
+  [YouTube's Terms of Service](https://www.youtube.com/t/terms). Only download content
+  you have the right to (e.g. your own uploads, public-domain, Creative Commons, or
+  material you're otherwise permitted to save). Respect copyright law in your country.
+- The authors and contributors are **not liable** for any misuse, data loss, account
+  action, legal consequence, or damage arising from the use of this software.
+
+This project is intended for personal use — for example saving your own videos or
+content you're allowed to keep offline. It is **not** intended to facilitate copyright
+infringement.
+
+## 🛡️ Virus scan
+
+Every release installer is scanned before publishing. The installer bundles
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://ffmpeg.org/) — both
+well-known open-source tools — but because it's an unsigned `.exe` that spawns those
+binaries, some antivirus engines may flag it heuristically (a false positive common to
+yt-dlp wrappers).
+
+- **MetaDefender Cloud:** [0/21 engines — no threats detected](https://metadefender.com/results/file/YnpJMk1EWXlNekZKTUZkVVR6Rk9WV28xWkVsd1YwWlBZMGhNX21kYWFzYTdlMGQ0Y2U1Ng/threats-prevented)
+  (`yt2mp Setup 0.2.0.exe`, SHA256 `4f6056135aee5cb8df0647a24465d001090220621cb3b18c4444c490b8a23771`)
+- **VirusTotal:** _coming soon_
+
+If your browser or Windows SmartScreen warns about the download, that's the unsigned-exe
+warning — you can verify the file yourself with the scan links above.
+
+## License
+
+Licensed under the **[GNU General Public License v3.0 or later](LICENSE)**.
+
+In short: you're free to use, study, modify, and redistribute this software, but any
+distributed derivative must also be open source under the GPL. (Translation: someone can
+fork it, but they can't legally take it closed-source and wrap it in ads.)
 
 ## Why split it this way
 
@@ -36,22 +84,13 @@ bun run dev
 
 Visit `http://localhost:3000`.
 
-## Production build
-
-```bash
-bun run build
-bun run start
-```
-
 ## Deployment
 
-Render builds this with its Node/Bun buildpack (no Dockerfile needed anymore — the
-landing page has no yt-dlp/ffmpeg dependency). Push to `main` and Render redeploys
+Render builds the landing page from the root `Dockerfile` (a minimal bun image that
+serves the static Next.js page on `$PORT`). Push to `main` and Render redeploys
 automatically.
 
 ## Notes
 
-- The ad slot (`components/AdSidebar.tsx`) is currently an empty placeholder; drop in
-  whatever ad code you want (AdSense, etc.). It's only visible on desktop and hidden on mobile.
-- The "Download for Windows" button on the landing page points at this repo's GitHub
-  Releases page — make sure a release with the built `.exe` exists before linking to it.
+- The ad slot (`components/AdSidebar.tsx`) is an empty placeholder; drop in whatever ad
+  code you want. It's only visible on desktop and hidden on mobile.

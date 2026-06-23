@@ -46,3 +46,6 @@ next-env.d.ts
 # bundled binaries — too large for git (yt-dlp ~18MB, ffmpeg ~100MB).
 # Downloaded separately into resources/; see README for where to get them.
 /resources/*.exe
+
+#ideas
+ideas.md
