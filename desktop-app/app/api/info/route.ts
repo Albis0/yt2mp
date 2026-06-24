@@ -6,6 +6,7 @@ import {
   isValidYoutubeUrl,
   searchVideoInfo,
 } from "@/lib/ytdlp";
+import { refineSearchQuery } from "@/lib/groq";
 
 export async function POST(req: NextRequest) {
   let url: string | undefined;
@@ -53,9 +54,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Not a recognizable YouTube URL — treat it as a search query instead of
-  // rejecting it, so users can type a song name instead of hunting for a link.
+  // rejecting it, so users can type a request in plain language instead of
+  // hunting for a link. Groq turns loose phrasing ("that troye sivan song
+  // with rush in it") into a precise search query before it hits yt-dlp;
+  // if Groq is unreachable, refineSearchQuery just returns the input as-is.
   try {
-    const info = await searchVideoInfo(clean);
+    const query = await refineSearchQuery(clean);
+    const info = await searchVideoInfo(query);
     return NextResponse.json({ kind: "video", video: info });
   } catch (err) {
     console.error("searchVideoInfo failed:", err);

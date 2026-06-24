@@ -150,7 +150,7 @@ export default function DownloadForm() {
       <form className="download-form" onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="Paste a YouTube/playlist link, or type a song name…"
+          placeholder="Paste a YouTube/playlist link, or describe what you want…"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className="url-input"
