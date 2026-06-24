@@ -247,7 +247,7 @@ export default function Home() {
                             </table>
                         </section>
 
-                        <section className="cell">
+                        <section className="cell cell-wide">
                             <h2 className="cell-title">Verify what you downloaded</h2>
                             <p className="cell-text">
                                 The installer is unsigned, so Windows SmartScreen will warn
