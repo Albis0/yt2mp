@@ -146,6 +146,14 @@ export default function Home() {
                                         <th scope="row">AI search</th>
                                         <td>describe what you want instead of finding a link</td>
                                     </tr>
+                                    <tr>
+                                        <th scope="row">Playlists</th>
+                                        <td>paste a playlist link, pick which tracks to grab</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">Pause / Stop</th>
+                                        <td>control any download in progress, resume without restarting</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -200,12 +208,12 @@ export default function Home() {
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
-                                        <th scope="row">Chromium + Electron + Node</th>
-                                        <td>~100 MB</td>
+                                        <th scope="row">Chromium + Electron + Node + app code</th>
+                                        <td>~130 MB</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">ffmpeg.exe</th>
-                                        <td>~97 MB</td>
+                                        <td>~67 MB</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">yt-dlp.exe</th>
@@ -216,6 +224,29 @@ export default function Home() {
                         </section>
 
                         <section className="cell">
+                            <h2 className="cell-title">What&apos;s next</h2>
+                            <p className="cell-text">
+                                Things on the list, not promised on a timeline:
+                            </p>
+                            <table className="info-table info-table-tight">
+                                <tbody>
+                                    <tr>
+                                        <th scope="row">More AI keys</th>
+                                        <td>more free-tier keys in rotation as usage grows</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">Code signing</th>
+                                        <td>remove the SmartScreen warning on first run</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">Batch downloads</th>
+                                        <td>queue multiple links at once outside of a playlist</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </section>
+
+                        <section className="cell cell-wide">
                             <h2 className="cell-title">Specifications</h2>
                             <table className="info-table info-table-tight">
                                 <tbody>
