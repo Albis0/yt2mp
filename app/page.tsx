@@ -93,7 +93,7 @@ export default function Home() {
                                 <div className="get-meta">
                                     <span className="get-name">{INSTALLER_NAME}</span>
                                     <span className="get-sep">·</span>
-                                    <span>~225 MB</span>
+                                    <span>~215 MB</span>
                                     <span className="get-sep">·</span>
                                     <span>Windows 10/11</span>
                                 </div>
@@ -169,7 +169,7 @@ export default function Home() {
                         </section>
 
                         <section className="cell">
-                            <h2 className="cell-title">Why the installer is ~225 MB</h2>
+                            <h2 className="cell-title">Why the installer is ~215 MB</h2>
                             <p className="cell-text">
                                 Most of it isn&apos;t this app&apos;s code — it&apos;s the
                                 runtime and tools it ships with:
@@ -187,10 +187,6 @@ export default function Home() {
                                     <tr>
                                         <th scope="row">yt-dlp.exe</th>
                                         <td>~18 MB</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">app code, overhead</th>
-                                        <td>~10 MB</td>
                                     </tr>
                                 </tbody>
                             </table>
