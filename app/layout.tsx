@@ -1,27 +1,29 @@
 import type {Metadata} from "next";
-import {Geist, Geist_Mono} from "next/font/google";
+import {IBM_Plex_Mono, IBM_Plex_Sans} from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-    variable: "--font-geist-sans",
+const plexSans = IBM_Plex_Sans({
+    variable: "--font-plex-sans",
     subsets: ["latin"],
+    weight: ["400", "500", "600"],
 });
 
-const geistMono = Geist_Mono({
-    variable: "--font-geist-mono",
+const plexMono = IBM_Plex_Mono({
+    variable: "--font-plex-mono",
     subsets: ["latin"],
+    weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
     metadataBase: new URL("https://yt2mp.onrender.com"),
-    title: "yt2mp — clean YouTube to MP3 / MP4",
+    title: "yt2mp — YouTube to MP3/MP4, run locally",
     description:
-        "A clean, ad-free YouTube downloader that runs on your own computer. No upload limits, no shared server, no waiting.",
+        "A Windows desktop app that downloads YouTube audio/video as MP3 or MP4. No server, no account, no ads — open source under GPL-3.0.",
     icons: {icon: "/icon.png"},
     openGraph: {
-        title: "yt2mp — clean YouTube to MP3 / MP4",
+        title: "yt2mp — YouTube to MP3/MP4, run locally",
         description:
-            "A clean, ad-free YouTube downloader that runs on your own computer.",
+            "A Windows desktop app that downloads YouTube audio/video as MP3 or MP4. No server, no account, no ads.",
         images: ["/icon.png"],
     },
 };
@@ -32,7 +34,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+        <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
             <body>{children}</body>
         </html>
     );

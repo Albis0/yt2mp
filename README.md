@@ -90,7 +90,3 @@ Render builds the landing page from the root `Dockerfile` (a minimal bun image t
 serves the static Next.js page on `$PORT`). Push to `main` and Render redeploys
 automatically.
 
-## Notes
-
-- The ad slot (`components/AdSidebar.tsx`) is an empty placeholder; drop in whatever ad
-  code you want. It's only visible on desktop and hidden on mobile.
