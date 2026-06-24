@@ -280,6 +280,12 @@ a:focus-visible {
   grid-column: 1 / -1;
 }
 
+.split-cols {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 40px;
+}
+
 .cell-title {
   font-size: 0.76rem;
   font-weight: 600;
@@ -415,6 +421,11 @@ a:focus-visible {
 
   .cell-wide {
     grid-column: auto;
+  }
+
+  .split-cols {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 

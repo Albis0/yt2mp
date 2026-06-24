@@ -5,6 +5,7 @@ import {
     REPO_URL,
     LICENSE_URL,
     ISSUES_URL,
+    METADEFENDER_URL,
     VERSION,
     INSTALLER_NAME,
     INSTALLER_SHA256,
@@ -231,10 +232,6 @@ export default function Home() {
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
-                                        <th scope="row">More AI keys</th>
-                                        <td>more free-tier keys in rotation as usage grows</td>
-                                    </tr>
-                                    <tr>
                                         <th scope="row">Code signing</th>
                                         <td>remove the SmartScreen warning on first run</td>
                                     </tr>
@@ -283,9 +280,12 @@ export default function Home() {
                             <p className="cell-text">
                                 The installer is unsigned, so Windows SmartScreen will warn
                                 on first run — that&apos;s the missing code-signing
-                                certificate, not a detected threat. A MetaDefender scan for
-                                this build is pending; check the hash below against what
-                                you downloaded in the meantime.
+                                certificate, not a detected threat.{" "}
+                                <a href={METADEFENDER_URL} target="_blank" rel="noreferrer">
+                                    See the MetaDefender scan
+                                </a>{" "}
+                                for this build, or check the hash below against what you
+                                downloaded.
                             </p>
                             <div className="hash-row">
                                 <span className="hash-label">sha256</span>
@@ -293,25 +293,30 @@ export default function Home() {
                             </div>
                         </section>
 
-                        <section className="cell cell-wide">
+                        <section className="cell cell-wide cell-split">
                             <h2 className="cell-title">Before you download</h2>
-                            <p className="cell-text">
-                                Free software, provided as-is, no warranty. You&apos;re
-                                responsible for what you download with it — keep it to
-                                content you have the right to save (your own uploads,
-                                public domain, Creative Commons, or anything else
-                                you&apos;re permitted to keep). Downloading from YouTube may
-                                go against{" "}
-                                <a
-                                    href="https://www.youtube.com/t/terms"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    its Terms of Service
-                                </a>
-                                . This project isn&apos;t built for copyright infringement,
-                                and the authors aren&apos;t liable for how it&apos;s used.
-                            </p>
+                            <div className="split-cols">
+                                <p className="cell-text">
+                                    Free software, provided as-is, no warranty. You&apos;re
+                                    responsible for what you download with it — keep it to
+                                    content you have the right to save: your own uploads,
+                                    public domain, Creative Commons, or anything else
+                                    you&apos;re permitted to keep.
+                                </p>
+                                <p className="cell-text">
+                                    Downloading from YouTube may go against{" "}
+                                    <a
+                                        href="https://www.youtube.com/t/terms"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        its Terms of Service
+                                    </a>
+                                    . This project isn&apos;t built for copyright
+                                    infringement, and the authors aren&apos;t liable for how
+                                    it&apos;s used.
+                                </p>
+                            </div>
                         </section>
                     </div>
                 </main>
