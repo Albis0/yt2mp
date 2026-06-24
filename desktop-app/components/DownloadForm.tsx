@@ -35,10 +35,16 @@ export interface ActiveDownload {
 
 type Mode = "link" | "ai";
 
-// AI mode chains a Groq call (rewriting the request) and then a yt-dlp
-// search — that's two network hops, so the button cycles through a couple
-// of phrases instead of sitting on one static "Fetching…" the whole time.
-const AI_LOADING_PHRASES = ["Thinking…", "Searching YouTube…"];
+// AI mode chains a Groq call (rewriting the request, with up to 5 key
+// retries) and then a yt-dlp search — that's a genuinely multi-step,
+// multi-second wait, so the button walks through what's actually happening
+// instead of sitting on one static word the whole time.
+const AI_LOADING_PHRASES = [
+  "Reading your request…",
+  "Asking AI to turn it into a search…",
+  "Still waiting on AI (retrying a key)…",
+  "Searching YouTube for a match…",
+];
 
 export default function DownloadForm() {
   const [mode, setMode] = useState<Mode>("link");
@@ -50,6 +56,7 @@ export default function DownloadForm() {
   const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null);
   const [downloads, setDownloads] = useState<Record<string, ActiveDownload>>({});
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     // localStorage isn't available during SSR, so we load history after mount
@@ -66,6 +73,8 @@ export default function DownloadForm() {
     setDownloads({});
     if (!clean) return;
 
+    const controller = new AbortController();
+    setAbortController(controller);
     setLoading(true);
     setLoadingPhrase(0);
 
@@ -84,6 +93,7 @@ export default function DownloadForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: clean, mode: targetMode }),
+        signal: controller.signal,
       });
       const data: InfoResponse & { error?: string } = await res.json();
       if (!res.ok) {
@@ -95,17 +105,26 @@ export default function DownloadForm() {
       } else {
         setInfo(data.video);
       }
-    } catch {
-      setError("Could not reach the downloader. Try again.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Cancelled.");
+      } else {
+        setError("Could not reach the downloader. Try again.");
+      }
     } finally {
       if (phraseTimer) clearInterval(phraseTimer);
       setLoading(false);
+      setAbortController(null);
     }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     fetchInfo(url, mode);
+  }
+
+  function cancelFetch() {
+    abortController?.abort();
   }
 
   function switchMode(next: Mode) {
@@ -224,9 +243,16 @@ export default function DownloadForm() {
             "Fetch"
           )}
         </button>
+        {loading ? (
+          <button type="button" className="cancel-btn" onClick={cancelFetch}>
+            Cancel
+          </button>
+        ) : null}
       </form>
 
-      {error ? <p className="error-text">{error}</p> : null}
+      {error ? (
+        <p className={error === "Cancelled." ? "cancel-text" : "error-text"}>{error}</p>
+      ) : null}
 
       {info ? (
         <ResultCard

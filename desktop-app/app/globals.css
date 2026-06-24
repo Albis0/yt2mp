@@ -222,6 +222,31 @@ button {
   border-radius: 10px;
 }
 
+.cancel-text {
+  color: var(--muted);
+  font-size: 0.92rem;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.cancel-btn {
+  padding: 14px 18px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.cancel-btn:hover {
+  border-color: var(--accent-hover);
+  color: var(--foreground);
+}
+
 /* ---------- Result card ---------- */
 .result-card {
   display: flex;
