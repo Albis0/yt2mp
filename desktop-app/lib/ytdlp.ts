@@ -1,4 +1,8 @@
 import { spawn } from "child_process";
+import os from "os";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 
 const YOUTUBE_URL_PATTERN =
   /^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]+/i;
@@ -52,8 +56,11 @@ function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(ytdlpPath(), args, { windowsHide: true });
 
-    let stdout = "";
-    let stderr = "";
+    // Collecting raw chunks and joining once at the end avoids repeated
+    // string concatenation/decoding on every "data" event — matters for
+    // large -J --flat-playlist dumps with hundreds of entries.
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
     let timedOut = false;
 
     const timer = setTimeout(() => {
@@ -61,11 +68,11 @@ function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
       proc.kill();
     }, YTDLP_TIMEOUT_MS);
 
-    proc.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
+    proc.stdout.on("data", (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
     });
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk);
     });
 
     proc.on("error", (err) => {
@@ -75,6 +82,8 @@ function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
 
     proc.on("close", (code) => {
       clearTimeout(timer);
+      const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf-8");
       if (timedOut) {
         reject(new Error("Timed out — yt-dlp took too long to respond."));
         return;
@@ -174,16 +183,21 @@ export function buildYtDlpAudioArgs(url: string): string[] {
   return ["-f", "bestaudio", "--no-playlist", "-o", "-", url];
 }
 
+// YouTube only offers a single pre-muxed (video+audio combined) stream up to
+// 360p — every quality above that (480p, 720p, 1080p, 1440p, 4K) is video-only
+// and audio-only DASH streams that have to be downloaded separately and
+// merged. Asking for "best[height<=1080]" silently falls back to whatever
+// the highest pre-muxed format is (360p), regardless of what quality the UI
+// shows as selected — this format selector instead requests the real
+// separate streams so the actual download matches the requested resolution.
 export function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
   const height = quality ? parseInt(quality, 10) : undefined;
   const formatSelector =
     height && Number.isFinite(height)
-      ? `best[height<=${height}][ext=mp4]/best[height<=${height}]`
-      : "best[ext=mp4]/best";
+      ? `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${height}]`
+      : "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best";
 
-  // A single pre-muxed "best" stream is required (not bestvideo+bestaudio),
-  // since separate streams can't be merged while piping through stdout.
-  return ["-f", formatSelector, "--no-playlist", "-o", "-", url];
+  return ["-f", formatSelector, "--no-playlist", "--merge-output-format", "mp4"];
 }
 
 /**
@@ -206,6 +220,60 @@ export function spawnMp3Stream(url: string) {
   return ffmpeg;
 }
 
-export function spawnMp4Stream(url: string, quality?: string) {
-  return spawn(ytdlpPath(), buildYtDlpVideoArgs(url, quality), { windowsHide: true });
+// Long enough for a 4K video on a slow connection, short enough that a stuck
+// download surfaces an error instead of hanging the UI indefinitely.
+const MP4_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
+// Separate video+audio streams can't be muxed while piping through stdout —
+// merging needs a real seekable output, so yt-dlp downloads both streams to
+// a temp file and muxes them with ffmpeg itself (--merge-output-format mp4),
+// and only once that's done do we open the result and stream it onward. The
+// caller is responsible for deleting the returned path once it's done
+// reading it.
+export async function downloadMp4ToFile(url: string, quality?: string): Promise<string> {
+  const tmpBase = path.join(os.tmpdir(), `yt2mp-${crypto.randomUUID()}`);
+  const args = [
+    ...buildYtDlpVideoArgs(url, quality),
+    "-o",
+    `${tmpBase}.%(ext)s`,
+    url,
+  ];
+
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(ytdlpPath(), args, {
+      windowsHide: true,
+      env: { ...process.env, FFMPEG_LOCATION: ffmpegPath() },
+    });
+
+    const stderrChunks: Buffer[] = [];
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+    }, MP4_DOWNLOAD_TIMEOUT_MS);
+
+    proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error("Timed out — download took too long."));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(Buffer.concat(stderrChunks).toString("utf-8") || `yt-dlp exited with code ${code}`));
+        return;
+      }
+      resolve();
+    });
+  });
+
+  const finalPath = `${tmpBase}.mp4`;
+  if (!fs.existsSync(finalPath)) {
+    throw new Error("Download finished but the merged file is missing.");
+  }
+  return finalPath;
 }

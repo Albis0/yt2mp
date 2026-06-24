@@ -17,18 +17,48 @@ interface ResultCardProps {
   info: VideoInfo;
   downloads: Record<string, ActiveDownload>;
   onDownload: (format: DownloadFormat, quality?: number) => void;
+  onPause: (key: string) => void;
+  onResume: (key: string) => void;
+  onStop: (key: string) => void;
 }
 
-function ProgressBar({ dl }: { dl: ActiveDownload }) {
-  if (dl.error) {
-    return <span className="dl-status dl-status-error">Failed — {dl.error}</span>;
+function ProgressBar({ dl, onPause, onResume, onStop }: {
+  dl: ActiveDownload;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}) {
+  // Stop is a deliberate user action, not a failure — and "Save cancelled"
+  // (closing the native dialog) isn't a real failure either. Both get a
+  // neutral status plus a clear next action instead of red error text.
+  if (dl.stopped) {
+    return (
+      <div className="dl-progress">
+        <span className="dl-status">Stopped</span>
+        <button type="button" className="dl-ctrl-btn" onClick={onResume}>
+          Restart
+        </button>
+      </div>
+    );
   }
+
+  if (dl.error) {
+    const isCancelled = dl.error === "Save cancelled";
+    return (
+      <span className={isCancelled ? "dl-status" : "dl-status dl-status-error"}>
+        {isCancelled ? "Cancelled" : `Failed — ${dl.error}`}
+      </span>
+    );
+  }
+
   const { percent, receivedBytes, totalBytes } = dl.progress;
   const label = dl.done
     ? "Saved"
-    : percent !== null
-      ? `${Math.floor(percent)}%`
-      : formatBytes(receivedBytes);
+    : dl.paused
+      ? "Paused"
+      : percent !== null
+        ? `${Math.floor(percent)}%`
+        : formatBytes(receivedBytes);
   return (
     <div className="dl-progress">
       <div className="dl-track">
@@ -41,11 +71,27 @@ function ProgressBar({ dl }: { dl: ActiveDownload }) {
         {label}
         {totalBytes && !dl.done ? ` · ${formatBytes(totalBytes)}` : ""}
       </span>
+      {!dl.done ? (
+        <div className="dl-controls">
+          {dl.paused ? (
+            <button type="button" className="dl-ctrl-btn" onClick={onResume}>
+              Resume
+            </button>
+          ) : (
+            <button type="button" className="dl-ctrl-btn" onClick={onPause}>
+              Pause
+            </button>
+          )}
+          <button type="button" className="dl-ctrl-btn dl-ctrl-btn-stop" onClick={onStop}>
+            Stop
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export default function ResultCard({ info, downloads, onDownload }: ResultCardProps) {
+export default function ResultCard({ info, downloads, onDownload, onPause, onResume, onStop }: ResultCardProps) {
   const [playing, setPlaying] = useState(false);
   const topHeights = info.availableHeights.slice(0, 4);
 
@@ -113,7 +159,14 @@ export default function ResultCard({ info, downloads, onDownload }: ResultCardPr
               <span className="format-label">MP3</span>
               <span className="format-hint">audio</span>
             </button>
-            {mp3Dl ? <ProgressBar dl={mp3Dl} /> : null}
+            {mp3Dl ? (
+              <ProgressBar
+                dl={mp3Dl}
+                onPause={() => onPause(mp3Key)}
+                onResume={() => onResume(mp3Key)}
+                onStop={() => onStop(mp3Key)}
+              />
+            ) : null}
           </div>
 
           <div className="format-group-label">Video</div>
@@ -133,7 +186,14 @@ export default function ResultCard({ info, downloads, onDownload }: ResultCardPr
                     <span className="format-label">{h ? `${h}p` : "MP4"}</span>
                     <span className="format-hint">mp4</span>
                   </button>
-                  {dl ? <ProgressBar dl={dl} /> : null}
+                  {dl ? (
+                    <ProgressBar
+                      dl={dl}
+                      onPause={() => onPause(key)}
+                      onResume={() => onResume(key)}
+                      onStop={() => onStop(key)}
+                    />
+                  ) : null}
                 </div>
               );
             })}

@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
+import fs from "fs";
 import {
   isValidYoutubeUrl,
   spawnMp3Stream,
-  spawnMp4Stream,
+  downloadMp4ToFile,
   type DownloadFormat,
 } from "@/lib/ytdlp";
 
@@ -21,36 +22,75 @@ export async function GET(req: NextRequest) {
     return new Response("Format must be mp3 or mp4.", { status: 400 });
   }
 
-  const proc = format === "mp3" ? spawnMp3Stream(url) : spawnMp4Stream(url, quality);
+  const baseName = safeFileName(title);
+
+  if (format === "mp3") {
+    const proc = spawnMp3Stream(url);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        proc.stdout.on("data", (chunk: Buffer) => {
+          controller.enqueue(new Uint8Array(chunk));
+        });
+        proc.stdout.on("end", () => controller.close());
+        proc.on("error", (err) => controller.error(err));
+        proc.stderr.on("data", () => {
+          // yt-dlp progress/log info written to stderr; ignored for the response stream.
+        });
+      },
+      cancel() {
+        proc.kill();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Content-Disposition": contentDisposition(`${baseName}.mp3`),
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // MP4: video+audio above 360p are separate YouTube streams that yt-dlp has
+  // to download and mux with ffmpeg into a real file first (can't be muxed
+  // through a stdout pipe) — see lib/ytdlp.ts's downloadMp4ToFile. Once
+  // that's done, stream the merged file's bytes and delete it.
+  let filePath: string;
+  try {
+    filePath = await downloadMp4ToFile(url, quality);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Download failed.";
+    return new Response(message, { status: 502 });
+  }
+
+  const stats = fs.statSync(filePath);
+  const fileStream = fs.createReadStream(filePath);
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      proc.stdout.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
+      fileStream.on("data", (chunk) => {
+        controller.enqueue(new Uint8Array(chunk as Buffer));
       });
-      proc.stdout.on("end", () => {
+      fileStream.on("end", () => {
         controller.close();
+        fs.unlink(filePath, () => {});
       });
-      proc.on("error", (err) => {
+      fileStream.on("error", (err) => {
         controller.error(err);
-      });
-      proc.stderr.on("data", () => {
-        // yt-dlp progress/log info written to stderr; ignored for the response stream.
+        fs.unlink(filePath, () => {});
       });
     },
     cancel() {
-      proc.kill();
+      fileStream.destroy();
+      fs.unlink(filePath, () => {});
     },
   });
 
-  const ext = format === "mp3" ? "mp3" : "mp4";
-  const contentType = format === "mp3" ? "audio/mpeg" : "video/mp4";
-  const baseName = safeFileName(title);
-
   return new Response(stream, {
     headers: {
-      "Content-Type": contentType,
-      "Content-Disposition": contentDisposition(`${baseName}.${ext}`),
+      "Content-Type": "video/mp4",
+      "Content-Length": String(stats.size),
+      "Content-Disposition": contentDisposition(`${baseName}.mp4`),
       "Cache-Control": "no-store",
     },
   });

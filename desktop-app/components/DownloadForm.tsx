@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import type { PlaylistInfo, VideoInfo } from "@/lib/ytdlp";
 import {
   downloadWithProgress,
+  pauseDownload,
+  resumeDownload,
+  stopDownload,
   type DownloadFormat,
   type DownloadProgress,
 } from "@/lib/download";
@@ -26,11 +29,14 @@ type InfoResponse =
 // bar per format button without them interfering.
 export interface ActiveDownload {
   key: string; // `${format}-${quality ?? "auto"}`
+  id: string; // unique per attempt — pause/resume/stop target this, not key
   format: DownloadFormat;
   quality?: number;
   progress: DownloadProgress;
   done: boolean;
   error: string | null;
+  paused: boolean;
+  stopped: boolean;
 }
 
 type Mode = "link" | "ai";
@@ -139,22 +145,32 @@ export default function DownloadForm() {
   async function startDownload(format: DownloadFormat, quality?: number) {
     if (!info) return;
     const key = `${format}-${quality ?? "auto"}`;
+    const id = crypto.randomUUID();
+
+    // Download must use the resolved video's real YouTube URL, not the raw
+    // input — in AI mode the input is a search phrase ("rick and roll"),
+    // never a URL, and sending that straight to /api/download fails (400).
+    const videoUrl = `https://www.youtube.com/watch?v=${info.id}`;
 
     setDownloads((d) => ({
       ...d,
       [key]: {
         key,
+        id,
         format,
         quality,
         progress: { receivedBytes: 0, totalBytes: null, percent: 0 },
         done: false,
         error: null,
+        paused: false,
+        stopped: false,
       },
     }));
 
     try {
       await downloadWithProgress(
-        { url: url.trim(), format, quality, title: info.title },
+        id,
+        { url: videoUrl, format, quality, title: info.title },
         (progress) =>
           setDownloads((d) => ({
             ...d,
@@ -164,7 +180,7 @@ export default function DownloadForm() {
       setDownloads((d) => ({ ...d, [key]: { ...d[key], done: true } }));
       const next = addHistory({
         videoId: info.id,
-        url: url.trim(),
+        url: videoUrl,
         title: info.title,
         thumbnail: info.thumbnail,
         format,
@@ -173,8 +189,42 @@ export default function DownloadForm() {
       setHistory(next);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Download failed.";
-      setDownloads((d) => ({ ...d, [key]: { ...d[key], error: message } }));
+      setDownloads((d) => ({
+        ...d,
+        [key]: { ...d[key], error: message, stopped: message === "Download stopped" },
+      }));
     }
+  }
+
+  function handlePause(key: string) {
+    const dl = downloads[key];
+    if (!dl) return;
+    pauseDownload(dl.id);
+    setDownloads((d) => ({ ...d, [key]: { ...d[key], paused: true } }));
+  }
+
+  function handleResumeOrRestart(key: string) {
+    const dl = downloads[key];
+    if (!dl) return;
+    if (dl.stopped) {
+      // Stopped downloads can't resume from a byte offset (yt-dlp/ffmpeg
+      // re-transcode from scratch every run) — "restart" just starts a
+      // brand new download in its place.
+      startDownload(dl.format, dl.quality);
+      return;
+    }
+    resumeDownload(dl.id);
+    setDownloads((d) => ({ ...d, [key]: { ...d[key], paused: false } }));
+  }
+
+  function handleStop(key: string) {
+    const dl = downloads[key];
+    if (!dl) return;
+    stopDownload(dl.id);
+    setDownloads((d) => ({
+      ...d,
+      [key]: { ...d[key], stopped: true, paused: false, error: "Download stopped" },
+    }));
   }
 
   function replayHistory(item: HistoryItem) {
@@ -259,6 +309,9 @@ export default function DownloadForm() {
           info={info}
           downloads={downloads}
           onDownload={startDownload}
+          onPause={handlePause}
+          onResume={handleResumeOrRestart}
+          onStop={handleStop}
         />
       ) : null}
 

@@ -485,6 +485,33 @@ button {
   color: var(--accent-hover);
 }
 
+.dl-controls {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dl-ctrl-btn {
+  padding: 3px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--foreground);
+  font-size: 0.74rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dl-ctrl-btn:hover {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.dl-ctrl-btn-stop:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
 /* ---------- History ---------- */
 .history {
   display: flex;

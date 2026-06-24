@@ -4,13 +4,19 @@ A clean, ad-free YouTube → MP3 / MP4 downloader. The actual downloading runs a
 Windows desktop app **on your own computer** — no shared server, no upload limits,
 no ads.
 
+- Paste a link (single video or playlist) — or switch to **AI search** and describe
+  what you want instead of finding a link.
+- Pause, resume, or stop any download mid-transfer.
+- No account, no server-side memory limits, no shared IP for YouTube to flag.
+
 This repo has two independent parts:
 
 - **Root** (this directory): a small Next.js landing page, deployed to Render. It only
   describes the project and links to the desktop app download — it does no downloading
   itself.
 - **`desktop-app/`**: the Electron desktop app that does the actual work. See
-  [desktop-app/README.md](desktop-app/README.md).
+  [desktop-app/README.md](desktop-app/README.md) for how it's built, what's bundled,
+  and how AI search is configured.
 
 ## Download
 
@@ -44,8 +50,9 @@ well-known open-source tools — but because it's an unsigned `.exe` that spawns
 binaries, some antivirus engines may flag it heuristically (a false positive common to
 yt-dlp wrappers).
 
-- **MetaDefender Cloud:** _pending re-scan for 0.3.0_
-  (`yt2mp Setup 0.3.0.exe`, SHA256 `41517a9996d124b0b48114309477dbffd85b757a4e1b0b7d1f2ee23bae2fd3a1`)
+- **MetaDefender Cloud:** _pending re-scan for the current release_ — check the SHA256
+  on the [latest release](https://github.com/Albis0/yt2mp/releases/latest) page against
+  what you downloaded in the meantime.
 - **VirusTotal:** _coming soon_
 
 If your browser or Windows SmartScreen warns about the download, that's the unsigned-exe

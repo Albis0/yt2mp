@@ -69,6 +69,7 @@ export default function PlaylistView({ playlist, onDownloaded }: PlaylistViewPro
 
     try {
       await downloadWithProgress(
+        crypto.randomUUID(),
         { url, format, title: track.info.title },
         (progress) =>
           setTracks((t) => ({

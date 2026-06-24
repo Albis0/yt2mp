@@ -23,11 +23,13 @@ if (process.env.ELECTRON_RUN_AS_NODE) {
   process.exit(0);
 }
 
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { spawn, type ChildProcess } from "child_process";
 import path from "path";
 import fs from "fs";
 import net from "net";
+import { Readable } from "stream";
+import type { StartDownloadArgs } from "./preload";
 
 // On some Windows GPU drivers an Electron window reports visible=true but
 // paints nothing (blank/black/invisible) because GPU compositing fails. Forcing
@@ -37,7 +39,23 @@ app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
+let serverPort = 0;
 let logFile = "";
+
+// Tracks in-flight downloads by the id the renderer generates, so
+// cancel/pause/stop can act on the right fetch/write pair when multiple
+// downloads (e.g. two playlist tracks) are running at once.
+interface ActiveDownload {
+  abort: AbortController;
+  writeStream: fs.WriteStream;
+  filePath: string;
+  // Pause holds incoming bytes here instead of writing them, without killing
+  // the underlying fetch/yt-dlp pipeline — resume just flushes and continues.
+  paused: boolean;
+  pendingChunks: Buffer[];
+  nodeStream?: Readable;
+}
+const activeDownloads = new Map<string, ActiveDownload>();
 
 // __dirname at runtime is electron/dist (this file is compiled there), so
 // the project root (where resources/ and .next/ live) is two levels up.
@@ -140,11 +158,17 @@ async function startNextServer(): Promise<number> {
   });
 
   await waitForServer(port);
+  serverPort = port;
   return port;
 }
 
 async function waitForServer(port: number, timeoutMs = 20000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  // Start polling fast (the common case — server binds in well under a
+  // second) and back off multiplicatively so a slow start doesn't burn CPU
+  // in a tight 250ms loop for the full 20s deadline.
+  let delay = 50;
+  const maxDelay = 1000;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}`);
@@ -152,9 +176,149 @@ async function waitForServer(port: number, timeoutMs = 20000): Promise<void> {
     } catch {
       // server not ready yet, keep polling
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(delay * 1.5, maxDelay);
   }
   throw new Error("Next server did not become ready in time");
+}
+
+// Mirrors app/api/download/route.ts's safeFileName so the Save dialog's
+// suggested name matches what the old auto-saved filename would have been.
+function safeFileName(title: string): string {
+  const cleaned = title
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/[\x00-\x1f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120)
+    .replace(/[. ]+$/, "");
+
+  if (cleaned) return cleaned;
+
+  const stamp = new Date().toISOString().replace(/[:T]/g, "-").replace(/\..+$/, "");
+  return `yt2mp-${stamp}`;
+}
+
+function buildDownloadUrl(args: StartDownloadArgs): string {
+  const params = new URLSearchParams({ url: args.url, format: args.format });
+  if (args.quality) params.set("quality", String(args.quality));
+  if (args.title) params.set("title", args.title);
+  return `http://127.0.0.1:${serverPort}/api/download?${params.toString()}`;
+}
+
+function registerDownloadHandlers() {
+  ipcMain.handle(
+    "download:start",
+    async (event, id: string, args: StartDownloadArgs) => {
+      const ext = args.format === "mp3" ? "mp3" : "mp4";
+      const defaultName = `${safeFileName(args.title || "yt2mp")}.${ext}`;
+
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: path.join(app.getPath("downloads"), defaultName),
+      });
+      if (canceled || !filePath) {
+        throw new Error("Save cancelled");
+      }
+
+      const abort = new AbortController();
+      const downloadUrl = buildDownloadUrl(args);
+      log(`download:start url=${downloadUrl}`);
+      const res = await fetch(downloadUrl, { signal: abort.signal });
+      if (!res.ok || !res.body) {
+        const body = await res.text().catch(() => "");
+        log(`download:start failed status=${res.status} body=${body}`);
+        throw new Error(`Download failed (${res.status})`);
+      }
+
+      const lenHeader = res.headers.get("Content-Length");
+      const totalBytes = lenHeader ? parseInt(lenHeader, 10) : null;
+
+      const writeStream = fs.createWriteStream(filePath);
+      const entry: ActiveDownload = {
+        abort,
+        writeStream,
+        filePath,
+        paused: false,
+        pendingChunks: [],
+      };
+      activeDownloads.set(id, entry);
+
+      let received = 0;
+      const nodeStream = Readable.fromWeb(
+        res.body as unknown as import("stream/web").ReadableStream<Uint8Array>
+      );
+      entry.nodeStream = nodeStream;
+
+      // Driving the pipe manually (instead of nodeStream.pipe(writeStream))
+      // is what makes pause possible: while paused, chunks are held in
+      // pendingChunks and the readable side is paused too, instead of
+      // letting Node's automatic backpressure handling write straight
+      // through.
+      nodeStream.on("data", (chunk: Buffer) => {
+        received += chunk.length;
+        event.sender.send("download:progress", { id, receivedBytes: received, totalBytes });
+        if (entry.paused) {
+          entry.pendingChunks.push(chunk);
+          nodeStream.pause();
+        } else {
+          writeStream.write(chunk);
+        }
+      });
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          nodeStream.on("end", () => writeStream.end());
+          writeStream.on("finish", resolve);
+          writeStream.on("error", reject);
+          nodeStream.on("error", reject);
+        });
+      } catch (err) {
+        activeDownloads.delete(id);
+        // Clean up a partial file rather than leaving a corrupt download behind.
+        fs.unlink(filePath, () => {});
+        throw err;
+      }
+
+      activeDownloads.delete(id);
+      return { filePath };
+    }
+  );
+
+  ipcMain.on("download:cancel", (_event, id: string) => {
+    const entry = activeDownloads.get(id);
+    if (!entry) return;
+    entry.abort.abort();
+    entry.writeStream.destroy();
+    fs.unlink(entry.filePath, () => {});
+    activeDownloads.delete(id);
+  });
+
+  ipcMain.on("download:pause", (_event, id: string) => {
+    const entry = activeDownloads.get(id);
+    if (entry) entry.paused = true;
+  });
+
+  ipcMain.on("download:resume", (_event, id: string) => {
+    const entry = activeDownloads.get(id);
+    if (!entry || !entry.paused) return;
+    entry.paused = false;
+    for (const chunk of entry.pendingChunks) {
+      entry.writeStream.write(chunk);
+    }
+    entry.pendingChunks = [];
+    entry.nodeStream?.resume();
+  });
+
+  // Stop actually kills the connection (unlike pause, which keeps it alive).
+  // Reuses the same cleanup as cancel.
+  ipcMain.on("download:stop", (_event, id: string) => {
+    const entry = activeDownloads.get(id);
+    if (!entry) return;
+    entry.abort.abort();
+    entry.writeStream.destroy();
+    fs.unlink(entry.filePath, () => {});
+    activeDownloads.delete(id);
+  });
 }
 
 async function createWindow() {
@@ -175,6 +339,7 @@ async function createWindow() {
       autoHideMenuBar: true,
       webPreferences: {
         contextIsolation: true,
+        preload: path.join(__dirname, "preload.js"),
       },
     });
 
@@ -222,6 +387,7 @@ process.on("uncaughtException", (err) => {
   log(`Uncaught exception: ${err.stack || err.message}`);
 });
 
+registerDownloadHandlers();
 app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
@@ -230,4 +396,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   serverProcess?.kill();
+  for (const entry of activeDownloads.values()) {
+    entry.abort.abort();
+    entry.writeStream.destroy();
+  }
 });
