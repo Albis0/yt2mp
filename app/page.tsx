@@ -140,20 +140,12 @@ export default function Home() {
                                         <td>title, duration and uploader before you download</td>
                                     </tr>
                                     <tr>
-                                        <th scope="row">History</th>
-                                        <td>kept on your machine, one click to re-fetch a past link</td>
-                                    </tr>
-                                    <tr>
                                         <th scope="row">AI search</th>
                                         <td>describe what you want instead of finding a link</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">Playlists</th>
                                         <td>paste a playlist link, pick which tracks to grab</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Pause / Stop</th>
-                                        <td>control any download in progress, resume without restarting</td>
                                     </tr>
                                 </tbody>
                             </table>
