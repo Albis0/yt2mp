@@ -6,6 +6,7 @@ import {
   downloadMp4ToFile,
   type DownloadFormat,
 } from "@/lib/ytdlp";
+import { setDownloadProgress, clearDownloadProgress } from "@/lib/downloadProgress";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   const format = searchParams.get("format") as DownloadFormat | null;
   const quality = searchParams.get("quality") ?? undefined;
   const title = searchParams.get("title") ?? undefined;
+  const id = searchParams.get("id") ?? undefined;
 
   if (!url || !isValidYoutubeUrl(url)) {
     return new Response("Please enter a valid YouTube link.", { status: 400 });
@@ -53,15 +55,21 @@ export async function GET(req: NextRequest) {
 
   // MP4: video+audio above 360p are separate YouTube streams that yt-dlp has
   // to download and mux with ffmpeg into a real file first (can't be muxed
-  // through a stdout pipe) — see lib/ytdlp.ts's downloadMp4ToFile. Once
-  // that's done, stream the merged file's bytes and delete it.
+  // through a stdout pipe) — see lib/ytdlp.ts's downloadMp4ToFile. No bytes
+  // of the actual response go out until that's done, so yt-dlp's own
+  // progress (parsed from stdout) is published to a shared store the client
+  // polls via /api/download-progress while this is in flight.
   let filePath: string;
   try {
-    filePath = await downloadMp4ToFile(url, quality);
+    filePath = await downloadMp4ToFile(url, quality, (p) => {
+      if (id) setDownloadProgress(id, p.percent);
+    });
   } catch (err) {
+    if (id) clearDownloadProgress(id);
     const message = err instanceof Error ? err.message : "Download failed.";
     return new Response(message, { status: 502 });
   }
+  if (id) clearDownloadProgress(id);
 
   const stats = fs.statSync(filePath);
   const fileStream = fs.createReadStream(filePath);

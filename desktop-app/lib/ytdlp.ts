@@ -224,20 +224,52 @@ export function spawnMp3Stream(url: string) {
 // download surfaces an error instead of hanging the UI indefinitely.
 const MP4_DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
+// Matches yt-dlp's --newline progress format, e.g.:
+// "[download]  34.5% of   29.01MiB at   20.51MiB/s ETA 00:00"
+const PROGRESS_LINE_PATTERN = /\[download\]\s+(\d+(?:\.\d+)?)% of\s+~?\s*([\d.]+)(KiB|MiB|GiB)/;
+
+function parseProgressLine(line: string): { percent: number } | null {
+  const match = PROGRESS_LINE_PATTERN.exec(line);
+  if (!match) return null;
+  return { percent: parseFloat(match[1]) };
+}
+
+export interface Mp4DownloadProgress {
+  // 0-100, scaled across both streams: video is most of the work (audio is
+  // a small fraction of the bitrate), so it gets the bulk of the range and
+  // the merge step gets a small fixed allowance at the end.
+  percent: number;
+}
+
 // Separate video+audio streams can't be muxed while piping through stdout —
 // merging needs a real seekable output, so yt-dlp downloads both streams to
 // a temp file and muxes them with ffmpeg itself (--merge-output-format mp4),
 // and only once that's done do we open the result and stream it onward. The
 // caller is responsible for deleting the returned path once it's done
-// reading it.
-export async function downloadMp4ToFile(url: string, quality?: string): Promise<string> {
+// reading it. yt-dlp's own progress percentages (read from stdout, with
+// --newline so each update is its own line) are forwarded via onProgress so
+// the UI isn't stuck on an indeterminate spinner for the whole download.
+export async function downloadMp4ToFile(
+  url: string,
+  quality?: string,
+  onProgress?: (p: Mp4DownloadProgress) => void
+): Promise<string> {
   const tmpBase = path.join(os.tmpdir(), `yt2mp-${crypto.randomUUID()}`);
   const args = [
     ...buildYtDlpVideoArgs(url, quality),
+    "--newline",
     "-o",
     `${tmpBase}.%(ext)s`,
     url,
   ];
+
+  // Two streams download in sequence (video, then audio) before merging —
+  // video is reported as "stream 0 of 2" worth of progress here so the bar
+  // doesn't visually restart from 0% partway through. Audio and the final
+  // merge are folded into the remaining range instead of tracked precisely,
+  // since yt-dlp doesn't report merge progress at all.
+  let streamsSeen = 0;
+  let lastPercentInStream = 0;
 
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(ytdlpPath(), args, {
@@ -245,14 +277,41 @@ export async function downloadMp4ToFile(url: string, quality?: string): Promise<
       env: { ...process.env, FFMPEG_LOCATION: ffmpegPath() },
     });
 
-    const stderrChunks: Buffer[] = [];
+    const outputChunks: Buffer[] = [];
+    let lineBuffer = "";
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       proc.kill();
     }, MP4_DOWNLOAD_TIMEOUT_MS);
 
-    proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    function handleOutput(chunk: Buffer) {
+      outputChunks.push(chunk);
+      lineBuffer += chunk.toString("utf-8");
+      const lines = lineBuffer.split(/\r\n|\r|\n/);
+      lineBuffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (line.includes("Destination:") && lastPercentInStream > 0) {
+          streamsSeen++;
+          lastPercentInStream = 0;
+        }
+        const progress = parseProgressLine(line);
+        if (progress && onProgress) {
+          lastPercentInStream = progress.percent;
+          // Video stream: 0-80%. Audio stream: 80-95%. Merge: 95-100% (no
+          // real signal for it, so it just jumps to 100 on completion).
+          const overall =
+            streamsSeen === 0
+              ? (progress.percent / 100) * 80
+              : 80 + (progress.percent / 100) * 15;
+          onProgress({ percent: Math.min(95, overall) });
+        }
+      }
+    }
+
+    proc.stdout.on("data", handleOutput);
+    proc.stderr.on("data", (chunk: Buffer) => outputChunks.push(chunk));
     proc.on("error", (err) => {
       clearTimeout(timer);
       reject(err);
@@ -264,9 +323,10 @@ export async function downloadMp4ToFile(url: string, quality?: string): Promise<
         return;
       }
       if (code !== 0) {
-        reject(new Error(Buffer.concat(stderrChunks).toString("utf-8") || `yt-dlp exited with code ${code}`));
+        reject(new Error(Buffer.concat(outputChunks).toString("utf-8") || `yt-dlp exited with code ${code}`));
         return;
       }
+      onProgress?.({ percent: 100 });
       resolve();
     });
   });

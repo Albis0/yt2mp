@@ -14,6 +14,10 @@ export interface DownloadProgressEvent {
   id: string;
   receivedBytes: number;
   totalBytes: number | null;
+  // Only present for MP4 downloads while yt-dlp is still downloading/merging
+  // the separate video+audio streams server-side, before any response bytes
+  // exist to compute receivedBytes/totalBytes from.
+  mergePercent?: number;
 }
 
 contextBridge.exposeInMainWorld("yt2mp", {

@@ -23,14 +23,19 @@ export interface DownloadProgress {
   percent: number | null; // 0..100, or null when total is unknown
 }
 
+interface Yt2mpProgressEvent {
+  id: string;
+  receivedBytes: number;
+  totalBytes: number | null;
+  mergePercent?: number;
+}
+
 interface Yt2mpBridge {
   startDownload: (
     id: string,
     args: DownloadParams
   ) => Promise<{ filePath: string }>;
-  onDownloadProgress: (
-    callback: (p: { id: string; receivedBytes: number; totalBytes: number | null }) => void
-  ) => () => void;
+  onDownloadProgress: (callback: (p: Yt2mpProgressEvent) => void) => () => void;
   cancelDownload: (id: string) => void;
   pauseDownload: (id: string) => void;
   resumeDownload: (id: string) => void;
@@ -133,6 +138,14 @@ async function downloadWithProgressElectron(
 
   const unsubscribe = bridge.onDownloadProgress((p) => {
     if (p.id !== id) return;
+    // mergePercent is yt-dlp's own progress while it's still downloading and
+    // muxing the separate video+audio streams server-side (MP4 only) — at
+    // that point there are no response bytes yet to compute a percentage
+    // from receivedBytes/totalBytes, so this takes priority while present.
+    if (typeof p.mergePercent === "number") {
+      onProgress({ receivedBytes: 0, totalBytes: null, percent: p.mergePercent });
+      return;
+    }
     totalBytes = p.totalBytes;
     onProgress({
       receivedBytes: p.receivedBytes,

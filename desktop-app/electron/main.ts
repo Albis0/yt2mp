@@ -199,11 +199,35 @@ function safeFileName(title: string): string {
   return `yt2mp-${stamp}`;
 }
 
-function buildDownloadUrl(args: StartDownloadArgs): string {
-  const params = new URLSearchParams({ url: args.url, format: args.format });
+function buildDownloadUrl(args: StartDownloadArgs, id: string): string {
+  const params = new URLSearchParams({ url: args.url, format: args.format, id });
   if (args.quality) params.set("quality", String(args.quality));
   if (args.title) params.set("title", args.title);
   return `http://127.0.0.1:${serverPort}/api/download?${params.toString()}`;
+}
+
+// MP4 downloads don't emit response bytes until yt-dlp's temp-file
+// download/merge finishes server-side, so the only way to show real
+// progress during that wait is to poll the same id against
+// /api/download-progress, which app/api/download/route.ts writes yt-dlp's
+// stdout-parsed percentage into while it's working.
+function pollMp4Progress(id: string, event: Electron.IpcMainInvokeEvent): NodeJS.Timeout {
+  return setInterval(async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:${serverPort}/api/download-progress?id=${id}`);
+      const data = await res.json();
+      if (typeof data.percent === "number") {
+        event.sender.send("download:progress", {
+          id,
+          receivedBytes: 0,
+          totalBytes: null,
+          mergePercent: data.percent,
+        });
+      }
+    } catch {
+      // best-effort — a missed poll just means one stale progress update
+    }
+  }, 500);
 }
 
 function registerDownloadHandlers() {
@@ -221,9 +245,20 @@ function registerDownloadHandlers() {
       }
 
       const abort = new AbortController();
-      const downloadUrl = buildDownloadUrl(args);
+      const downloadUrl = buildDownloadUrl(args, id);
       log(`download:start url=${downloadUrl}`);
-      const res = await fetch(downloadUrl, { signal: abort.signal });
+
+      // MP4's response doesn't start streaming until yt-dlp's temp-file
+      // download/merge is done, so poll the merge progress in parallel with
+      // the fetch instead of waiting for it to resolve first.
+      const progressTimer = args.format === "mp4" ? pollMp4Progress(id, event) : null;
+
+      let res: Response;
+      try {
+        res = await fetch(downloadUrl, { signal: abort.signal });
+      } finally {
+        if (progressTimer) clearInterval(progressTimer);
+      }
       if (!res.ok || !res.body) {
         const body = await res.text().catch(() => "");
         log(`download:start failed status=${res.status} body=${body}`);
