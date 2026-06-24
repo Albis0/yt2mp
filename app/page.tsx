@@ -5,7 +5,6 @@ import {
     REPO_URL,
     LICENSE_URL,
     ISSUES_URL,
-    METADEFENDER_URL,
     VERSION,
     INSTALLER_NAME,
     INSTALLER_SHA256,
@@ -94,7 +93,7 @@ export default function Home() {
                                 <div className="get-meta">
                                     <span className="get-name">{INSTALLER_NAME}</span>
                                     <span className="get-sep">·</span>
-                                    <span>~210 MB</span>
+                                    <span>~225 MB</span>
                                     <span className="get-sep">·</span>
                                     <span>Windows 10/11</span>
                                 </div>
@@ -170,32 +169,28 @@ export default function Home() {
                         </section>
 
                         <section className="cell">
-                            <h2 className="cell-title">Why the installer is ~210 MB</h2>
+                            <h2 className="cell-title">Why the installer is ~225 MB</h2>
                             <p className="cell-text">
                                 Most of it isn&apos;t this app&apos;s code — it&apos;s the
-                                runtime it ships with:
+                                runtime and tools it ships with:
                             </p>
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
-                                        <th scope="row">Chromium + Electron</th>
-                                        <td>~170 MB</td>
+                                        <th scope="row">Chromium + Electron + Node</th>
+                                        <td>~100 MB</td>
                                     </tr>
                                     <tr>
-                                        <th scope="row">Node.js runtime</th>
-                                        <td>~20 MB</td>
+                                        <th scope="row">ffmpeg.exe</th>
+                                        <td>~97 MB</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">yt-dlp.exe</th>
                                         <td>~18 MB</td>
                                     </tr>
                                     <tr>
-                                        <th scope="row">ffmpeg.exe</th>
-                                        <td>~5 MB</td>
-                                    </tr>
-                                    <tr>
                                         <th scope="row">app code, overhead</th>
-                                        <td>~7 MB</td>
+                                        <td>~10 MB</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -238,12 +233,9 @@ export default function Home() {
                             <p className="cell-text">
                                 The installer is unsigned, so Windows SmartScreen will warn
                                 on first run — that&apos;s the missing code-signing
-                                certificate, not a detected threat. Scanned with
-                                MetaDefender (
-                                <a href={METADEFENDER_URL} target="_blank" rel="noreferrer">
-                                    0/21 engines flagged it
-                                </a>
-                                ) before publishing.
+                                certificate, not a detected threat. A MetaDefender scan for
+                                this build is pending; check the hash below against what
+                                you downloaded in the meantime.
                             </p>
                             <div className="hash-row">
                                 <span className="hash-label">sha256</span>

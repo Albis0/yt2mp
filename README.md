@@ -44,8 +44,8 @@ well-known open-source tools — but because it's an unsigned `.exe` that spawns
 binaries, some antivirus engines may flag it heuristically (a false positive common to
 yt-dlp wrappers).
 
-- **MetaDefender Cloud:** [0/21 engines — no threats detected](https://metadefender.com/results/file/YnpJMk1EWXlNekZKTUZkVVR6Rk9WV28xWkVsd1YwWlBZMGhNX21kYWFzYTdlMGQ0Y2U1Ng/threats-prevented)
-  (`yt2mp Setup 0.2.0.exe`, SHA256 `4f6056135aee5cb8df0647a24465d001090220621cb3b18c4444c490b8a23771`)
+- **MetaDefender Cloud:** _pending re-scan for 0.3.0_
+  (`yt2mp Setup 0.3.0.exe`, SHA256 `41517a9996d124b0b48114309477dbffd85b757a4e1b0b7d1f2ee23bae2fd3a1`)
 - **VirusTotal:** _coming soon_
 
 If your browser or Windows SmartScreen warns about the download, that's the unsigned-exe
