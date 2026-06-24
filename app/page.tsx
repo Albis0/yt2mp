@@ -209,12 +209,16 @@ export default function Home() {
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
-                                        <th scope="row">Chromium + Electron + Node + app code</th>
-                                        <td>~130 MB</td>
+                                        <th scope="row">Chromium (the browser engine)</th>
+                                        <td>~75 MB</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">Electron + Node + app code</th>
+                                        <td>~45 MB</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">ffmpeg.exe</th>
-                                        <td>~67 MB</td>
+                                        <td>~77 MB</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">yt-dlp.exe</th>
