@@ -1,26 +1,36 @@
-// Free Groq API keys, base64-split so a plain `grep -r gsk_` over the
-// unpacked app doesn't immediately turn one up. This does NOT make the keys
-// unextractable — anyone willing to read this file gets them in seconds —
-// it only raises the bar above "trivial automated scraping," which is the
-// actual threat model for free throwaway keys.
-const ENCODED_KEYS: string[] = []; // keys removed from history, see GROQ_KEYS env var
-
-function decode(b64: string): string {
-  return Buffer.from(b64, "base64").toString("utf-8");
+// Keys come from GROQ_KEYS (comma-separated) at runtime, never hardcoded —
+// GitHub's push protection blocks commits containing real Groq keys even
+// base64-encoded, and a checked-in key is a checked-in key regardless of how
+// it's wrapped. In dev, set GROQ_KEYS in desktop-app/.env.local (gitignored).
+// In the packaged app, electron/main.ts reads desktop-app/.env (copied into
+// extraResources at build time, also gitignored) and injects it the same way
+// it injects YTDLP_PATH/FFMPEG_PATH.
+function loadKeys(): string[] {
+  const raw = process.env.GROQ_KEYS;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
 }
 
 let cursor = 0;
 
 // Without a timeout, a single unresponsive key can hang the whole chain —
-// fetch has no default deadline, so 5 stuck keys in a row means minutes of
-// silent "Fetching…" instead of falling back to the raw search query.
+// fetch has no default deadline, so several stuck keys in a row means
+// minutes of silent "Fetching…" instead of falling back to the raw query.
 const REQUEST_TIMEOUT_MS = 6000;
 
 async function callGroq(messages: { role: string; content: string }[]): Promise<string> {
+  const keys = loadKeys();
+  if (keys.length === 0) {
+    throw new Error("No Groq keys configured (GROQ_KEYS is empty)");
+  }
+
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt < ENCODED_KEYS.length; attempt++) {
-    const key = decode(ENCODED_KEYS[cursor % ENCODED_KEYS.length]);
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const key = keys[cursor % keys.length];
     cursor++;
 
     const controller = new AbortController();
@@ -73,7 +83,7 @@ async function callGroq(messages: { role: string; content: string }[]): Promise<
 // Turns a free-text request (e.g. "that one rush song by troye sivan") into a
 // concise YouTube search query, so users don't have to phrase things like a
 // search-engine query themselves. Falls back to the raw input if Groq is
-// unreachable or every key is rate-limited.
+// unreachable, unconfigured, or every key is rate-limited.
 export async function refineSearchQuery(input: string): Promise<string> {
   try {
     const result = await callGroq([

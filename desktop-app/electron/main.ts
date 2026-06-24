@@ -59,6 +59,22 @@ function resourcePath(fileName: string): string {
     : path.join(PROJECT_ROOT, "resources", fileName);
 }
 
+// Reads GROQ_KEYS=a,b,c out of a .env file next to the binaries (packaged) or
+// the project root (dev) — keeping it out of source so it never ends up in a
+// commit. Missing file just means AI search falls back to the raw query.
+function loadGroqKeys(): string {
+  const envPath = app.isPackaged
+    ? path.join(process.resourcesPath, ".env")
+    : path.join(PROJECT_ROOT, ".env.local");
+  try {
+    const content = fs.readFileSync(envPath, "utf-8");
+    const match = content.match(/^GROQ_KEYS=(.*)$/m);
+    return match ? match[1].trim() : "";
+  } catch {
+    return "";
+  }
+}
+
 // Ask the OS for a free port by binding to :0, then releasing it. Avoids a
 // third-party dependency (which got pruned out of the asar at package time).
 function findFreePort(): Promise<number> {
@@ -105,6 +121,7 @@ async function startNextServer(): Promise<number> {
       ELECTRON_RUN_AS_NODE: "1",
       YTDLP_PATH: resourcePath("yt-dlp.exe"),
       FFMPEG_PATH: resourcePath("ffmpeg.exe"),
+      GROQ_KEYS: loadGroqKeys(),
     },
     windowsHide: true,
   });
