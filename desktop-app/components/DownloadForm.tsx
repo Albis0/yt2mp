@@ -33,7 +33,10 @@ export interface ActiveDownload {
   error: string | null;
 }
 
+type Mode = "link" | "ai";
+
 export default function DownloadForm() {
+  const [mode, setMode] = useState<Mode>("link");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +52,7 @@ export default function DownloadForm() {
     setHistory(loadHistory());
   }, []);
 
-  async function fetchInfo(targetUrl: string) {
+  async function fetchInfo(targetUrl: string, targetMode: Mode) {
     const clean = targetUrl.trim();
     setError(null);
     setInfo(null);
@@ -62,7 +65,7 @@ export default function DownloadForm() {
       const res = await fetch("/api/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: clean }),
+        body: JSON.stringify({ url: clean, mode: targetMode }),
       });
       const data: InfoResponse & { error?: string } = await res.json();
       if (!res.ok) {
@@ -83,7 +86,16 @@ export default function DownloadForm() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    fetchInfo(url);
+    fetchInfo(url, mode);
+  }
+
+  function switchMode(next: Mode) {
+    if (next === mode) return;
+    setMode(next);
+    setUrl("");
+    setError(null);
+    setInfo(null);
+    setPlaylist(null);
   }
 
   async function startDownload(format: DownloadFormat, quality?: number) {
@@ -128,10 +140,11 @@ export default function DownloadForm() {
   }
 
   function replayHistory(item: HistoryItem) {
+    // History always stores resolved YouTube URLs, regardless of which mode
+    // found them, so replaying always goes through link mode.
+    setMode("link");
     setUrl(item.url);
-    // Re-fetch info so the preview and current format options are fresh, then
-    // the user can download again from the card.
-    fetchInfo(item.url);
+    fetchInfo(item.url, "link");
   }
 
   function handlePlaylistTrackDownloaded(
@@ -146,11 +159,36 @@ export default function DownloadForm() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell mode-${mode}`}>
+      <div className="mode-switch" role="tablist" aria-label="Search mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "link"}
+          className={`mode-btn mode-btn-link${mode === "link" ? " mode-btn-active" : ""}`}
+          onClick={() => switchMode("link")}
+        >
+          YouTube link
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "ai"}
+          className={`mode-btn mode-btn-ai${mode === "ai" ? " mode-btn-active" : ""}`}
+          onClick={() => switchMode("ai")}
+        >
+          AI search
+        </button>
+      </div>
+
       <form className="download-form" onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="Paste a YouTube/playlist link, or describe what you want…"
+          placeholder={
+            mode === "ai"
+              ? "Describe the song or video you want…"
+              : "Paste a YouTube or playlist link…"
+          }
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className="url-input"

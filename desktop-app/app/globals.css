@@ -90,6 +90,59 @@ button {
   gap: 22px;
 }
 
+/* Link mode: red. AI mode: orange. Everything that uses --accent/--accent-2
+   (the submit button, audio format button, progress fill, focus ring) picks
+   up the active mode's color automatically through these overrides. */
+.app-shell.mode-link {
+  --accent: #ff3b30;
+  --accent-2: #ff6a4d;
+  --accent-hover: #ff5a4f;
+  --accent-rgb: 255, 59, 48;
+}
+
+.app-shell.mode-ai {
+  --accent: #ff8a00;
+  --accent-2: #ffb648;
+  --accent-hover: #ffa733;
+  --accent-rgb: 255, 138, 0;
+}
+
+/* ---------- Mode switch ---------- */
+.mode-switch {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 4px;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.mode-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-btn:hover:not(.mode-btn-active) {
+  color: var(--foreground);
+}
+
+.mode-btn-link.mode-btn-active {
+  background: linear-gradient(135deg, #ff3b30, #ff6a4d);
+  color: #fff;
+}
+
+.mode-btn-ai.mode-btn-active {
+  background: linear-gradient(135deg, #ff8a00, #ffb648);
+  color: #fff;
+}
+
 /* ---------- Search form ---------- */
 .download-form {
   display: flex;
@@ -114,7 +167,7 @@ button {
 
 .url-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.15);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
 }
 
 .submit-btn {
@@ -141,8 +194,8 @@ button {
   color: var(--accent-hover);
   font-size: 0.92rem;
   padding: 10px 14px;
-  background: rgba(255, 59, 48, 0.08);
-  border: 1px solid rgba(255, 59, 48, 0.25);
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
   border-radius: 10px;
 }
 
@@ -215,8 +268,8 @@ button {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: rgba(255, 59, 48, 0.92);
-  box-shadow: 0 8px 30px -6px rgba(255, 59, 48, 0.7);
+  background: rgba(var(--accent-rgb), 0.92);
+  box-shadow: 0 8px 30px -6px rgba(var(--accent-rgb), 0.7);
 }
 
 .result-embed {
@@ -520,7 +573,7 @@ button {
 
 .history-remove:hover {
   color: var(--accent-hover);
-  background: rgba(255, 59, 48, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 /* ---------- Playlist ---------- */
