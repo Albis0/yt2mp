@@ -7,7 +7,7 @@ export const GITHUB_URL =
 // "can't scan for viruses" page on the normal link; the
 // drive.usercontent.google.com host with confirm=t serves the .exe directly.
 export const DRIVE_URL =
-    "https://drive.usercontent.google.com/download?id=1nKvHTb9uh2H1724GEkYPUM5jXeNa3dEB&export=download&confirm=t";
+    "https://drive.usercontent.google.com/download?id=1SyviZ2N7pS1c18FEn9k79c5owUun2v4s&export=download&confirm=t";
 
 export const REPO_URL = "https://github.com/Albis0/yt2mp";
 export const LICENSE_URL = "https://github.com/Albis0/yt2mp/blob/main/LICENSE";
