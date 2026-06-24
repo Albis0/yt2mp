@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { VideoInfo } from "@/lib/ytdlp";
+import type { PlaylistInfo, VideoInfo } from "@/lib/ytdlp";
 import {
   downloadWithProgress,
   type DownloadFormat,
@@ -16,6 +16,11 @@ import {
 } from "@/lib/history";
 import ResultCard from "./ResultCard";
 import HistoryList from "./HistoryList";
+import PlaylistView from "./PlaylistView";
+
+type InfoResponse =
+  | { kind: "video"; video: VideoInfo }
+  | { kind: "playlist"; playlist: PlaylistInfo };
 
 // A single in-flight or finished download, keyed so the UI can show a progress
 // bar per format button without them interfering.
@@ -33,6 +38,7 @@ export default function DownloadForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<VideoInfo | null>(null);
+  const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null);
   const [downloads, setDownloads] = useState<Record<string, ActiveDownload>>({});
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
@@ -47,6 +53,7 @@ export default function DownloadForm() {
     const clean = targetUrl.trim();
     setError(null);
     setInfo(null);
+    setPlaylist(null);
     setDownloads({});
     if (!clean) return;
 
@@ -57,12 +64,16 @@ export default function DownloadForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: clean }),
       });
-      const data = await res.json();
+      const data: InfoResponse & { error?: string } = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
         return;
       }
-      setInfo(data);
+      if (data.kind === "playlist") {
+        setPlaylist(data.playlist);
+      } else {
+        setInfo(data.video);
+      }
     } catch {
       setError("Could not reach the downloader. Try again.");
     } finally {
@@ -123,12 +134,23 @@ export default function DownloadForm() {
     fetchInfo(item.url);
   }
 
+  function handlePlaylistTrackDownloaded(
+    videoId: string,
+    trackUrl: string,
+    title: string,
+    thumbnail: string,
+    format: DownloadFormat
+  ) {
+    const next = addHistory({ videoId, url: trackUrl, title, thumbnail, format });
+    setHistory(next);
+  }
+
   return (
     <div className="app-shell">
       <form className="download-form" onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="Paste a YouTube link…"
+          placeholder="Paste a YouTube/playlist link, or type a song name…"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className="url-input"
@@ -148,6 +170,10 @@ export default function DownloadForm() {
           downloads={downloads}
           onDownload={startDownload}
         />
+      ) : null}
+
+      {playlist ? (
+        <PlaylistView playlist={playlist} onDownloaded={handlePlaylistTrackDownloaded} />
       ) : null}
 
       <HistoryList

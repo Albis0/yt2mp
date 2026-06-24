@@ -3,8 +3,15 @@ import { spawn } from "child_process";
 const YOUTUBE_URL_PATTERN =
   /^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]+/i;
 
+const YOUTUBE_PLAYLIST_PATTERN =
+  /^https?:\/\/(www\.|m\.)?youtube\.com\/(playlist\?|watch\?.*[&?]list=)/i;
+
 export function isValidYoutubeUrl(url: string): boolean {
   return YOUTUBE_URL_PATTERN.test(url);
+}
+
+export function isPlaylistUrl(url: string): boolean {
+  return YOUTUBE_PLAYLIST_PATTERN.test(url);
 }
 
 // electron/main.ts sets these to the bundled binaries' resolved paths
@@ -91,6 +98,57 @@ export function parseVideoInfo(raw: string): VideoInfo {
 export async function getVideoInfo(url: string): Promise<VideoInfo> {
   const { stdout } = await runYtDlp(["-J", "--no-playlist", url]);
   return parseVideoInfo(stdout);
+}
+
+export interface PlaylistEntry {
+  id: string;
+  title: string;
+  url: string;
+  duration: number;
+  uploader: string;
+}
+
+export interface PlaylistInfo {
+  id: string;
+  title: string;
+  entries: PlaylistEntry[];
+}
+
+// Uses --flat-playlist so yt-dlp only lists entries (one JSON line per video)
+// instead of resolving full formats for every track up front — the "lazy
+// loading" the user wants: the list appears instantly, and each track's real
+// info/formats are only fetched when the user actually picks it to download.
+export async function getPlaylistInfo(url: string): Promise<PlaylistInfo> {
+  const { stdout } = await runYtDlp(["-J", "--flat-playlist", url]);
+  const data = JSON.parse(stdout);
+  const rawEntries: Record<string, unknown>[] = data.entries ?? [];
+
+  const entries: PlaylistEntry[] = rawEntries.map((e) => ({
+    id: String(e.id ?? ""),
+    title: String(e.title ?? "Unknown track"),
+    url:
+      typeof e.url === "string"
+        ? e.url
+        : `https://www.youtube.com/watch?v=${e.id}`,
+    duration: typeof e.duration === "number" ? e.duration : 0,
+    uploader: String(e.uploader ?? e.channel ?? ""),
+  }));
+
+  return {
+    id: String(data.id ?? ""),
+    title: String(data.title ?? "Playlist"),
+    entries,
+  };
+}
+
+// Resolves free-text search queries (e.g. "song name artist") to a real
+// video, the same way typing into YouTube's search bar would — no API key,
+// no link required. yt-dlp's ytsearch1: pseudo-URL returns the top match.
+export async function searchVideoInfo(query: string): Promise<VideoInfo> {
+  const { stdout } = await runYtDlp(["-J", `ytsearch1:${query}`]);
+  const data = JSON.parse(stdout);
+  const first = Array.isArray(data.entries) ? data.entries[0] : data;
+  return parseVideoInfo(JSON.stringify(first));
 }
 
 export type DownloadFormat = "mp3" | "mp4";

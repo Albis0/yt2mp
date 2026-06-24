@@ -523,6 +523,123 @@ button {
   background: rgba(255, 59, 48, 0.08);
 }
 
+/* ---------- Playlist ---------- */
+.playlist-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.playlist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.playlist-title {
+  font-size: 1rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-count {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.playlist-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.playlist-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.playlist-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+}
+
+.playlist-index {
+  flex-shrink: 0;
+  width: 26px;
+  color: var(--muted-2);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.playlist-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playlist-track-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-track-sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.playlist-chevron {
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.playlist-expand {
+  padding: 0 12px 12px 50px;
+}
+
+.playlist-status {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.playlist-status-error {
+  color: var(--accent-hover);
+}
+
+.playlist-formats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 520px) {
   .download-form {
     flex-direction: column;
