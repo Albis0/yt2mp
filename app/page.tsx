@@ -142,6 +142,10 @@ export default function Home() {
                                         <th scope="row">History</th>
                                         <td>kept on your machine, one click to re-fetch a past link</td>
                                     </tr>
+                                    <tr>
+                                        <th scope="row">AI search</th>
+                                        <td>describe what you want instead of finding a link</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -165,6 +169,25 @@ export default function Home() {
                                 Both problems belong to the server, not the idea — so the
                                 server is gone. Downloads now run from your own IP, with no
                                 shared memory budget for anyone to exceed.
+                            </p>
+                        </section>
+
+                        <section className="cell">
+                            <h2 className="cell-title">How AI search works</h2>
+                            <p className="cell-text">
+                                Switch to AI search and type a request instead of a link —
+                                &quot;that troye sivan song called rush&quot; works the same
+                                as pasting the URL. A small model (Groq&apos;s
+                                Llama&nbsp;3.1&nbsp;8B) turns your phrasing into a clean
+                                search query, then yt-dlp searches YouTube for it directly —
+                                no link required, nothing leaves YouTube&apos;s own search.
+                            </p>
+                            <p className="cell-text cell-text-tight">
+                                This runs on a handful of free-tier API keys that rotate if
+                                one is rate-limited; if every key fails, your original text
+                                is searched as-is instead of breaking the feature. Worth
+                                knowing: unlike everything else in this app, the AI step
+                                does send your search text to Groq&apos;s API.
                             </p>
                         </section>
 
