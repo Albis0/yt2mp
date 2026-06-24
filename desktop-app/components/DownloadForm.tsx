@@ -35,10 +35,16 @@ export interface ActiveDownload {
 
 type Mode = "link" | "ai";
 
+// AI mode chains a Groq call (rewriting the request) and then a yt-dlp
+// search — that's two network hops, so the button cycles through a couple
+// of phrases instead of sitting on one static "Fetching…" the whole time.
+const AI_LOADING_PHRASES = ["Thinking…", "Searching YouTube…"];
+
 export default function DownloadForm() {
   const [mode, setMode] = useState<Mode>("link");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingPhrase, setLoadingPhrase] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<VideoInfo | null>(null);
   const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null);
@@ -61,6 +67,18 @@ export default function DownloadForm() {
     if (!clean) return;
 
     setLoading(true);
+    setLoadingPhrase(0);
+
+    // AI mode genuinely takes longer (Groq, then yt-dlp's search) — step the
+    // phrase forward so the button visibly progresses instead of sitting on
+    // one word for the whole wait.
+    const phraseTimer =
+      targetMode === "ai"
+        ? setInterval(() => {
+            setLoadingPhrase((p) => Math.min(p + 1, AI_LOADING_PHRASES.length - 1));
+          }, 2500)
+        : null;
+
     try {
       const res = await fetch("/api/info", {
         method: "POST",
@@ -80,6 +98,7 @@ export default function DownloadForm() {
     } catch {
       setError("Could not reach the downloader. Try again.");
     } finally {
+      if (phraseTimer) clearInterval(phraseTimer);
       setLoading(false);
     }
   }
@@ -195,8 +214,15 @@ export default function DownloadForm() {
           autoFocus
           spellCheck={false}
         />
-        <button type="submit" className="submit-btn" disabled={loading}>
-          {loading ? "Fetching…" : "Fetch"}
+        <button type="submit" className={`submit-btn${loading ? " submit-btn-loading" : ""}`} disabled={loading}>
+          {loading ? (
+            <>
+              <span className="submit-spinner" aria-hidden="true" />
+              {mode === "ai" ? AI_LOADING_PHRASES[loadingPhrase] : "Fetching…"}
+            </>
+          ) : (
+            "Fetch"
+          )}
         </button>
       </form>
 

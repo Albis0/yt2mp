@@ -11,12 +11,20 @@ function decode(b64: string): string {
 
 let cursor = 0;
 
+// Without a timeout, a single unresponsive key can hang the whole chain —
+// fetch has no default deadline, so 5 stuck keys in a row means minutes of
+// silent "Fetching…" instead of falling back to the raw search query.
+const REQUEST_TIMEOUT_MS = 6000;
+
 async function callGroq(messages: { role: string; content: string }[]): Promise<string> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < ENCODED_KEYS.length; attempt++) {
     const key = decode(ENCODED_KEYS[cursor % ENCODED_KEYS.length]);
     cursor++;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -31,6 +39,7 @@ async function callGroq(messages: { role: string; content: string }[]): Promise<
           temperature: 0.2,
           max_tokens: 60,
         }),
+        signal: controller.signal,
       });
 
       // Rate-limited or dead key — rotate to the next one instead of failing.
@@ -53,6 +62,8 @@ async function callGroq(messages: { role: string; content: string }[]): Promise<
       return content.trim();
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timer);
     }
   }
 

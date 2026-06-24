@@ -190,6 +190,29 @@ button {
   cursor: not-allowed;
 }
 
+.submit-btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  opacity: 1;
+}
+
+.submit-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .error-text {
   color: var(--accent-hover);
   font-size: 0.92rem;
@@ -704,7 +727,8 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dl-fill-indeterminate {
+  .dl-fill-indeterminate,
+  .submit-spinner {
     animation: none;
   }
 }

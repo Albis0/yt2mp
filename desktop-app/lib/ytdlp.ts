@@ -43,12 +43,23 @@ export interface VideoInfo {
   availableHeights: number[];
 }
 
+// Without a deadline, a yt-dlp call stuck on a slow/dead network path (info
+// fetch, search) hangs the "Fetching…" UI indefinitely instead of surfacing
+// an error the user can act on.
+const YTDLP_TIMEOUT_MS = 25000;
+
 function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn(ytdlpPath(), args, { windowsHide: true });
 
     let stdout = "";
     let stderr = "";
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill();
+    }, YTDLP_TIMEOUT_MS);
 
     proc.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -58,10 +69,16 @@ function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
     });
 
     proc.on("error", (err) => {
+      clearTimeout(timer);
       reject(err);
     });
 
     proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new Error("Timed out — yt-dlp took too long to respond."));
+        return;
+      }
       if (code !== 0) {
         reject(new Error(stderr || `yt-dlp exited with code ${code}`));
         return;
