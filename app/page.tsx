@@ -1,4 +1,5 @@
 import Image from "next/image";
+import CopyCommand from "@/components/CopyCommand";
 import {GITHUB_URL, DRIVE_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, METADEFENDER_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
@@ -88,10 +89,22 @@ function DriveIcon() {
     );
 }
 
+// Tux, the Linux mascot, in his standard colours (black body, white belly,
+// yellow beak and feet). Simplified vector path that stays crisp at icon size.
 function LinuxIcon() {
     return (
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-            <path d="M12.5 2c-1.7 0-3 1.5-3 3.3 0 .9.1 1.9-.4 2.7-.6 1-1.6 1.7-2.2 2.7-.7 1.1-1 2.4-1.6 3.6-.4.8-1 1.5-1.2 2.4-.1.5.1 1.1.6 1.3.5.2 1 0 1.4.3.5.4.6 1.1 1 1.6.7.8 1.9 1 2.9.7.6-.2 1.1-.6 1.7-.6s1.1.4 1.7.6c1 .3 2.2.1 2.9-.7.4-.5.5-1.2 1-1.6.4-.3.9-.1 1.4-.3.5-.2.7-.8.6-1.3-.2-.9-.8-1.6-1.2-2.4-.6-1.2-.9-2.5-1.6-3.6-.6-1-1.6-1.7-2.2-2.7-.5-.8-.4-1.8-.4-2.7C15.5 3.5 14.2 2 12.5 2zm-1.4 3.4c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z" />
+        <svg viewBox="0 0 24 24" width="15" height="18" aria-hidden="true">
+            <path
+                fill="#000"
+                d="M12.005 0C9.27 0 8.165 2.527 8.165 4.5c0 1.34.34 2.06.34 3.4 0 .9-.74 1.62-1.49 2.85-.86 1.4-1.83 3.02-1.83 5.02 0 .77.2 1.45.2 2.05 0 .67-.5 1.07-.95 1.6-.5.6-.98 1.2-.98 2.06 0 1.18 1.07 1.74 2.4 2.02 1.2.25 2.6.5 3.86.5h4.55c1.27 0 2.66-.25 3.86-.5 1.33-.28 2.4-.84 2.4-2.02 0-.86-.48-1.46-.98-2.06-.45-.53-.95-.93-.95-1.6 0-.6.2-1.28.2-2.05 0-2-.97-3.62-1.83-5.02-.75-1.23-1.49-1.95-1.49-2.85 0-1.34.34-2.06.34-3.4C15.845 2.527 14.74 0 12.005 0z"
+            />
+            <ellipse cx="9.6" cy="6.5" rx="1.5" ry="1.9" fill="#fff" />
+            <ellipse cx="14.4" cy="6.5" rx="1.5" ry="1.9" fill="#fff" />
+            <circle cx="9.9" cy="6.8" r="0.85" fill="#000" />
+            <circle cx="14.1" cy="6.8" r="0.85" fill="#000" />
+            <path fill="#f4b400" d="M12 7.4c-1.1 0-2.5 1.1-2.5 1.9 0 .6 1.3 1.1 2.5 1.1s2.5-.5 2.5-1.1c0-.8-1.4-1.9-2.5-1.9z" />
+            <path fill="#fff" d="M12 11.2c-2.4 0-4 3.6-4 6.6 0 2.7 1.8 4.4 4 4.4s4-1.7 4-4.4c0-3-1.6-6.6-4-6.6z" />
+            <path fill="#f4b400" d="M6.3 20.6c-.7 1.2-1.9 1.6-1.8 2.4.1.7 1.1.6 1.9.5.8-.1 1.4-.5 1.4-1.1 0-.8-.9-3-1.5-1.8zm11.4 0c.7 1.2 1.9 1.6 1.8 2.4-.1.7-1.1.6-1.9.5-.8-.1-1.4-.5-1.4-1.1 0-.8.9-3 1.5-1.8z" />
         </svg>
     );
 }
@@ -180,6 +193,11 @@ export default function Home() {
                                         <span>GitHub releases</span>
                                     </a>
                                 </div>
+                                <div className="get-linux-hint">
+                                    <span className="get-linux-label">After the AppImage downloads:</span>
+                                    <CopyCommand command={`chmod +x yt2mp-${VERSION}.AppImage`} />
+                                    <CopyCommand command={`./yt2mp-${VERSION}.AppImage`} />
+                                </div>
                             </div>
                         </div>
 
@@ -237,6 +255,22 @@ export default function Home() {
                             <p className="cell-text cell-text-tight">
                                 This runs on a handful of free-tier API keys that rotate if one is rate-limited; if every key fails, your original text is searched as-is instead of breaking the
                                 feature. Worth knowing: unlike everything else in this app, the AI step does send your search text to Groq&apos;s API.
+                            </p>
+                        </section>
+
+                        <section className="cell cell-wide">
+                            <h2 className="cell-title">Running on Linux</h2>
+                            <p className="cell-text">
+                                The Linux build is a portable AppImage — there&apos;s nothing to install. Download it, mark it executable, and run it. yt-dlp and ffmpeg are bundled inside, same as
+                                on Windows.
+                            </p>
+                            <div className="cmd-list">
+                                <CopyCommand command={`chmod +x yt2mp-${VERSION}.AppImage`} />
+                                <CopyCommand command={`./yt2mp-${VERSION}.AppImage`} />
+                            </div>
+                            <p className="cell-text cell-text-tight">
+                                If it won&apos;t start, your distro may be missing FUSE — either install it (<code className="inline-code">sudo apt install libfuse2</code>) or run with{" "}
+                                <code className="inline-code">--appimage-extract-and-run</code>. Built and tested on x64.
                             </p>
                         </section>
 
