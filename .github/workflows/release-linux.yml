@@ -1,13 +1,20 @@
 name: Build Linux AppImage
 
-# Fires when a version tag is pushed. Builds the Linux AppImage on an Ubuntu
-# runner (electron-builder can't produce Linux targets reliably from Windows)
-# and attaches it to the GitHub Release for that tag.
+# Builds the Linux AppImage on an Ubuntu runner (electron-builder can't produce
+# Linux targets reliably from Windows) and attaches it to a GitHub Release.
+# Runs automatically on a version-tag push, or manually against an existing
+# release tag via the `tag` input (e.g. to add Linux to an already-shipped
+# version without cutting a new one).
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the AppImage to"
+        required: true
+        default: "v0.4.0"
 
 permissions:
   contents: write
@@ -63,6 +70,7 @@ jobs:
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: desktop-app/${{ steps.hash.outputs.file }}
           append_body: true
           body: |
