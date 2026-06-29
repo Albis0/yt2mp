@@ -3,11 +3,20 @@
 export const GITHUB_URL =
     "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp.Setup.0.4.0.exe";
 
+// Linux build: a portable AppImage attached to the same GitHub Release. Runs
+// on any x64 distro without installation — mark executable and launch.
+export const LINUX_URL =
+    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp-0.4.0.AppImage";
+
 // Mirror: Google Drive. The installer is large enough that Drive shows a
 // "can't scan for viruses" page on the normal link; the
 // drive.usercontent.google.com host with confirm=t serves the .exe directly.
 export const DRIVE_URL =
     "https://drive.usercontent.google.com/download?id=1SyviZ2N7pS1c18FEn9k79c5owUun2v4s&export=download&confirm=t";
+
+// Canonical origin the site is served from — single source for canonical
+// URLs, the sitemap, robots, and absolute OG/Twitter image URLs.
+export const SITE_URL = "https://yt2mp.onrender.com";
 
 export const REPO_URL = "https://github.com/Albis0/yt2mp";
 export const LICENSE_URL = "https://github.com/Albis0/yt2mp/blob/main/LICENSE";

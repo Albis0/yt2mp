@@ -71,10 +71,28 @@ function log(message: string) {
   }
 }
 
+// yt-dlp/ffmpeg ship as .exe on Windows and as plain ELF binaries on Linux.
+// Resolve the platform-correct name so the same code spawns the right file.
+function binaryName(base: "yt-dlp" | "ffmpeg"): string {
+  return process.platform === "win32" ? `${base}.exe` : base;
+}
+
 function resourcePath(fileName: string): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, fileName)
     : path.join(PROJECT_ROOT, "resources", fileName);
+}
+
+// extraResources copies files without preserving the executable bit, so on
+// Linux/macOS the bundled binaries land as non-executable and spawn fails with
+// EACCES. Restore +x best-effort; a no-op on Windows.
+function ensureExecutable(filePath: string): void {
+  if (process.platform === "win32") return;
+  try {
+    fs.chmodSync(filePath, 0o755);
+  } catch (err) {
+    log(`[chmod] could not mark ${filePath} executable: ${(err as Error).message}`);
+  }
 }
 
 // Reads GROQ_KEYS=a,b,c out of a .env file next to the binaries (packaged) or
@@ -120,9 +138,13 @@ function standaloneServerPath(): string {
 
 async function startNextServer(): Promise<number> {
   const serverPath = standaloneServerPath();
+  const ytdlpPath = resourcePath(binaryName("yt-dlp"));
+  const ffmpegPath = resourcePath(binaryName("ffmpeg"));
   log(`Starting Next server from ${serverPath}`);
-  log(`yt-dlp: ${resourcePath("yt-dlp.exe")}`);
-  log(`ffmpeg: ${resourcePath("ffmpeg.exe")}`);
+  log(`yt-dlp: ${ytdlpPath}`);
+  log(`ffmpeg: ${ffmpegPath}`);
+  ensureExecutable(ytdlpPath);
+  ensureExecutable(ffmpegPath);
 
   if (!fs.existsSync(serverPath)) {
     throw new Error(`server.js not found at ${serverPath}`);
@@ -137,8 +159,8 @@ async function startNextServer(): Promise<number> {
       PORT: String(port),
       HOSTNAME: "127.0.0.1",
       ELECTRON_RUN_AS_NODE: "1",
-      YTDLP_PATH: resourcePath("yt-dlp.exe"),
-      FFMPEG_PATH: resourcePath("ffmpeg.exe"),
+      YTDLP_PATH: ytdlpPath,
+      FFMPEG_PATH: ffmpegPath,
       GROQ_KEYS: loadGroqKeys(),
     },
     windowsHide: true,

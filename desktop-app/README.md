@@ -41,6 +41,18 @@ desktop-app/resources/yt-dlp.exe
 desktop-app/resources/ffmpeg.exe
 ```
 
+### Linux build
+
+The Linux AppImage is built in CI (`.github/workflows/release-linux.yml`) on a
+version-tag push — the workflow downloads the Linux `yt-dlp` and a static
+`ffmpeg` into `resources/linux/` itself. To build locally on Linux, place the
+two binaries there manually and run `bun run electron:build`:
+
+```
+desktop-app/resources/linux/yt-dlp
+desktop-app/resources/linux/ffmpeg
+```
+
 ## AI search setup (optional)
 
 AI search needs Groq API keys, which are **never committed to source** (GitHub's

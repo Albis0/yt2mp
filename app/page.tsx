@@ -1,15 +1,79 @@
 import Image from "next/image";
-import {
-    GITHUB_URL,
-    DRIVE_URL,
-    REPO_URL,
-    LICENSE_URL,
-    ISSUES_URL,
-    METADEFENDER_URL,
-    VERSION,
-    INSTALLER_NAME,
-    INSTALLER_SHA256,
-} from "@/lib/site";
+import {GITHUB_URL, DRIVE_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, METADEFENDER_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256} from "@/lib/site";
+
+// Structured data: a SoftwareApplication node so the download surfaces as a
+// rich result, plus an FAQPage built from the questions the page already
+// answers — both feed Google rich results and AI Overviews.
+const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+        {
+            "@type": "SoftwareApplication",
+            name: "yt2mp",
+            applicationCategory: "MultimediaApplication",
+            operatingSystem: "Windows 10, Windows 11, Linux",
+            softwareVersion: VERSION,
+            softwareRequirements: "Windows 10/11 (x64) or a Linux x64 distribution",
+            fileSize: "215 MB",
+            inLanguage: "en",
+            description: "Free, open-source Windows desktop app that downloads YouTube videos as MP3 or MP4. Runs locally — no server, no account, no ads.",
+            url: SITE_URL,
+            downloadUrl: GITHUB_URL,
+            installUrl: GITHUB_URL,
+            releaseNotes: `${REPO_URL}/releases/latest`,
+            image: `${SITE_URL}/og.png`,
+            license: LICENSE_URL,
+            isAccessibleForFree: true,
+            offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+            },
+            author: {
+                "@type": "Person",
+                name: "Albis0",
+                url: REPO_URL,
+            },
+        },
+        {
+            "@type": "FAQPage",
+            mainEntity: [
+                {
+                    "@type": "Question",
+                    name: "Is yt2mp free?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "Yes. yt2mp is free and open source under the GPL-3.0 license, with no account, ads, or upload required.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "Does yt2mp work offline or send my data anywhere?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "Downloads run entirely on your own machine and talk only to youtube.com — there is no server component. The optional AI search feature is the one exception: it sends your search text to Groq's API to turn it into a search query.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "What formats can yt2mp download?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "MP3 (best available audio re-encoded at 192 kbps) and MP4 (best available video at any resolution offered). It also supports playlists.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "Which operating systems does yt2mp support?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. yt-dlp and ffmpeg ship inside the download, so there are no separate dependencies to install.",
+                    },
+                },
+            ],
+        },
+    ],
+};
 
 function DriveIcon() {
     return (
@@ -20,6 +84,14 @@ function DriveIcon() {
             <path fill="#00832d" d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" />
             <path fill="#2684fc" d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" />
             <path fill="#ffba00" d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" />
+        </svg>
+    );
+}
+
+function LinuxIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M12.5 2c-1.7 0-3 1.5-3 3.3 0 .9.1 1.9-.4 2.7-.6 1-1.6 1.7-2.2 2.7-.7 1.1-1 2.4-1.6 3.6-.4.8-1 1.5-1.2 2.4-.1.5.1 1.1.6 1.3.5.2 1 0 1.4.3.5.4.6 1.1 1 1.6.7.8 1.9 1 2.9.7.6-.2 1.1-.6 1.7-.6s1.1.4 1.7.6c1 .3 2.2.1 2.9-.7.4-.5.5-1.2 1-1.6.4-.3.9-.1 1.4-.3.5-.2.7-.8.6-1.3-.2-.9-.8-1.6-1.2-2.4-.6-1.2-.9-2.5-1.6-3.6-.6-1-1.6-1.7-2.2-2.7-.5-.8-.4-1.8-.4-2.7C15.5 3.5 14.2 2 12.5 2zm-1.4 3.4c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9zm2.8 0c.4 0 .7.4.7.9s-.3.9-.7.9-.7-.4-.7-.9.3-.9.7-.9z" />
         </svg>
     );
 }
@@ -35,14 +107,14 @@ function GitHubIcon() {
 export default function Home() {
     return (
         <div className="page">
+            <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(jsonLd)}} />
             <div className="mobile-block">
                 <div className="mobile-block-inner">
                     <Image src="/icon.png" alt="" width={40} height={40} />
                     <p className="mobile-block-title">yt2mp is a Windows app</p>
                     <p className="mobile-block-text">
-                        It installs and runs on a Windows 10/11 desktop — there&apos;s
-                        nothing to open here on a phone. Pull this page up on your computer
-                        when you&apos;re ready to install it, or jump to the source below.
+                        It installs and runs on a Windows 10/11 desktop — there&apos;s nothing to open here on a phone. Pull this page up on your computer when you&apos;re ready to install it, or jump
+                        to the source below.
                     </p>
                     <a className="mobile-block-link" href={REPO_URL}>
                         View the repository on GitHub →
@@ -81,11 +153,7 @@ export default function Home() {
                                 <br />
                                 as MP3 or MP4.
                             </h1>
-                            <p className="hero-dek">
-                                Paste a link, pick a format, the file lands in your
-                                Downloads folder. Runs on your own machine — no account, no
-                                upload, no ads.
-                            </p>
+                            <p className="hero-dek">Paste a link, pick a format, the file lands in your Downloads folder. Runs on your own machine — no account, no upload, no ads.</p>
 
                             <div className="get">
                                 <a className="get-btn" href={GITHUB_URL}>
@@ -99,23 +167,15 @@ export default function Home() {
                                     <span>Windows 10/11</span>
                                 </div>
                                 <div className="get-alt">
-                                    <a
-                                        className="icon-link"
-                                        href={DRIVE_URL}
-                                        title="Google Drive mirror"
-                                        aria-label="Google Drive mirror"
-                                    >
+                                    <a className="icon-link" href={LINUX_URL} title="Linux AppImage" aria-label="Download the Linux AppImage">
+                                        <LinuxIcon />
+                                        <span>Linux AppImage</span>
+                                    </a>
+                                    <a className="icon-link" href={DRIVE_URL} title="Google Drive mirror" aria-label="Google Drive mirror">
                                         <DriveIcon />
                                         <span>Drive mirror</span>
                                     </a>
-                                    <a
-                                        className="icon-link"
-                                        href={REPO_URL}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        title="GitHub releases"
-                                        aria-label="GitHub releases"
-                                    >
+                                    <a className="icon-link" href={REPO_URL} target="_blank" rel="noreferrer" title="GitHub releases" aria-label="GitHub releases">
                                         <GitHubIcon />
                                         <span>GitHub releases</span>
                                     </a>
@@ -159,45 +219,30 @@ export default function Home() {
                         <section className="cell">
                             <h2 className="cell-title">Why it runs locally</h2>
                             <p className="cell-text">
-                                This used to be a web app on a free Render instance. Two
-                                things broke under real use: YouTube blocks downloads from
-                                shared cloud IP ranges (&quot;Sign in to confirm you&apos;re
-                                not a bot&quot;), and a free 512&nbsp;MB instance gets
-                                OOM-killed the moment more than one person downloads at
-                                once.
+                                This used to be a web app on a free Render instance. Two things broke under real use: YouTube blocks downloads from shared cloud IP ranges (&quot;Sign in to confirm
+                                you&apos;re not a bot&quot;), and a free 512&nbsp;MB instance gets OOM-killed the moment more than one person downloads at once.
                             </p>
                             <p className="cell-text cell-text-tight">
-                                Both problems belong to the server, not the idea — so the
-                                server is gone. Downloads now run from your own IP, with no
-                                shared memory budget for anyone to exceed.
+                                Both problems belong to the server, not the idea — so the server is gone. Downloads now run from your own IP, with no shared memory budget for anyone to exceed.
                             </p>
                         </section>
 
                         <section className="cell">
                             <h2 className="cell-title">How AI search works</h2>
                             <p className="cell-text">
-                                Switch to AI search and type a request instead of a link —
-                                &quot;that troye sivan song called rush&quot; works the same
-                                as pasting the URL. A small model (Groq&apos;s
-                                Llama&nbsp;3.1&nbsp;8B) turns your phrasing into a clean
-                                search query, then yt-dlp searches YouTube for it directly —
-                                no link required, nothing leaves YouTube&apos;s own search.
+                                Switch to AI search and type a request instead of a link — &quot;that troye sivan song called rush&quot; works the same as pasting the URL. A small model (Groq&apos;s
+                                Llama&nbsp;3.1&nbsp;8B) turns your phrasing into a clean search query, then yt-dlp searches YouTube for it directly — no link required, nothing leaves YouTube&apos;s
+                                own search.
                             </p>
                             <p className="cell-text cell-text-tight">
-                                This runs on a handful of free-tier API keys that rotate if
-                                one is rate-limited; if every key fails, your original text
-                                is searched as-is instead of breaking the feature. Worth
-                                knowing: unlike everything else in this app, the AI step
-                                does send your search text to Groq&apos;s API.
+                                This runs on a handful of free-tier API keys that rotate if one is rate-limited; if every key fails, your original text is searched as-is instead of breaking the
+                                feature. Worth knowing: unlike everything else in this app, the AI step does send your search text to Groq&apos;s API.
                             </p>
                         </section>
 
                         <section className="cell">
                             <h2 className="cell-title">Why the installer is ~215 MB</h2>
-                            <p className="cell-text">
-                                Most of it isn&apos;t this app&apos;s code — it&apos;s the
-                                runtime and tools it ships with:
-                            </p>
+                            <p className="cell-text">Most of it isn&apos;t this app&apos;s code — it&apos;s the runtime and tools it ships with:</p>
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
@@ -222,9 +267,7 @@ export default function Home() {
 
                         <section className="cell">
                             <h2 className="cell-title">What&apos;s next</h2>
-                            <p className="cell-text">
-                                Things on the list, not promised on a timeline:
-                            </p>
+                            <p className="cell-text">Things on the list, not promised on a timeline:</p>
                             <table className="info-table info-table-tight">
                                 <tbody>
                                     <tr>
@@ -245,7 +288,7 @@ export default function Home() {
                                 <tbody>
                                     <tr>
                                         <th scope="row">Platform</th>
-                                        <td>Windows 10 / 11 (x64) only</td>
+                                        <td>Windows 10 / 11 (x64) installer · Linux x64 AppImage</td>
                                     </tr>
                                     <tr>
                                         <th scope="row">License</th>
@@ -274,14 +317,11 @@ export default function Home() {
                         <section className="cell cell-wide">
                             <h2 className="cell-title">Verify what you downloaded</h2>
                             <p className="cell-text">
-                                The installer is unsigned, so Windows SmartScreen will warn
-                                on first run — that&apos;s the missing code-signing
-                                certificate, not a detected threat.{" "}
+                                The installer is unsigned, so Windows SmartScreen will warn on first run — that&apos;s the missing code-signing certificate, not a detected threat.{" "}
                                 <a href={METADEFENDER_URL} target="_blank" rel="noreferrer">
                                     See the MetaDefender scan
                                 </a>{" "}
-                                for this build, or check the hash below against what you
-                                downloaded.
+                                for this build, or check the hash below against what you downloaded.
                             </p>
                             <div className="hash-row">
                                 <span className="hash-label">sha256</span>
@@ -293,24 +333,15 @@ export default function Home() {
                             <h2 className="cell-title">Before you download</h2>
                             <div className="split-cols">
                                 <p className="cell-text">
-                                    Free software, provided as-is, no warranty. You&apos;re
-                                    responsible for what you download with it — keep it to
-                                    content you have the right to save: your own uploads,
-                                    public domain, Creative Commons, or anything else
-                                    you&apos;re permitted to keep.
+                                    Free software, provided as-is, no warranty. You&apos;re responsible for what you download with it — keep it to content you have the right to save: your own uploads,
+                                    public domain, Creative Commons, or anything else you&apos;re permitted to keep.
                                 </p>
                                 <p className="cell-text">
                                     Downloading from YouTube may go against{" "}
-                                    <a
-                                        href="https://www.youtube.com/t/terms"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                    >
+                                    <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
                                         its Terms of Service
                                     </a>
-                                    . This project isn&apos;t built for copyright
-                                    infringement, and the authors aren&apos;t liable for how
-                                    it&apos;s used.
+                                    . This project isn&apos;t built for copyright infringement, and the authors aren&apos;t liable for how it&apos;s used.
                                 </p>
                             </div>
                         </section>
