@@ -50,20 +50,35 @@
     "files": [
       "electron/dist/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "resources/yt-dlp.exe",
-        "to": "yt-dlp.exe"
-      },
-      {
-        "from": "resources/ffmpeg.exe",
-        "to": "ffmpeg.exe"
-      }
-    ],
     "afterPack": "scripts/after-pack.js",
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "extraResources": [
+        {
+          "from": "resources/yt-dlp.exe",
+          "to": "yt-dlp.exe"
+        },
+        {
+          "from": "resources/ffmpeg.exe",
+          "to": "ffmpeg.exe"
+        }
+      ]
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "AudioVideo",
+      "extraResources": [
+        {
+          "from": "resources/linux/yt-dlp",
+          "to": "yt-dlp"
+        },
+        {
+          "from": "resources/linux/ffmpeg",
+          "to": "ffmpeg"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
