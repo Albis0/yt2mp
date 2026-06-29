@@ -1,0 +1,79 @@
+name: Build Linux AppImage
+
+# Builds the Linux AppImage on an Ubuntu runner (electron-builder can't produce
+# Linux targets reliably from Windows) and attaches it to a GitHub Release.
+# Runs automatically on a version-tag push, or manually against an existing
+# release tag via the `tag` input (e.g. to add Linux to an already-shipped
+# version without cutting a new one).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the AppImage to"
+        required: true
+        default: "v0.4.0"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-appimage:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Linux yt-dlp + a static ffmpeg, fetched at build time so they never
+      # live in the repo. yt-dlp ships a self-contained Linux binary; ffmpeg
+      # comes from John Van Sickle's widely-used static builds.
+      - name: Fetch Linux binaries
+        run: |
+          mkdir -p resources/linux
+          curl -L -o resources/linux/yt-dlp \
+            https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+          curl -L -o /tmp/ffmpeg.tar.xz \
+            https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf /tmp/ffmpeg.tar.xz -C /tmp
+          cp /tmp/ffmpeg-*-amd64-static/ffmpeg resources/linux/ffmpeg
+          chmod +x resources/linux/yt-dlp resources/linux/ffmpeg
+
+      # GROQ_KEYS powers AI search. Pulled from a repo secret into the .env that
+      # after-pack.js bundles. If the secret is unset, AI search falls back to
+      # the raw query — the build still succeeds.
+      - name: Write .env
+        run: |
+          echo "GROQ_KEYS=${{ secrets.GROQ_KEYS }}" > .env
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build AppImage
+        run: bun run electron:build
+
+      - name: Compute checksum
+        id: hash
+        run: |
+          APPIMAGE=$(ls release/*.AppImage | head -n1)
+          echo "file=$APPIMAGE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$APPIMAGE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: desktop-app/${{ steps.hash.outputs.file }}
+          append_body: true
+          body: |
+
+            ---
+            **Linux AppImage** · sha256 `${{ steps.hash.outputs.sha256 }}`
