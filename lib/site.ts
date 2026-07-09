@@ -1,12 +1,12 @@
 // Primary download: GitHub Releases. Fast CDN, no size warnings, and "latest"
 // always points at the newest published release.
 export const GITHUB_URL =
-    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp.Setup.0.4.0.exe";
+    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp.Setup.0.4.1.exe";
 
 // Linux build: a portable AppImage attached to the same GitHub Release. Runs
 // on any x64 distro without installation — mark executable and launch.
 export const LINUX_URL =
-    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp-0.4.0.AppImage";
+    "https://github.com/Albis0/yt2mp/releases/latest/download/yt2mp-0.4.1.AppImage";
 
 // Mirror: Google Drive. The installer is large enough that Drive shows a
 // "can't scan for viruses" page on the normal link; the
@@ -24,7 +24,7 @@ export const ISSUES_URL = "https://github.com/Albis0/yt2mp/issues";
 export const METADEFENDER_URL =
     "https://metadefender.com/results/file/YnpJMk1EWXlNekZKTUZkVVR6Rk9WV28xWkVsd1YwWlBZMGhNX21kYWFzYTdlMGQ0Y2U1Ng/threats-prevented";
 
-export const VERSION = "0.4.0";
-export const INSTALLER_NAME = "yt2mp Setup 0.4.0.exe";
+export const VERSION = "0.4.1";
+export const INSTALLER_NAME = "yt2mp Setup 0.4.1.exe";
 export const INSTALLER_SHA256 =
-    "fc1bea614a94e51d9960887ed9088d1a879c6601c690cfdc8c18e44907e351cc";
+    "00f3c3d781fc1114593e5012f949789e58ef30a8165ec81083f9b81dce04df43";
