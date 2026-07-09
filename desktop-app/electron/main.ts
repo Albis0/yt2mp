@@ -161,6 +161,13 @@ async function startNextServer(): Promise<number> {
       ELECTRON_RUN_AS_NODE: "1",
       YTDLP_PATH: ytdlpPath,
       FFMPEG_PATH: ffmpegPath,
+      // yt-dlp needs a JS runtime to solve YouTube's player challenges —
+      // without one the >360p DASH formats can silently disappear from
+      // extraction. Instead of bundling ~100MB of Deno, reuse this very
+      // Electron binary as that runtime: yt-dlp inherits this server
+      // process's env (including ELECTRON_RUN_AS_NODE=1 above), so when it
+      // spawns this exe, Electron boots as plain Node instead of the app.
+      YTDLP_JS_RUNTIME: `node:${process.execPath}`,
       GROQ_KEYS: loadGroqKeys(),
     },
     windowsHide: true,

@@ -28,6 +28,27 @@ function ffmpegPath(): string {
   return process.env.FFMPEG_PATH || "ffmpeg";
 }
 
+// yt-dlp needs a JavaScript runtime to solve YouTube's player challenges
+// (EJS); without one, extraction still "works" but the DASH formats —
+// everything above 360p — can silently vanish, which downgrades downloads
+// regardless of the requested quality. electron/main.ts points this at the
+// app's own Electron binary running in node mode, so no separate runtime
+// (Deno is ~100MB) has to ship with the app.
+function jsRuntimeArgs(): string[] {
+  const runtime = process.env.YTDLP_JS_RUNTIME;
+  return runtime ? ["--js-runtimes", runtime] : [];
+}
+
+// yt-dlp does NOT read any FFMPEG_LOCATION environment variable — the merge
+// step only finds the bundled ffmpeg via this CLI flag. (On Windows it happens
+// to work without it because CreateProcess searches yt-dlp.exe's own
+// directory, but Linux spawn only searches PATH.)
+function ffmpegLocationArgs(): string[] {
+  return process.env.FFMPEG_PATH
+    ? ["--ffmpeg-location", process.env.FFMPEG_PATH]
+    : [];
+}
+
 export interface VideoFormat {
   format_id: string;
   ext: string;
@@ -54,7 +75,9 @@ const YTDLP_TIMEOUT_MS = 25000;
 
 function runYtDlp(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(ytdlpPath(), args, { windowsHide: true });
+    const proc = spawn(ytdlpPath(), [...jsRuntimeArgs(), ...args], {
+      windowsHide: true,
+    });
 
     // Collecting raw chunks and joining once at the end avoids repeated
     // string concatenation/decoding on every "data" event — matters for
@@ -180,24 +203,37 @@ export async function searchVideoInfo(query: string): Promise<VideoInfo> {
 export type DownloadFormat = "mp3" | "mp4";
 
 export function buildYtDlpAudioArgs(url: string): string[] {
-  return ["-f", "bestaudio", "--no-playlist", "-o", "-", url];
+  return [...jsRuntimeArgs(), "-f", "bestaudio", "--no-playlist", "-o", "-", url];
 }
 
 // YouTube only offers a single pre-muxed (video+audio combined) stream up to
 // 360p — every quality above that (480p, 720p, 1080p, 1440p, 4K) is video-only
 // and audio-only DASH streams that have to be downloaded separately and
-// merged. Asking for "best[height<=1080]" silently falls back to whatever
-// the highest pre-muxed format is (360p), regardless of what quality the UI
-// shows as selected — this format selector instead requests the real
-// separate streams so the actual download matches the requested resolution.
+// merged. Above 1080p those streams are often VP9/AV1-only (no avc1/mp4), so
+// a selector locked to [ext=mp4] can skip every DASH stream and land on its
+// last resort: the pre-muxed 360p — the UI then shows "2160p" while the file
+// arrives at 360p. This chain prefers mp4/m4a (fast stream-copy merge, best
+// player compatibility) but walks through any-codec video and any-codec audio
+// before ever settling for the pre-muxed fallback; every branch still remuxes
+// into an .mp4 container (the bundled ffmpeg accepts VP9 and opus in mp4).
 export function buildYtDlpVideoArgs(url: string, quality?: string): string[] {
   const height = quality ? parseInt(quality, 10) : undefined;
+  const cap = height && Number.isFinite(height) ? `[height<=${height}]` : "";
   const formatSelector =
-    height && Number.isFinite(height)
-      ? `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${height}]`
-      : "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best";
+    `bestvideo${cap}[ext=mp4]+bestaudio[ext=m4a]/` +
+    `bestvideo${cap}+bestaudio[ext=m4a]/` +
+    `bestvideo${cap}+bestaudio/` +
+    `best${cap}`;
 
-  return ["-f", formatSelector, "--no-playlist", "--merge-output-format", "mp4"];
+  return [
+    ...jsRuntimeArgs(),
+    "-f",
+    formatSelector,
+    "--no-playlist",
+    "--merge-output-format",
+    "mp4",
+    ...ffmpegLocationArgs(),
+  ];
 }
 
 /**
@@ -272,10 +308,7 @@ export async function downloadMp4ToFile(
   let lastPercentInStream = 0;
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ytdlpPath(), args, {
-      windowsHide: true,
-      env: { ...process.env, FFMPEG_LOCATION: ffmpegPath() },
-    });
+    const proc = spawn(ytdlpPath(), args, { windowsHide: true });
 
     const outputChunks: Buffer[] = [];
     let lineBuffer = "";
