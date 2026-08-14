@@ -1,10 +1,12 @@
 import type {Metadata} from "next";
-import {IBM_Plex_Mono, IBM_Plex_Sans} from "next/font/google";
+import {IBM_Plex_Mono, Inter} from "next/font/google";
 import {SITE_URL} from "@/lib/site";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
-    variable: "--font-plex-sans",
+// Inter for the interface and IBM Plex Mono for figures — the same pairing
+// the app itself ships, so the page and the product read as one thing.
+const inter = Inter({
+    variable: "--font-inter",
     subsets: ["latin"],
     weight: ["400", "500", "600"],
 });
@@ -15,9 +17,12 @@ const plexMono = IBM_Plex_Mono({
     weight: ["400", "500", "600", "700"],
 });
 
-const TITLE = "yt2mp — YouTube to MP3/MP4 Downloader for Windows";
+// YouTube stays first in both: it is the highest-volume term by a wide margin
+// and the page's existing ranking rests on it. The other sites are additions,
+// not a replacement.
+const TITLE = "yt2mp — YouTube, TikTok & Instagram to MP3/MP4 Downloader";
 const DESCRIPTION =
-    "Free, open-source Windows app that downloads YouTube videos as MP3 or MP4. Runs locally on your own machine — no server, no account, no ads, no upload. GPL-3.0.";
+    "Free, open-source desktop app that downloads YouTube, TikTok, Instagram, X and Twitch video as MP3 or MP4. Runs locally on your own machine — no server, no account, no ads, no upload. Windows and Linux. GPL-3.0.";
 
 export const metadata: Metadata = {
     metadataBase: new URL(SITE_URL),
@@ -33,6 +38,10 @@ export const metadata: Metadata = {
         "YouTube downloader",
         "YouTube MP3 converter",
         "download YouTube video",
+        "TikTok video downloader",
+        "Instagram reel downloader",
+        "Twitch VOD downloader",
+        "X video downloader",
         "Windows YouTube downloader",
         "offline YouTube downloader",
         "open source YouTube downloader",
@@ -64,7 +73,7 @@ export const metadata: Metadata = {
                 url: "/og.png",
                 width: 1200,
                 height: 630,
-                alt: "yt2mp — download YouTube as MP3 or MP4 on Windows",
+                alt: "yt2mp — download YouTube, TikTok and Instagram video as MP3 or MP4",
             },
         ],
     },
@@ -96,7 +105,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+        <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
             <body>{children}</body>
         </html>
     );

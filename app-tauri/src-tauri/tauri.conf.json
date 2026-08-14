@@ -1,0 +1,76 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "yt2mp",
+  "version": "../package.json",
+  "identifier": "com.yt2mp.desktop",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "yt2mp",
+        "width": 900,
+        "height": 760,
+        "minWidth": 560,
+        "minHeight": 480,
+        "center": true,
+        "resizable": true,
+        "backgroundColor": "#0c0e12",
+        "decorations": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com https://*.cdninstagram.com https://*.fbcdn.net https://pbs.twimg.com https://*.twimg.com https://*.jtvnw.net https://*.twitch.tv",
+        "frame-src": "https://www.youtube.com https://www.youtube-nocookie.com",
+        "connect-src": "'self' ipc: http://ipc.localhost"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Albis0/yt2mp/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZDRDc0MDU5NERGQUQxODcKUldTSDBmcE5XVURYL0c4Z25QVG9STlo5d3FQWFU2UlZvdTNWNzBHUU9ERUZ4b2R0US9xVGpucHoK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "appimage"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "copyright": "GPL-3.0-or-later",
+    "category": "Utility",
+    "shortDescription": "Ad-free YouTube to MP3/MP4 downloader",
+    "longDescription": "Downloads YouTube videos as MP3 or MP4, running entirely on your own machine. No account, no server, no ads.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

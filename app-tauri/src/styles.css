@@ -1,0 +1,1477 @@
+/* ============================================================
+   yt2mp — interface
+
+   The subject is a file tool. What people are actually reading
+   here is tabular data: resolutions, container types, byte
+   counts, durations. So the interface is built like a good file
+   listing rather than like a media brand.
+
+   Three rules hold the whole thing together:
+
+   1. Neutral surfaces, coloured accent. Each tab sets its own
+      --accent, so the window takes on the site's colour in the
+      places that carry meaning — the active tab, its icon, the
+      focus ring, the primary button. Backgrounds, panels and
+      borders stay on one neutral ramp in every tab, which is
+      what keeps this from becoming the old "whole window turns
+      magenta" treatment that fought every thumbnail on screen.
+   2. Colour is never the only signal. The active tab is also
+      bolder and underlined; a warning is also a glyph.
+   3. Every number is set in tabular mono figures, so columns of
+      sizes line up on the decimal and can be compared by eye.
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Type. Inter for the interface, Plex Mono anywhere a number
+     needs to line up under another number. */
+  --sans: "Inter", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* One accent for the whole app. It marks focus and the single
+     primary action, and nothing else. */
+  --accent: #2f6fed;
+  --accent-press: #2559c8;
+  --on-accent: #ffffff;
+
+  /* Status. Deliberately desaturated — these appear next to text,
+     not as fields of colour. */
+  --danger: #d1343c;
+  --warn: #9a6410;
+  --warn-bg: #fdf5e6;
+  --ok: #1a7f52;
+
+  --radius: 7px;
+  --radius-lg: 11px;
+}
+
+/* ---------- Light ---------- */
+:root,
+:root[data-theme="light"] {
+  --bg: #f7f7f6;
+  --chrome: #ecebe9;
+  --surface: #ffffff;
+  --surface-2: #f2f1ef;
+  --surface-3: #e7e5e2;
+  --border: #dcd9d5;
+  --border-strong: #c4c0ba;
+  --text: #16171a;
+  --text-2: #55585e;
+  --text-3: #85888e;
+  --shadow: 0 1px 2px rgba(20, 20, 25, 0.06), 0 8px 24px -12px rgba(20, 20, 25, 0.18);
+}
+
+/* ---------- Dark ----------
+   Not pure black: a slightly warm charcoal, so thumbnails sit on
+   it without the halo a #000 ground gives them. */
+:root[data-theme="dark"] {
+  --bg: #131316;
+  --chrome: #0e0e11;
+  --surface: #1a1a1e;
+  --surface-2: #212127;
+  --surface-3: #292930;
+  --border: #2c2c33;
+  --border-strong: #3d3d46;
+  --text: #f2f2f3;
+  --text-2: #a9abb2;
+  --text-3: #7c7f87;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+
+  --accent: #5b8dff;
+  --accent-press: #7ba3ff;
+  --danger: #ff6b70;
+  --warn: #e0a94a;
+  --warn-bg: #2a2213;
+  --ok: #4ac48a;
+}
+
+html {
+  height: 100%;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100%;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* The window is the app; selecting a label only ever looks like
+     an accident. Real inputs opt back in below. */
+  user-select: none;
+}
+
+input,
+code,
+.selectable {
+  user-select: text;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Every figure in the interface: tabular so digits sit in fixed
+   columns and two sizes can be compared without reading them. */
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---------- Per-tab accent ----------
+   The only thing a tab changes. Two values per site: the accent
+   itself and its pressed state. Everything structural — bg,
+   surface, border, text — is shared, so switching tabs tints the
+   controls without repainting the room.
+
+   Light and dark get different values because a colour that reads
+   as "brand" on white turns fluorescent on charcoal. */
+
+.page-youtube { --accent: #d70029; --accent-press: #b30022; }
+.page-tiktok { --accent: #00868a; --accent-press: #026e71; }
+.page-instagram { --accent: #c62d78; --accent-press: #a72463; }
+.page-twitter { --accent: #38424e; --accent-press: #232c36; }
+.page-twitch { --accent: #7b3fe4; --accent-press: #6832c4; }
+.page-other { --accent: #2f6fed; --accent-press: #2559c8; }
+.page-ai { --accent: #97650f; --accent-press: #7d530b; }
+
+:root[data-theme="dark"] .page-youtube { --accent: #ff4d67; --accent-press: #ff7186; }
+:root[data-theme="dark"] .page-tiktok { --accent: #25dbd3; --accent-press: #5ae7e1; }
+:root[data-theme="dark"] .page-instagram { --accent: #ff5fa2; --accent-press: #ff85b8; }
+:root[data-theme="dark"] .page-twitter { --accent: #9fb0c4; --accent-press: #bccadb; }
+:root[data-theme="dark"] .page-twitch { --accent: #a87bff; --accent-press: #bd9bff; }
+:root[data-theme="dark"] .page-other { --accent: #5b8dff; --accent-press: #7ba3ff; }
+:root[data-theme="dark"] .page-ai { --accent: #e3b45c; --accent-press: #edc77e; }
+
+/* The filled controls need dark text on the light accents, or the
+   label disappears into the fill. */
+:root[data-theme="dark"] .page-tiktok,
+:root[data-theme="dark"] .page-twitter,
+:root[data-theme="dark"] .page-ai {
+  --on-accent: #15161a;
+}
+
+/* ---------- Window ---------- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  /* Undecorated window: without this the app has no edge at all
+     against a dark desktop. */
+  border: 1px solid var(--border);
+}
+
+/* ---------- Chrome ---------- */
+
+/* Two rows, not one. Seven tabs at a readable size cannot share a
+   row with the window controls at this window's width — one of
+   them always loses, and it was the last tab's label. Splitting
+   them means the tabs get the full width and the title bar keeps
+   its own, which is also how a browser does it. */
+.chrome {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Top row: drag handle plus the window controls. Deliberately
+   short — it is chrome, not content. */
+.chrome-bar {
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+}
+
+.chrome-drag {
+  flex: 1;
+  min-width: 24px;
+}
+
+/* The app's name sits in the title bar, which is otherwise dead
+   space, and gives the drag region something to be. */
+.chrome-title {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.chrome-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.chrome-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.chrome-btn-on {
+  color: var(--text);
+}
+
+/* ---------- Tabs ----------
+   Flat, underlined. The old raised "browser tab" shape needed a
+   border on three sides plus a 1px overlap trick to join the
+   chrome; an underline says the same thing with one rule and
+   survives a theme swap without redrawing. */
+
+/* min-width:0 lets the strip shrink inside the flex chrome instead of
+   overflowing it — without it the last tab's label gets clipped at
+   narrow window widths. */
+/* Second row: the tabs, with the full window width to themselves.
+   They stretch to fill it, so the strip reads as a segmented
+   control rather than a huddle of buttons on the left. */
+.tabstrip {
+  display: flex;
+  align-items: stretch;
+  height: 42px;
+  padding: 0 6px;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabstrip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  /* Share the row evenly, but never shrink a label to ellipsis:
+     flex-basis 0 + grow gives each tab an equal slice, and the
+     min-width floor keeps the longest label ("Instagram") intact. */
+  flex: 1 1 0;
+  min-width: fit-content;
+  justify-content: center;
+  padding: 0 12px;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 0.92rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.tab:hover:not(.tab-active) {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+/* The active tab carries its site's colour, and says so twice:
+   in the accent and in the weight, so the state survives a
+   greyscale screenshot or a colour-blind reader. */
+.tab-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The marker sits on the chrome's own bottom border, so the active
+   tab reads as connected to the content below it. */
+.tab-active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+/* Inactive icons stay muted so seven brand colours never shout at
+   once; the active one takes the tab's accent. */
+.tab-icon {
+  display: inline-flex;
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+
+.tab:hover .tab-icon,
+.tab-active .tab-icon {
+  opacity: 1;
+}
+
+/* A tab whose downloads are failing upstream. A bare dot reads as
+   decoration and prompts "why is this here?"; the glyph is legible
+   as a warning without waiting for the tooltip. */
+.tab-warn {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--chrome);
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ---------- Window controls ---------- */
+
+.wincontrols {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.wc-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.wc-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* The one window control that can lose work keeps the red
+   convention. */
+.wc-close:hover {
+  background: #e11d2e;
+  color: #fff;
+}
+
+/* ---------- Shell ---------- */
+
+.app-shell {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------- Entry ---------- */
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.download-form {
+  display: flex;
+  gap: 8px;
+}
+
+.url-input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.url-input::placeholder {
+  color: var(--text-3);
+}
+
+.url-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.submit-btn {
+  flex-shrink: 0;
+  padding: 11px 20px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--accent-press);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 1;
+}
+
+.submit-spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--on-accent) 35%, transparent);
+  border-top-color: var(--on-accent);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Notices ---------- */
+
+.tab-notice {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.tab-notice-warn {
+  background: var(--warn-bg);
+  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+  color: var(--warn);
+}
+
+.error-text {
+  padding: 10px 13px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+/* ---------- Result ---------- */
+
+.result-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.result-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.result-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: #000;
+  position: relative;
+}
+
+.result-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.result-thumb:disabled {
+  cursor: default;
+}
+
+.result-embed {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* The play affordance is a plain white disc. It used to be a big
+   accent-coloured circle with a glow, which competed with the
+   thumbnail it was sitting on. */
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s ease;
+}
+
+.result-thumb:hover .play-overlay {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.play-overlay::before {
+  content: "";
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.3);
+}
+
+.play-triangle {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 10px 0 10px 17px;
+  border-color: transparent transparent transparent #16171a;
+  margin-left: 4px;
+}
+
+.open-glyph {
+  position: relative;
+  z-index: 1;
+  color: #16171a;
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 600;
+}
+
+/* Neutral chip. The brand-coloured badges were the last place the
+   old design shouted; the tab already says which site you are on. */
+.platform-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.result-meta {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+}
+
+.result-title {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.result-sub {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 0.83rem;
+}
+
+/* ---------- Formats ----------
+   The signature. This is a file listing, not a row of buttons:
+   one option per line, label left, exact size right in tabular
+   figures, so the sizes form a column you can compare down. */
+
+.format-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+}
+
+.format-group-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 14px 0 6px;
+}
+
+.format-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.format-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.format-row:first-child {
+  border-top: none;
+}
+
+/* The row itself is the target — a full-width hit area reads as a
+   list you pick from, which is what it is. */
+.format-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 10px;
+  margin: 0 -10px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.format-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.format-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.format-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: -0.005em;
+}
+
+.format-hint {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* MP3 is the most-used action, so it is the one filled control in
+   the window. Everything else is a quiet row. */
+.format-btn-audio {
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.format-btn-audio:hover:not(:disabled) {
+  background: var(--accent-press);
+}
+
+.format-btn-audio .format-hint {
+  color: color-mix(in srgb, var(--on-accent) 75%, transparent);
+}
+
+/* ---------- Progress ---------- */
+
+.dl-progress {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.dl-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.dl-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.18s ease;
+}
+
+.dl-fill-done {
+  background: var(--ok);
+  width: 100%;
+}
+
+/* A paused transfer is suspended, not killed, so the bar stays
+   filled but drains of colour to read as "held". */
+.dl-fill-paused {
+  background: var(--text-3);
+}
+
+.dl-status {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.dl-status-error {
+  color: var(--danger);
+  font-family: var(--sans);
+}
+
+.dl-controls {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.dl-ctrl-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.dl-ctrl-btn:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+
+.dl-ctrl-btn-stop:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---------- History ---------- */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-head h3 {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.history-clear {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.79rem;
+  transition: color 0.14s ease;
+}
+
+.history-clear:hover {
+  color: var(--danger);
+}
+
+/* An empty screen is an invitation to act, not a mood. */
+.history-empty {
+  padding: 22px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 0.85rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.history-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.history-item {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  transition: background 0.12s ease;
+}
+
+.history-item:first-child {
+  border-top: none;
+}
+
+.history-item:hover {
+  background: var(--surface-2);
+}
+
+.history-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+}
+
+.history-thumb {
+  flex-shrink: 0;
+  width: 56px;
+  height: 34px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.history-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.history-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.history-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+
+.history-badge {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.history-platform {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.history-remove {
+  flex-shrink: 0;
+  width: 34px;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.9rem;
+  transition: color 0.14s ease;
+}
+
+.history-remove:hover {
+  color: var(--danger);
+}
+
+/* ---------- Playlist ---------- */
+
+.playlist-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.playlist-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.playlist-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-count {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+
+.playlist-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.playlist-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.playlist-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 6px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.playlist-row:hover {
+  background: var(--surface-2);
+}
+
+.playlist-index {
+  flex-shrink: 0;
+  width: 24px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.playlist-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.playlist-track-title {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-track-sub {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+
+.playlist-chevron {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 1rem;
+}
+
+.playlist-expand {
+  padding: 0 10px 12px 41px;
+}
+
+.playlist-status {
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.playlist-status-error {
+  color: var(--danger);
+}
+
+.playlist-formats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Settings ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.settings-close {
+  padding: 6px 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.79rem;
+  font-weight: 500;
+}
+
+.settings-close:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.settings-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+.settings-primary:hover:not(:disabled) {
+  background: var(--accent-press);
+}
+
+.settings-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-active {
+  font-size: 0.83rem;
+  color: var(--text);
+}
+
+.settings-link {
+  align-self: flex-start;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.79rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-link:hover {
+  color: var(--text);
+}
+
+.settings-body {
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.settings-body-dim {
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+
+.settings-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.settings-choice {
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.83rem;
+  font-weight: 500;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.settings-choice:hover {
+  border-color: var(--text-3);
+}
+
+.settings-choice-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.settings-status {
+  font-size: 0.81rem;
+  color: var(--text-2);
+}
+
+/* ---------- Theme switch ----------
+   Three states, not two: "System" has to be reachable, otherwise
+   choosing once permanently opts out of the OS setting. */
+
+.theme-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.theme-opt {
+  padding: 6px 13px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.theme-opt:hover {
+  color: var(--text);
+}
+
+.theme-opt-on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- Update strip ----------
+   Sits under the tabs, above the content. A modal would be the wrong shape:
+   an available update is worth mentioning, not worth blocking someone who
+   opened the app to grab one video. */
+
+.updatebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 9px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.updatebar-text {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.updatebar-note {
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+
+.updatebar-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
+.updatebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.updatebar-primary {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background 0.14s ease;
+}
+
+.updatebar-primary:hover {
+  background: var(--accent-press);
+}
+
+.updatebar-ghost {
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 0.82rem;
+  transition: color 0.14s ease;
+}
+
+.updatebar-ghost:hover {
+  color: var(--text);
+}
+
+/* ---------- First run ----------
+   Replaces the main UI while the external tools download. There is genuinely
+   nothing to do until they arrive, so this occupies the window rather than
+   floating over a UI that would not work if touched. */
+
+.firstrun {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+}
+
+.firstrun-card {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.firstrun-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.firstrun-text {
+  color: var(--text-2);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.firstrun-dim {
+  color: var(--text-3);
+  font-size: 0.82rem;
+}
+
+.firstrun-error {
+  color: var(--danger);
+  font-size: 0.86rem;
+}
+
+.firstrun-track {
+  height: 5px;
+  border-radius: 5px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.firstrun-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.firstrun-status {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.firstrun-stage {
+  color: var(--text-3);
+}
+
+/* ---------- Probe results ---------- */
+
+.probe-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.probe-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.79rem;
+}
+
+.probe-mark {
+  flex-shrink: 0;
+  width: 13px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.probe-works {
+  color: var(--ok);
+}
+
+.probe-locked,
+.probe-signedinbutblocked {
+  color: var(--warn);
+}
+
+.probe-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.probe-note {
+  color: var(--text-2);
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .download-form {
+    flex-direction: column;
+  }
+  .format-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

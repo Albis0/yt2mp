@@ -1,0 +1,227 @@
+name: Release
+
+# Builds Windows and Linux in parallel on a version tag, signs both, and
+# publishes them with the manifest the in-app updater reads.
+#
+# Replaces the old release-linux.yml, which only built the AppImage — the
+# Windows installer was built by hand on a developer machine, so nothing
+# verified that the two came from the same commit.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach artifacts to"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  # Used by the Tauri bundler to sign the update artifacts. Without these the
+  # build still succeeds but emits no .sig files, and the updater would then
+  # reject every release — so the manifest job below fails loudly if they are
+  # missing rather than publishing something unusable.
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+jobs:
+  build:
+    strategy:
+      # Never cancel the other platform because one failed: a half-published
+      # release with only one artifact is worse than a clean failure.
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: nsis
+            # What the bundler produces, relative to the bundle directory.
+            artifact: "nsis/*-setup.exe"
+            platform: windows-x86_64
+          - os: ubuntu-22.04
+            target: appimage
+            artifact: "appimage/*.AppImage"
+            platform: linux-x86_64
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app-tauri
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cargo's registry and target dir dominate the build time. First run is
+      # a few minutes; cached runs are much shorter.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app-tauri/src-tauri
+          key: ${{ matrix.os }}
+
+      # Tauri's Linux target links against WebKitGTK. 22.04 is pinned because
+      # 24.04 ships webkit2gtk-4.1 only, which Tauri v2's default features do
+      # not build against cleanly.
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2
+
+      # NOTE: yt-dlp, ffmpeg and quickjs are deliberately NOT fetched here.
+      # They are no longer bundled into the installer — the app downloads them
+      # into its own data folder on first run (src-tauri/src/tools.rs). That
+      # is what keeps an update to ~5 MB instead of ~120 MB, and it also
+      # removed the old inconsistency where CI fetched Bellard's quickjs while
+      # the local script fetched quickjs-ng.
+
+      # GROQ_KEYS powers AI search. If the secret is unset, AI search falls
+      # back to searching the raw query and the build still succeeds.
+      - name: Write .env
+        run: echo "GROQ_KEYS=${{ secrets.GROQ_KEYS }}" > .env
+        shell: bash
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      - name: Build
+        run: bun run tauri build --bundles ${{ matrix.target }}
+
+      # The updater needs the signature's *contents*, not the .sig file, so it
+      # is read out here and carried to the manifest job.
+      - name: Collect artifact and signature
+        id: collect
+        shell: bash
+        run: |
+          BUNDLE="src-tauri/target/release/bundle"
+          FILE=$(ls $BUNDLE/${{ matrix.artifact }} | head -n1)
+          SIG="$FILE.sig"
+
+          if [ ! -f "$SIG" ]; then
+            echo "::error::No signature next to $FILE."
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is probably not set, or"
+            echo "::error::createUpdaterArtifacts is missing from tauri.conf.json."
+            echo "::error::Publishing without it would ship a release the updater refuses."
+            exit 1
+          fi
+
+          echo "path=app-tauri/$FILE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$FILE")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "size=$(du -m "$FILE" | cut -f1)" >> "$GITHUB_OUTPUT"
+
+          # Signatures are single-line base64, so no multi-line handling needed.
+          echo "signature=$(cat "$SIG")" >> "$GITHUB_OUTPUT"
+
+      # Passed to the manifest job, which cannot see other jobs' outputs
+      # except through artifacts.
+      - name: Record platform metadata
+        shell: bash
+        run: |
+          mkdir -p /tmp/meta
+          cat > /tmp/meta/${{ matrix.platform }}.json <<EOF
+          {
+            "platform": "${{ matrix.platform }}",
+            "file": "${{ steps.collect.outputs.name }}",
+            "signature": "${{ steps.collect.outputs.signature }}",
+            "sha256": "${{ steps.collect.outputs.sha256 }}",
+            "sizeMb": "${{ steps.collect.outputs.size }}"
+          }
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meta-${{ matrix.platform }}
+          path: /tmp/meta/*.json
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            ${{ steps.collect.outputs.path }}
+            ${{ steps.collect.outputs.path }}.sig
+
+  # Builds latest.json from both platforms' signatures and uploads it. This is
+  # the file the app polls, so it goes up only after both builds succeeded —
+  # publishing it early would advertise an update whose download 404s.
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: meta
+          pattern: meta-*
+          merge-multiple: true
+
+      - name: Build latest.json
+        id: manifest
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The tag is v0.6.0; the manifest must carry 0.6.0. A leading "v"
+          # here would never compare equal to the app's own version, so the
+          # updater would offer the same release forever.
+          export VERSION="${TAG#v}"
+          export BASE="https://github.com/$REPO/releases/download/$TAG"
+
+          node <<'EOF'
+          const fs = require("fs");
+          const version = process.env.VERSION;
+          const base = process.env.BASE;
+
+          const platforms = {};
+          for (const f of fs.readdirSync("meta")) {
+            const m = JSON.parse(fs.readFileSync(`meta/${f}`, "utf8"));
+            platforms[m.platform] = {
+              signature: m.signature,
+              url: `${base}/${m.file}`,
+            };
+          }
+
+          if (Object.keys(platforms).length === 0) {
+            console.error("No platform metadata — refusing to publish an empty manifest.");
+            process.exit(1);
+          }
+
+          fs.writeFileSync(
+            "latest.json",
+            JSON.stringify(
+              {
+                version,
+                notes: `See https://github.com/${process.env.REPO}/releases/tag/v${version}`,
+                pub_date: new Date().toISOString(),
+                platforms,
+              },
+              null,
+              2
+            )
+          );
+          console.log(fs.readFileSync("latest.json", "utf8"));
+          EOF
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: latest.json

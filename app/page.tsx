@@ -1,6 +1,6 @@
 import Image from "next/image";
 import CopyCommand from "@/components/CopyCommand";
-import {GITHUB_URL, DRIVE_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, METADEFENDER_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256} from "@/lib/site";
+import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
 // rich result, plus an FAQPage built from the questions the page already
@@ -15,9 +15,9 @@ const jsonLd = {
             operatingSystem: "Windows 10, Windows 11, Linux",
             softwareVersion: VERSION,
             softwareRequirements: "Windows 10/11 (x64) or a Linux x64 distribution",
-            fileSize: "215 MB",
+            ...(INSTALLER_SIZE ? {fileSize: INSTALLER_SIZE} : {}),
             inLanguage: "en",
-            description: "Free, open-source Windows desktop app that downloads YouTube videos as MP3 or MP4. Runs locally — no server, no account, no ads.",
+            description: "Free, open-source desktop app that downloads video and audio from YouTube, TikTok, Instagram, X and Twitch as MP3 or MP4. Runs locally — no server, no account, no ads.",
             url: SITE_URL,
             downloadUrl: GITHUB_URL,
             installUrl: GITHUB_URL,
@@ -25,16 +25,8 @@ const jsonLd = {
             image: `${SITE_URL}/og.png`,
             license: LICENSE_URL,
             isAccessibleForFree: true,
-            offers: {
-                "@type": "Offer",
-                price: "0",
-                priceCurrency: "USD",
-            },
-            author: {
-                "@type": "Person",
-                name: "Albis0",
-                url: REPO_URL,
-            },
+            offers: {"@type": "Offer", price: "0", priceCurrency: "USD"},
+            author: {"@type": "Person", name: "Albis0", url: REPO_URL},
         },
         {
             "@type": "FAQPage",
@@ -52,7 +44,15 @@ const jsonLd = {
                     name: "Does yt2mp work offline or send my data anywhere?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "Downloads run entirely on your own machine and talk only to youtube.com — there is no server component. The optional AI search feature is the one exception: it sends your search text to Groq's API to turn it into a search query.",
+                        text: "Downloads run entirely on your own machine and talk only to the site you are downloading from — there is no server component. The optional AI search feature is the one exception: it sends your search text to Groq's API to turn it into a search query.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "Which sites does yt2mp support?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "YouTube, TikTok, Instagram, X (Twitter) and Twitch each have their own tab, an 'Any link' tab accepts anything else yt-dlp supports — roughly 1750 sites — and an AI search tab finds a video on YouTube from a description instead of a link. Instagram and TikTok hide most posts from logged-out visitors, so yt2mp can borrow the login from a browser you are already signed into.",
                     },
                 },
                 {
@@ -60,7 +60,7 @@ const jsonLd = {
                     name: "What formats can yt2mp download?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "MP3 (best available audio re-encoded at 192 kbps) and MP4 (best available video at any resolution offered). It also supports playlists.",
+                        text: "MP3 (best available audio re-encoded at 192 kbps) and MP4 (best available video, with a quality picker for the resolutions the source offers). It also supports playlists, and downloads over 1 GB can be paused and resumed.",
                     },
                 },
                 {
@@ -68,7 +68,7 @@ const jsonLd = {
                     name: "Which operating systems does yt2mp support?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. yt-dlp and ffmpeg ship inside the download, so there are no separate dependencies to install.",
+                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. It fetches yt-dlp and ffmpeg itself the first time you open it, so there is nothing to install separately.",
                     },
                 },
             ],
@@ -76,21 +76,6 @@ const jsonLd = {
     ],
 };
 
-function DriveIcon() {
-    return (
-        <svg viewBox="0 0 87.3 78" width="16" height="16" aria-hidden="true">
-            <path fill="#0066da" d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" />
-            <path fill="#00ac47" d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" />
-            <path fill="#ea4335" d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" />
-            <path fill="#00832d" d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" />
-            <path fill="#2684fc" d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" />
-            <path fill="#ffba00" d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" />
-        </svg>
-    );
-}
-
-// Tux, the Linux mascot, in his standard colours (black body, white belly,
-// yellow beak and feet). Simplified vector path that stays crisp at icon size.
 function LinuxIcon() {
     return (
         <svg viewBox="0 0 24 24" width="15" height="18" aria-hidden="true">
@@ -117,17 +102,83 @@ function GitHubIcon() {
     );
 }
 
+function DownloadIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="m7 11 5 5 5-5" />
+            <path d="M4 20h16" />
+        </svg>
+    );
+}
+
+// The seven tabs, in the order the app shows them. Icons are the same
+// silhouettes the app draws, so the page and the product agree.
+const SITE_ROWS = [
+    {
+        id: "youtube",
+        name: "YouTube",
+        what: "Videos, Shorts and full playlists",
+        note: "",
+        path: "M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z",
+    },
+    {
+        id: "tiktok",
+        name: "TikTok",
+        what: "Posts, photo carousels and sounds",
+        note: "broken upstream",
+        warn: true,
+        path: "M16.6 5.8a4.8 4.8 0 0 1-1-2.8h-3.3v13.2a2.9 2.9 0 1 1-2-2.8v-3.3a6.2 6.2 0 1 0 5.3 6.1V9.4a8 8 0 0 0 4.7 1.5V7.6a4.8 4.8 0 0 1-3.7-1.8z",
+    },
+    {
+        id: "instagram",
+        name: "Instagram",
+        what: "Reels, posts and IGTV",
+        note: "sign-in needed",
+        path: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4 1.3-.1 1.7-.1 4.8-.1zm0 3.1a6.7 6.7 0 1 0 0 13.4 6.7 6.7 0 0 0 0-13.4zm0 11a4.3 4.3 0 1 1 0-8.6 4.3 4.3 0 0 1 0 8.6zm6.9-11.3a1.6 1.6 0 1 1-3.1 0 1.6 1.6 0 0 1 3.1 0z",
+    },
+    {
+        id: "twitter",
+        name: "X",
+        what: "Video from any public post",
+        note: "",
+        path: "M18.2 2.3h3.4l-7.4 8.5 8.7 11.5h-6.8l-5.3-7-6.1 7H1.3l7.9-9.1L.9 2.3h7l4.8 6.4 5.5-6.4zm-1.2 18h1.9L7.1 4.2H5.1L17 20.3z",
+    },
+    {
+        id: "twitch",
+        name: "Twitch",
+        what: "Clips, VODs and highlights",
+        note: "",
+        path: "M4.3 1.7 1.7 6v14.6h5V24h2.8l2.9-3.4h4.3l5.4-5.4V1.7H4.3zm15.9 12.2-3.1 3.1h-4.9l-2.7 2.7v-2.7H5.3V3.6h14.9v10.3zm-4.1-6.7v5.4h-2V7.2h2zm-5.4 0v5.4h-2V7.2h2z",
+    },
+    {
+        id: "other",
+        name: "Any link",
+        what: "The catch-all tab for everything else",
+        note: "~1,750 sites",
+        path: "M10.6 13.4a1 1 0 0 1 0-1.4l1.4-1.4a1 1 0 0 1 1.4 1.4l-1.4 1.4a1 1 0 0 1-1.4 0zm-2.8 5.7a4 4 0 0 1 0-5.7l2.8-2.8 1.4 1.4-2.8 2.9a2 2 0 0 0 2.8 2.8l2.9-2.8 1.4 1.4-2.8 2.8a4 4 0 0 1-5.7 0zm8.5-8.5-1.4-1.4 2.8-2.9a2 2 0 0 0-2.8-2.8l-2.9 2.8-1.4-1.4 2.8-2.8a4 4 0 0 1 5.7 5.7l-2.8 2.8z",
+    },
+    {
+        id: "ai",
+        name: "AI search",
+        what: "Describe a video instead of finding its link",
+        note: "YouTube only",
+        path: "M12 2l2.2 6.1L20.4 10l-6.2 2.2L12 18.4 9.8 12.2 3.6 10l6.2-1.9L12 2zm6.6 12.2l1 2.7 2.8 1-2.8 1-1 2.8-1-2.8-2.7-1 2.7-1 1-2.7z",
+    },
+];
+
 export default function Home() {
     return (
         <div className="page">
             <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(jsonLd)}} />
+
             <div className="mobile-block">
                 <div className="mobile-block-inner">
-                    <Image src="/icon.png" alt="" width={40} height={40} />
-                    <p className="mobile-block-title">yt2mp is a Windows app</p>
+                    <Image src="/icon.png" alt="" width={44} height={44} />
+                    <p className="mobile-block-title">yt2mp is a desktop app</p>
                     <p className="mobile-block-text">
-                        It installs and runs on a Windows 10/11 desktop — there&apos;s nothing to open here on a phone. Pull this page up on your computer when you&apos;re ready to install it, or jump
-                        to the source below.
+                        It installs and runs on a Windows 10/11 or Linux desktop — there&apos;s nothing to open here on a phone. Open this page on your computer when you&apos;re ready to install it,
+                        or read the source below.
                     </p>
                     <a className="mobile-block-link" href={REPO_URL}>
                         View the repository on GitHub →
@@ -136,262 +187,265 @@ export default function Home() {
             </div>
 
             <div className="desktop-only">
-                <header className="topbar">
-                    <div className="topbar-id">
-                        <Image src="/icon.png" alt="" width={22} height={22} />
-                        <span className="topbar-name">yt2mp</span>
-                        <span className="topbar-version">v{VERSION}</span>
+                <header className="wrap">
+                    <div className="topbar">
+                        <div className="topbar-id">
+                            <Image src="/icon.png" alt="" width={22} height={22} />
+                            <span className="topbar-name">yt2mp</span>
+                            <span className="topbar-version">v{VERSION}</span>
+                        </div>
+                        <nav className="topbar-links">
+                            <a href={REPO_URL} target="_blank" rel="noreferrer">
+                                source
+                            </a>
+                            <a href={ISSUES_URL} target="_blank" rel="noreferrer">
+                                issues
+                            </a>
+                            <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+                                license
+                            </a>
+                        </nav>
                     </div>
-                    <nav className="topbar-links">
-                        <a href={REPO_URL} target="_blank" rel="noreferrer">
-                            source
-                        </a>
-                        <a href={ISSUES_URL} target="_blank" rel="noreferrer">
-                            issues
-                        </a>
-                        <a href={LICENSE_URL} target="_blank" rel="noreferrer">
-                            license
-                        </a>
-                    </nav>
                 </header>
 
-                <main className="main">
-                    {/* Hero: two zones side by side, not stacked — left is the
-                        pitch + action, right is a real reference table, so the
-                        full viewport width carries content instead of margin. */}
-                    <section className="hero">
-                        <div className="hero-pitch">
-                            <h1 className="hero-title">
-                                Download YouTube
-                                <br />
-                                as MP3 or MP4.
-                            </h1>
-                            <p className="hero-dek">Paste a link, pick a format, the file lands in your Downloads folder. Runs on your own machine — no account, no upload, no ads.</p>
+                <main>
+                    <section className="wrap hero">
+                        <h1 className="hero-title">
+                            Paste a link.
+                            <br />
+                            Get <span className="hero-em">MP3</span> or <span className="hero-em">MP4</span>.
+                        </h1>
+                        <p className="hero-dek">
+                            A desktop downloader for YouTube, TikTok, Instagram, X and Twitch. It runs on your own machine — no account, no upload, no ads, and nothing to configure.
+                        </p>
 
-                            <div className="get">
-                                <a className="get-btn" href={GITHUB_URL}>
-                                    Download for Windows
-                                </a>
-                                <div className="get-meta">
-                                    <span className="get-name">{INSTALLER_NAME}</span>
-                                    <span className="get-sep">·</span>
-                                    <span>~215 MB</span>
-                                    <span className="get-sep">·</span>
-                                    <span>Windows 10/11</span>
-                                </div>
-                                <div className="get-alt">
-                                    <a className="icon-link" href={LINUX_URL} title="Linux AppImage" aria-label="Download the Linux AppImage">
-                                        <LinuxIcon />
-                                        <span>Linux AppImage</span>
-                                    </a>
-                                    <a className="icon-link" href={DRIVE_URL} title="Google Drive mirror" aria-label="Google Drive mirror">
-                                        <DriveIcon />
-                                        <span>Drive mirror</span>
-                                    </a>
-                                    <a className="icon-link" href={REPO_URL} target="_blank" rel="noreferrer" title="GitHub releases" aria-label="GitHub releases">
-                                        <GitHubIcon />
-                                        <span>GitHub releases</span>
-                                    </a>
-                                </div>
-                                <div className="get-linux-hint">
-                                    <span className="get-linux-label">After the AppImage downloads:</span>
-                                    <CopyCommand command={`chmod +x yt2mp-${VERSION}.AppImage`} />
-                                    <CopyCommand command={`./yt2mp-${VERSION}.AppImage`} />
-                                </div>
-                            </div>
+                        <div className="hero-actions">
+                            <a className="btn btn-primary" href={GITHUB_URL}>
+                                <DownloadIcon />
+                                Download for Windows
+                            </a>
+                            <a className="btn btn-ghost" href={LINUX_URL}>
+                                <LinuxIcon />
+                                Linux AppImage
+                            </a>
+                            <a className="btn btn-ghost" href={REPO_URL} target="_blank" rel="noreferrer">
+                                <GitHubIcon />
+                                Source
+                            </a>
                         </div>
 
-                        <div className="hero-panel">
-                            <h2 className="panel-title">What you get</h2>
-                            <table className="info-table">
-                                <tbody>
-                                    <tr>
-                                        <th scope="row">MP3</th>
-                                        <td>best available audio, re-encoded at 192 kbps</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">MP4</th>
-                                        <td>best available video, any resolution offered</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Preview</th>
-                                        <td>title, duration and uploader before you download</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">AI search</th>
-                                        <td>describe what you want instead of finding a link</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Playlists</th>
-                                        <td>paste a playlist link, pick which tracks to grab</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <p className="hero-meta">
+                            <span>{INSTALLER_NAME}</span>
+                            {INSTALLER_SIZE ? (
+                                <>
+                                    <span className="dot">·</span>
+                                    <span>{INSTALLER_SIZE}</span>
+                                </>
+                            ) : null}
+                            <span className="dot">·</span>
+                            <span>Windows 10/11</span>
+                            <span className="dot">·</span>
+                            <span>GPL-3.0</span>
+                        </p>
+
+                        {/* The product, at its own scale. Everything the page
+                            claims above is visible in this one image. */}
+                        <div className="shot">
+                            <Image src="/shots/app-hero.png" alt="The yt2mp window with a YouTube video loaded, showing the MP3 button and the list of video qualities" width={1089} height={952} priority />
+                        </div>
+                        <p className="shot-caption">A fetched video, ready to download. Dark by default; light is one click away.</p>
+                    </section>
+
+                    <section className="wrap band">
+                        <h2 className="band-title">A tab per site</h2>
+                        <p className="band-dek">
+                            Each site gets its own tab with the link format it expects, so you always know what the app is about to do. The tab colours the window it opens in.
+                        </p>
+
+                        <div className="sites">
+                            {SITE_ROWS.map((s) => (
+                                <div className="site-row" key={s.id}>
+                                    <span className={`site-name site-${s.id}`}>
+                                        <span className="site-icon">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                                                <path d={s.path} />
+                                            </svg>
+                                        </span>
+                                        {s.name}
+                                    </span>
+                                    <span className="site-what">{s.what}</span>
+                                    <span className={`site-note${s.warn ? " site-note-warn" : ""}`}>{s.note}</span>
+                                </div>
+                            ))}
                         </div>
                     </section>
 
-                    {/* Reference grid: every other section sits two-up so the
-                        page reads left-to-right in pairs instead of one long
-                        single-column scroll. */}
-                    <div className="grid">
-                        <section className="cell">
-                            <h2 className="cell-title">Why it runs locally</h2>
-                            <p className="cell-text">
-                                This used to be a web app on a free Render instance. Two things broke under real use: YouTube blocks downloads from shared cloud IP ranges (&quot;Sign in to confirm
-                                you&apos;re not a bot&quot;), and a free 512&nbsp;MB instance gets OOM-killed the moment more than one person downloads at once.
-                            </p>
-                            <p className="cell-text cell-text-tight">
-                                Both problems belong to the server, not the idea — so the server is gone. Downloads now run from your own IP, with no shared memory budget for anyone to exceed.
-                            </p>
-                        </section>
+                    <section className="wrap band">
+                        <h2 className="band-title">Pick the file you actually want</h2>
+                        <p className="band-dek">
+                            The quality list shows the exact size of every option before you commit to one — so a 4K download never surprises you at 1.3&nbsp;GB. Downloads that big can be paused and
+                            resumed.
+                        </p>
+                        <div className="shot">
+                            <Image src="/shots/app-formats.png" alt="The format list showing MP3 at 29.3 MB and video options from 2160p at 1.3 GB down to 720p at 172.9 MB" width={1089} height={952} />
+                        </div>
+                    </section>
 
-                        <section className="cell">
-                            <h2 className="cell-title">How AI search works</h2>
-                            <p className="cell-text">
-                                Switch to AI search and type a request instead of a link — &quot;that troye sivan song called rush&quot; works the same as pasting the URL. A small model (Groq&apos;s
-                                Llama&nbsp;3.1&nbsp;8B) turns your phrasing into a clean search query, then yt-dlp searches YouTube for it directly — no link required, nothing leaves YouTube&apos;s
-                                own search.
-                            </p>
-                            <p className="cell-text cell-text-tight">
-                                This runs on a handful of free-tier API keys that rotate if one is rate-limited; if every key fails, your original text is searched as-is instead of breaking the
-                                feature. Worth knowing: unlike everything else in this app, the AI step does send your search text to Groq&apos;s API.
-                            </p>
-                        </section>
+                    <section className="wrap band">
+                        <h2 className="band-title">The details</h2>
 
-                        <section className="cell cell-wide">
-                            <h2 className="cell-title">Running on Linux</h2>
-                            <p className="cell-text">
-                                The Linux build is a portable AppImage — there&apos;s nothing to install. Download it, mark it executable, and run it. yt-dlp and ffmpeg are bundled inside, same as
-                                on Windows.
-                            </p>
-                            <div className="cmd-list">
-                                <CopyCommand command={`chmod +x yt2mp-${VERSION}.AppImage`} />
-                                <CopyCommand command={`./yt2mp-${VERSION}.AppImage`} />
-                            </div>
-                            <p className="cell-text cell-text-tight">
-                                If it won&apos;t start, your distro may be missing FUSE — either install it (<code className="inline-code">sudo apt install libfuse2</code>) or run with{" "}
-                                <code className="inline-code">--appimage-extract-and-run</code>. Built and tested on x64.
-                            </p>
-                        </section>
-
-                        <section className="cell">
-                            <h2 className="cell-title">Why the installer is ~215 MB</h2>
-                            <p className="cell-text">Most of it isn&apos;t this app&apos;s code — it&apos;s the runtime and tools it ships with:</p>
-                            <table className="info-table info-table-tight">
-                                <tbody>
-                                    <tr>
-                                        <th scope="row">Chromium (the browser engine)</th>
-                                        <td>~75 MB</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Electron + Node + app code</th>
-                                        <td>~45 MB</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">ffmpeg.exe</th>
-                                        <td>~77 MB</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">yt-dlp.exe</th>
-                                        <td>~18 MB</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </section>
-
-                        <section className="cell">
-                            <h2 className="cell-title">What&apos;s next</h2>
-                            <p className="cell-text">Things on the list, not promised on a timeline:</p>
-                            <table className="info-table info-table-tight">
-                                <tbody>
-                                    <tr>
-                                        <th scope="row">Code signing</th>
-                                        <td>remove the SmartScreen warning on first run</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Batch downloads</th>
-                                        <td>queue multiple links at once outside of a playlist</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </section>
-
-                        <section className="cell cell-wide">
-                            <h2 className="cell-title">Specifications</h2>
-                            <table className="info-table info-table-tight">
-                                <tbody>
-                                    <tr>
-                                        <th scope="row">Platform</th>
-                                        <td>Windows 10 / 11 (x64) installer · Linux x64 AppImage</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">License</th>
-                                        <td>
-                                            <a href={LICENSE_URL} target="_blank" rel="noreferrer">
-                                                GPL-3.0-or-later
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Dependencies</th>
-                                        <td>none — yt-dlp/ffmpeg ship inside the installer</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Network</th>
-                                        <td>talks only to youtube.com</td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">Server component</th>
-                                        <td>none — your download never touches our server</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </section>
-
-                        <section className="cell cell-wide">
-                            <h2 className="cell-title">Verify what you downloaded</h2>
-                            <p className="cell-text">
-                                The installer is unsigned, so Windows SmartScreen will warn on first run — that&apos;s the missing code-signing certificate, not a detected threat.{" "}
-                                <a href={METADEFENDER_URL} target="_blank" rel="noreferrer">
-                                    See the MetaDefender scan
-                                </a>{" "}
-                                for this build, or check the hash below against what you downloaded.
-                            </p>
-                            <div className="hash-row">
-                                <span className="hash-label">sha256</span>
-                                <code className="hash-value">{INSTALLER_SHA256}</code>
-                            </div>
-                        </section>
-
-                        <section className="cell cell-wide cell-split">
-                            <h2 className="cell-title">Before you download</h2>
-                            <div className="split-cols">
-                                <p className="cell-text">
-                                    Free software, provided as-is, no warranty. You&apos;re responsible for what you download with it — keep it to content you have the right to save: your own uploads,
-                                    public domain, Creative Commons, or anything else you&apos;re permitted to keep.
+                        <div className="pair">
+                            <div className="card">
+                                <h3 className="card-title">Why it runs on your machine</h3>
+                                <p className="card-text">
+                                    This used to be a web app. Two things broke under real use: YouTube blocks downloads from shared cloud IP ranges, and a free 512&nbsp;MB instance gets OOM-killed the
+                                    moment two people download at once.
                                 </p>
-                                <p className="cell-text">
-                                    Downloading from YouTube may go against{" "}
+                                <p className="card-text">
+                                    Both problems belong to the server, so the server is gone. Downloads now run from your own connection — which also lets sites that need a login use the browser
+                                    session you already have.
+                                </p>
+                            </div>
+
+                            <div className="card">
+                                <h3 className="card-title">Signing in to Instagram and TikTok</h3>
+                                <p className="card-text">
+                                    Both hide most posts from logged-out visitors. yt2mp never asks for your password — it borrows the session from a browser you are already signed into. Press one
+                                    button and it tries each installed browser, then keeps the one that works.
+                                </p>
+                                <p className="card-text">
+                                    Firefox, Chrome, Edge, Brave, Opera, Vivaldi and the forks (Zen, LibreWolf, Waterfox, Floorp, Opera&nbsp;GX, Arc) are recognised. A session is only ever sent to the
+                                    site it came from.
+                                </p>
+                            </div>
+
+                            <div className="card">
+                                <h3 className="card-title">A small installer, and small updates</h3>
+                                <p className="card-text">
+                                    yt2mp draws its window with the WebView already in your OS rather than bundling a second copy of Chromium, so the download is {INSTALLER_SIZE}. The tools that do
+                                    the actual work — ffmpeg, yt-dlp and a small JavaScript runtime — are fetched once on first run instead of riding along inside the installer.
+                                </p>
+                                <div className="sizebar">
+                                    <div className="seg seg-app" style={{flexGrow: 3}}>
+                                        installer
+                                    </div>
+                                    <div className="seg seg-ffmpeg" style={{flexGrow: 98}}>
+                                        ffmpeg
+                                    </div>
+                                    <div className="seg seg-ytdlp" style={{flexGrow: 17}}>
+                                        yt-dlp
+                                    </div>
+                                    <div className="seg seg-quickjs" style={{flexGrow: 2}} />
+                                </div>
+                                <div className="sizekey">
+                                    <span className="sizekey-item">
+                                        <span className="swatch seg-app" />
+                                        installer {INSTALLER_SIZE}
+                                    </span>
+                                    <span className="sizekey-item">
+                                        <span className="swatch seg-ffmpeg" />
+                                        ffmpeg 98 MB
+                                    </span>
+                                    <span className="sizekey-item">
+                                        <span className="swatch seg-ytdlp" />
+                                        yt-dlp 17 MB
+                                    </span>
+                                    <span className="sizekey-item">
+                                        <span className="swatch seg-quickjs" />
+                                        QuickJS 2 MB
+                                    </span>
+                                </div>
+                                <p className="card-text">
+                                    That split is what keeps updates quick: a new version is {INSTALLER_SIZE}, not a hundred. The old Electron build was ~215&nbsp;MB installed. It also means yt-dlp
+                                    can be updated on its own from inside the app — which is how a site that suddenly stops working starts working again, without waiting for a new release.
+                                </p>
+                            </div>
+
+                            <div className="card">
+                                <h3 className="card-title">Updates and signing</h3>
+                                <p className="card-text">
+                                    yt2mp checks for a new version when it starts and tells you if one exists. It never installs anything without asking, and it will not interrupt a download that is
+                                    already running. Every update is cryptographically signed — the app refuses anything that does not carry a valid signature.
+                                </p>
+                                <p className="card-text">
+                                    The installer itself is unsigned, so Windows SmartScreen warns the first time you run it. That is a missing code-signing certificate, not a detected threat.
+                                    {INSTALLER_SHA256 ? (
+                                        <>
+                                            {" "}
+                                            To check the file you downloaded, run <code className="inline-code">Get-FileHash {INSTALLER_NAME}</code> and compare it with the hash below.
+                                        </>
+                                    ) : null}
+                                </p>
+                                {INSTALLER_SHA256 ? (
+                                    <div className="hash">
+                                        <span className="hash-label">sha256</span>
+                                        <code className="hash-value">{INSTALLER_SHA256}</code>
+                                    </div>
+                                ) : null}
+                                <table className="spec">
+                                    <tbody>
+                                        <tr>
+                                            <th scope="row">Platform</th>
+                                            <td>Windows 10/11 (x64) · Linux x64</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">Built with</th>
+                                            <td>Rust and Tauri</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">Dependencies</th>
+                                            <td>none — fetched on first run</td>
+                                        </tr>
+                                        <tr>
+                                            <th scope="row">Network</th>
+                                            <td>only the site you download from</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="card card-wide">
+                                <h3 className="card-title">Running it on Linux</h3>
+                                <p className="card-text">
+                                    The Linux build is a portable AppImage — nothing to install. Download it, mark it executable, run it. It fetches yt-dlp and ffmpeg on first launch, same as on Windows.
+                                </p>
+                                <div className="cmd-list">
+                                    <CopyCommand command={`chmod +x ${APPIMAGE_NAME}`} />
+                                    <CopyCommand command={`./${APPIMAGE_NAME}`} />
+                                </div>
+                                <p className="card-text">
+                                    If it won&apos;t start, your distro may be missing FUSE — install it (<code className="inline-code">sudo apt install libfuse2</code>) or run with{" "}
+                                    <code className="inline-code">--appimage-extract-and-run</code>. Built and tested on x64.
+                                </p>
+                            </div>
+
+                            <div className="card card-wide">
+                                <h3 className="card-title">Before you download</h3>
+                                <p className="card-text">
+                                    Free software, provided as-is, no warranty. You are responsible for what you download with it — keep it to content you have the right to save: your own uploads,
+                                    public domain, Creative Commons, or anything else you are permitted to keep. Downloading from YouTube may go against{" "}
                                     <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
                                         its Terms of Service
                                     </a>
-                                    . This project isn&apos;t built for copyright infringement, and the authors aren&apos;t liable for how it&apos;s used.
+                                    . This project is not built for copyright infringement, and the authors are not liable for how it is used.
                                 </p>
                             </div>
-                        </section>
-                    </div>
+                        </div>
+                    </section>
                 </main>
 
-                <footer className="site-footer">
-                    <span>yt2mp v{VERSION}</span>
-                    <span className="footer-dot">·</span>
-                    <a href={LICENSE_URL} target="_blank" rel="noreferrer">
-                        GPL-3.0-or-later
-                    </a>
-                    <span className="footer-dot">·</span>
-                    <a href={REPO_URL} target="_blank" rel="noreferrer">
-                        source
-                    </a>
+                <footer className="wrap">
+                    <div className="site-footer">
+                        <span>yt2mp v{VERSION}</span>
+                        <span className="dot">·</span>
+                        <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+                            GPL-3.0-or-later
+                        </a>
+                        <span className="dot">·</span>
+                        <a href={REPO_URL} target="_blank" rel="noreferrer">
+                            source
+                        </a>
+                    </div>
                 </footer>
             </div>
         </div>

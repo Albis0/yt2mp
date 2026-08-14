@@ -1,0 +1,62 @@
+[package]
+name = "yt2mp"
+version = "0.6.2"
+description = "Ad-free YouTube to MP3/MP4 downloader"
+authors = ["Albis0"]
+license = "GPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# Tauri builds the app as a library plus a thin binary so the same code can be
+# reused by mobile targets and integration tests.
+name = "yt2mp_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+# Self-update: checks a signed manifest on the GitHub release and installs the
+# new build. tauri-plugin-process supplies the relaunch() that follows it.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+# Used for one thing: telling Windows from Linux, because only Windows can
+# install an update in place. See src/lib/updater.ts.
+tauri-plugin-os = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Async runtime: the download commands spawn yt-dlp/ffmpeg and stream their
+# output without blocking the IPC thread, so a slow download never freezes
+# the UI the way a blocking std::process::Command would.
+tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "sync", "time", "fs", "macros"] }
+# AI search talks to Groq over HTTPS. rustls instead of native-tls so the
+# build doesn't need OpenSSL present on the machine.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+
+[target.'cfg(windows)'.dependencies]
+# Pause/resume suspends the yt-dlp process at the OS level, which on Windows
+# means walking its threads (tlhelp32) and calling Suspend/ResumeThread
+# (processthreadsapi) — there is no signal equivalent. See src/suspend.rs.
+winapi = { version = "0.3", features = [
+    "winbase",
+    "processthreadsapi",
+    "tlhelp32",
+    "handleapi",
+    "winnt",
+] }
+
+[profile.release]
+# Size matters here: the whole point of leaving Electron was the download
+# size. LTO + one codegen unit + stripped symbols cut the binary roughly in
+# half versus the default release profile.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

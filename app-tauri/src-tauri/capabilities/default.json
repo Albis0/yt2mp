@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions the yt2mp window needs: a native save dialog, revealing a finished file in the file manager, opening a post's original page in the user's browser (the only way to view TikTok/Instagram/X/Twitch content, which can't be embedded), and installing a signed update then restarting into it. github.com is allowed so a release page can be opened — on Linux an AppImage that wasn't launched as an AppImage cannot self-update, so it links to the download instead. Everything else (yt-dlp, the filesystem, the network) is reached through this app's own commands, never exposed to the webview directly.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close",
+    "dialog:allow-save",
+    "opener:allow-reveal-item-in-dir",
+    "updater:default",
+    "process:allow-restart",
+    "os:allow-platform",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*.youtube.com/*" },
+        { "url": "https://youtu.be/*" },
+        { "url": "https://*.tiktok.com/*" },
+        { "url": "https://*.instagram.com/*" },
+        { "url": "https://*.twitter.com/*" },
+        { "url": "https://*.x.com/*" },
+        { "url": "https://*.twitch.tv/*" },
+        { "url": "https://github.com/*" }
+      ]
+    }
+  ]
+}

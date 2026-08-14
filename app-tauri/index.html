@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>yt2mp</title>
+    <script>
+      // Paint the theme before the first frame. Without this the window shows
+      // a white flash on every launch while React mounts, which on a dark
+      // desktop is the most visible thing the app does.
+      (function () {
+        try {
+          var p = localStorage.getItem("yt2mp.theme") || "dark";
+          var dark =
+            p === "dark" ||
+            (p === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.setAttribute(
+            "data-theme",
+            dark ? "dark" : "light"
+          );
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
+    <style>
+      /* Matches --bg of the dark palette, so the pre-paint ground is already
+         the right colour even before the stylesheet arrives. */
+      html[data-theme="dark"] { background: #131316; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
