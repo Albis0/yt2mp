@@ -297,8 +297,19 @@ img {
    The screenshot is the hero image, so it gets a real frame and a
    soft ground behind it rather than floating flat on the page. */
 
-.shot {
+/* Two screenshots side by side. They are tall windows, so shown at full
+   width one would eat the whole fold on its own; a pair at half width
+   reads as "here is the app" in a single glance and lets the dark and
+   light themes be compared without scrolling between them. */
+.shots {
   margin-top: 52px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.shot {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -306,9 +317,30 @@ img {
   box-shadow: 0 40px 80px -40px rgba(0, 0, 0, 0.9);
 }
 
+/* A shot outside the pair still needs its own top margin, and is capped
+   narrower than the text column so it does not tower over the prose.
+   This one is a crop of the format table rather than a whole window, so
+   it gets a flat frame and no drop shadow — a window shadow around a
+   fragment of a window reads as a mistake. */
+.shot-inline {
+  margin-top: 32px;
+  max-width: 720px;
+  box-shadow: none;
+  background: transparent;
+}
+
 .shot img {
+  display: block;
   width: 100%;
   height: auto;
+}
+
+/* Below roughly the width where two windows stay legible, stack them. */
+@media (max-width: 860px) {
+  .shots {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }
 
 .shot-caption {

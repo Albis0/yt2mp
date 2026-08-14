@@ -501,8 +501,17 @@ export default function App() {
       {/* Not merely hidden: the input below autofocuses, and a form that
           cannot work yet should not be holding the caret while the tools it
           depends on are still downloading. */}
+      {/* With nothing fetched yet the shell centres itself: otherwise the
+          entry field and an empty history sit in a small cluster at the top
+          with the rest of the window left as dead space. Once a result or a
+          playlist exists there is enough to fill the page and it goes back
+          to flowing from the top. */}
       {needsTools ? null : (
-      <main className="app-shell">
+      <main
+        className={`app-shell${
+          !info && !playlist && history.length === 0 ? " app-shell-empty" : ""
+        }`}
+      >
         <div className="tab-panel" role="tabpanel">
           <form className="download-form" onSubmit={handleSubmit}>
             <input

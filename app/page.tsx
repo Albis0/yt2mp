@@ -248,12 +248,31 @@ export default function Home() {
                             <span>GPL-3.0</span>
                         </p>
 
-                        {/* The product, at its own scale. Everything the page
-                            claims above is visible in this one image. */}
-                        <div className="shot">
-                            <Image src="/shots/app-hero.png" alt="The yt2mp window with a YouTube video loaded, showing the MP3 button and the list of video qualities" width={1089} height={952} priority />
+                        {/* Both themes, side by side and at a size that keeps
+                            the whole result card legible without letting one
+                            screenshot own the fold. */}
+                        <div className="shots">
+                            <figure className="shot">
+                                <Image
+                                    src="/shots/app-dark.png"
+                                    alt="The yt2mp window in dark theme with a YouTube video fetched, showing the MP3 button and video qualities from 2160p to 720p with their file sizes"
+                                    width={900}
+                                    height={1076}
+                                    sizes="(max-width: 900px) 100vw, 430px"
+                                    priority
+                                />
+                            </figure>
+                            <figure className="shot">
+                                <Image
+                                    src="/shots/app-light.png"
+                                    alt="The same window in light theme, showing the identical layout on a light background"
+                                    width={900}
+                                    height={1076}
+                                    sizes="(max-width: 900px) 100vw, 430px"
+                                />
+                            </figure>
                         </div>
-                        <p className="shot-caption">A fetched video, ready to download. Dark by default; light is one click away.</p>
+                        <p className="shot-caption">The same screen in both themes. Dark by default; light is one click away.</p>
                     </section>
 
                     <section className="wrap band">
@@ -283,11 +302,16 @@ export default function Home() {
                     <section className="wrap band">
                         <h2 className="band-title">Pick the file you actually want</h2>
                         <p className="band-dek">
-                            The quality list shows the exact size of every option before you commit to one — so a 4K download never surprises you at 1.3&nbsp;GB. Downloads that big can be paused and
-                            resumed.
+                            The quality list shows the exact size of every option before you commit to one, so a 4K download never surprises you. Large downloads can be paused and resumed.
                         </p>
-                        <div className="shot">
-                            <Image src="/shots/app-formats.png" alt="The format list showing MP3 at 29.3 MB and video options from 2160p at 1.3 GB down to 720p at 172.9 MB" width={1089} height={952} />
+                        <div className="shot shot-inline">
+                            <Image
+                                src="/shots/app-formats.png"
+                                alt="The format list: MP3 at 3.3 MB, then video options from 2160p at 345.3 MB down to 720p at 25.2 MB, each with its size"
+                                width={1524}
+                                height={512}
+                                sizes="(max-width: 760px) 100vw, 720px"
+                            />
                         </div>
                     </section>
 

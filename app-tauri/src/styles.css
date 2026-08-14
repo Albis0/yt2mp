@@ -218,16 +218,24 @@ button {
 }
 
 /* The app's name sits in the title bar, which is otherwise dead
-   space, and gives the drag region something to be. */
+   space, and gives the drag region something to be.
+   Set at the same size as the tab labels rather than smaller: a
+   shrunken grey wordmark in the corner reads as a leftover, not
+   as the app's name. */
 .chrome-title {
   display: flex;
   align-items: center;
-  padding-left: 12px;
-  color: var(--text-3);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  gap: 7px;
+  padding-left: 14px;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   pointer-events: none;
+}
+
+.chrome-title svg {
+  opacity: 0.9;
 }
 
 .chrome-btn {
@@ -386,14 +394,33 @@ button {
 
 /* ---------- Shell ---------- */
 
+/* 820px rather than 680: at the 900px default window the narrower
+   column left a visible empty gutter down both sides while the
+   quality rows — the widest thing here, a label and a size pushed
+   apart — were cramped. The measure still caps so a maximised
+   window does not stretch a filename across a whole monitor. */
 .app-shell {
   width: 100%;
-  max-width: 680px;
+  max-width: 820px;
   margin: 0 auto;
-  padding: 28px 24px 64px;
+  padding: 22px 28px 40px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+}
+
+/* Nothing fetched yet: pull the entry field to the optical centre of the
+   window rather than leaving it pinned to the top edge of a mostly empty
+   screen. Bottom-weighted padding puts it slightly above true centre,
+   which is where the eye expects it. */
+.app-shell-empty {
+  /* 75px of chrome above (32 title + 42 tabs + its bottom border) plus
+     this element's own 22px top padding. Subtracting both is what keeps
+     the centred state from overflowing into a scrollbar on a window that
+     has nothing to scroll. */
+  min-height: calc(100vh - 75px - 22px);
+  justify-content: center;
+  padding-bottom: 64px;
 }
 
 /* ---------- Entry ---------- */
@@ -846,6 +873,22 @@ button {
   font-size: 0.85rem;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
+}
+
+/* On a first-open window the empty history is the loudest thing on
+   screen — a heading and a dashed box drawn around nothing, sitting
+   right under the one field the user is meant to look at. Keep the
+   message, drop the frame and the label, so the entry field stays the
+   only thing asking for attention. */
+.app-shell-empty .history-head {
+  display: none;
+}
+
+.app-shell-empty .history-empty {
+  border: none;
+  padding: 4px;
+  color: var(--text-3);
+  opacity: 0.75;
 }
 
 .history-list {
