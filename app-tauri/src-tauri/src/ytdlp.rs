@@ -234,11 +234,15 @@ pub enum ProbeOutcome {
     Locked,
     /// The login was found and sent, but the site rejected the request itself.
     ///
-    /// This is the shape of an upstream extractor breakage rather than
-    /// anything the user did: Instagram answers yt-dlp's authenticated API
-    /// call with HTTP 400 while the same session works fine in the browser.
-    /// It is worth separating from `NotSignedIn` because the advice is the
-    /// opposite — signing in again cannot help.
+    /// On Instagram this is almost always rate limiting. Instagram answers
+    /// its own API with **HTTP 429** once a device has made too many
+    /// requests, and yt-dlp surfaces that as a bare "HTTP Error 400: Bad
+    /// Request" — verified live by calling the API directly with the same
+    /// cookies, and with no cookies at all, both of which returned 429 while
+    /// ordinary instagram.com pages still loaded.
+    ///
+    /// Kept separate from `NotSignedIn` because the advice is the opposite:
+    /// signing in again cannot help, and waiting does.
     SignedInButBlocked,
     /// Anything else, carrying yt-dlp's own words.
     Failed { reason: String },
@@ -293,10 +297,16 @@ pub async fn probe_browser(browser: &str, url: &str) -> ProbeOutcome {
         || stderr.contains("not granting access")
     {
         ProbeOutcome::NotSignedIn
-    } else if stderr.contains("http error 400") || stderr.contains("http error 401") {
+    } else if stderr.contains("http error 400")
+        || stderr.contains("http error 401")
+        || stderr.contains("http error 429")
+        || stderr.contains("too many requests")
+        || stderr.contains("video info extraction failed")
+    {
         // The session was accepted as a session and then the API call was
-        // refused. Checked before the generic branch so this does not surface
-        // as a raw "HTTP Error 400" the user cannot act on.
+        // refused — on Instagram, a 429 wearing a 400's clothes. Checked
+        // before the generic branch so this does not surface as a raw
+        // "HTTP Error 400" the user cannot act on.
         ProbeOutcome::SignedInButBlocked
     } else {
         let first = String::from_utf8_lossy(&output.stderr)
@@ -334,11 +344,82 @@ pub async fn run_ytdlp(
         return Err(if stderr.is_empty() {
             format!("yt-dlp exited with {}", output.status)
         } else {
-            stderr
+            explain(&stderr, platform)
         });
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Turns yt-dlp's stderr into something a user can act on.
+///
+/// yt-dlp writes for people reading a terminal: its Instagram failure is a
+/// six-line paragraph containing three URLs and the phrase "fill out the
+/// appropriate issue template". Passed through verbatim into a desktop app it
+/// reads as a crash, and none of it says what to actually do.
+///
+/// Only cases with genuinely different advice are translated. Everything else
+/// keeps yt-dlp's own words — a wrong guess is worse than a technical
+/// message, and inventing an explanation for an error nobody has seen is how
+/// the confusing ones get created.
+fn explain(stderr: &str, platform: crate::platform::Platform) -> String {
+    use crate::platform::Platform;
+    let lower = stderr.to_ascii_lowercase();
+
+    // Instagram rate-limits by IP, hard, and it is the single most common
+    // Instagram failure. yt-dlp reports the 429 it gets back as a bare
+    // "HTTP Error 400: Bad Request", so the message names neither the cause
+    // nor the fact that waiting fixes it. Verified live: the same session and
+    // the same IP answer 429 to Instagram's own API for every request, while
+    // ordinary instagram.com pages still load normally.
+    if platform == Platform::Instagram
+        && (lower.contains("http error 400")
+            || lower.contains("http error 429")
+            || lower.contains("too many requests")
+            || lower.contains("video info extraction failed"))
+    {
+        return "Instagram is temporarily blocking this device for making too \
+                many requests. This is a limit on Instagram's side, not a \
+                problem with your login — waiting a few hours usually clears \
+                it. Downloading many posts in a row makes it happen sooner."
+            .to_string();
+    }
+
+    if lower.contains("empty media response")
+        || lower.contains("login required")
+        || lower.contains("requested content is not available")
+        || lower.contains("not granting access")
+    {
+        return "This post is only visible to signed-in accounts. Turn on \
+                browser sign-in in Settings so yt2mp can borrow the session \
+                from a browser you are already logged into."
+            .to_string();
+    }
+
+    if lower.contains("could not copy") && lower.contains("cookie database") {
+        return "Your browser is open and is holding its cookie file locked. \
+                Close it completely and try again, or pick a Firefox-based \
+                browser in Settings — those work while open."
+            .to_string();
+    }
+
+    if lower.contains("http error 403") {
+        return "The site refused to serve this file. This usually means it \
+                changed something on their end; try Update yt-dlp in Settings."
+            .to_string();
+    }
+
+    if lower.contains("video unavailable") || lower.contains("private video") {
+        return "This video is private or has been removed.".to_string();
+    }
+
+    // Unrecognised: keep yt-dlp's first ERROR line rather than the whole
+    // multi-paragraph dump, which is mostly links to its issue tracker.
+    stderr
+        .lines()
+        .find(|l| l.to_ascii_lowercase().contains("error"))
+        .map(|l| l.trim().trim_start_matches("ERROR:").trim().to_string())
+        .unwrap_or_else(|| stderr.to_string())
 }
 
 /// Collects the distinct video heights yt-dlp reported, highest first, so the
@@ -857,7 +938,7 @@ where
         return Err(if trimmed.is_empty() {
             "Download failed.".to_string()
         } else {
-            trimmed.lines().last().unwrap_or("Download failed.").to_string()
+            explain(trimmed, platform)
         });
     }
 
@@ -959,6 +1040,54 @@ mod tests {
             "must not fall into the not-signed-in branch"
         );
         assert!(lower.contains("http error 400"));
+    }
+
+    /// Instagram's rate limit arrives as a 400, not a 429 — yt-dlp reports
+    /// what its extractor saw, not what the API returned. Matching only on
+    /// "429" would miss every real occurrence.
+    #[test]
+    fn instagram_rate_limit_is_explained_not_echoed() {
+        use crate::platform::Platform;
+        let raw = "ERROR: [Instagram] DAmM8YXSb8-: Video info extraction \
+                   failed: HTTP Error 400: Bad Request";
+        let msg = explain(raw, Platform::Instagram);
+        assert!(msg.contains("too many requests"), "names the cause: {msg}");
+        assert!(msg.contains("waiting"), "says what actually helps: {msg}");
+        assert!(!msg.contains("400"), "no raw status code: {msg}");
+    }
+
+    /// The same 400 on another site is not Instagram's rate limit and must
+    /// not borrow its explanation.
+    #[test]
+    fn other_sites_do_not_get_the_instagram_explanation() {
+        use crate::platform::Platform;
+        let raw = "ERROR: [twitter] 1: HTTP Error 400: Bad Request";
+        let msg = explain(raw, Platform::Twitter);
+        assert!(!msg.contains("Instagram"), "must not blame Instagram: {msg}");
+    }
+
+    /// yt-dlp's not-signed-in message is six lines with three issue-tracker
+    /// URLs in it. What reaches the user has to be the instruction, not the
+    /// paragraph.
+    #[test]
+    fn login_required_becomes_an_instruction() {
+        use crate::platform::Platform;
+        let raw = "ERROR: [Instagram] X: Instagram sent an empty media \
+                   response. Check if this post is accessible in your browser \
+                   without being logged-in. See https://github.com/yt-dlp/...";
+        let msg = explain(raw, Platform::Instagram);
+        assert!(msg.contains("Settings"), "points at the fix: {msg}");
+        assert!(!msg.contains("http"), "no URLs survive: {msg}");
+    }
+
+    /// An error with no special handling keeps yt-dlp's own words — but only
+    /// the ERROR line, not the whole dump.
+    #[test]
+    fn unknown_errors_keep_ytdlp_wording() {
+        use crate::platform::Platform;
+        let raw = "WARNING: something\nERROR: Unsupported URL: foo\nSee docs";
+        let msg = explain(raw, Platform::Other);
+        assert_eq!(msg, "Unsupported URL: foo");
     }
 
     /// Cookie sharing stays off until it is switched on, whatever else is

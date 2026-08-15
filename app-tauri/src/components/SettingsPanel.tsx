@@ -169,7 +169,7 @@ export default function SettingsPanel({
     // logged in and every "sign in again" instruction would be wrong.
     if (blocked.length > 0) {
       const names = blocked.map((s) => s.label).join(" and ");
-      return `Your ${names} login was found and accepted, but Instagram is refusing the download request itself. This is a fault on Instagram's side that yt-dlp has to catch up with — signing in again will not help. It usually starts working after a yt-dlp update.`;
+      return `Your ${names} login was found and accepted, but Instagram is refusing the requests themselves — it rate-limits a device that has asked for too much too quickly. Signing in again will not help, and neither will switching browsers: the block is on your connection, not your account. It clears on its own, usually within a few hours.`;
     }
     if (locked.length > 0 && locked.length === result.length) {
       return `Close ${locked
@@ -414,7 +414,7 @@ function describe(outcome: ProbeStep["outcome"]): string {
     case "locked":
       return "close this browser and retry";
     case "signedinbutblocked":
-      return "signed in, but Instagram refused the request";
+      return "signed in — Instagram is rate-limiting this device";
     case "failed":
       return outcome.reason;
   }
