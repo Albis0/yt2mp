@@ -40,6 +40,19 @@ const TARGETS = [
     what: "Rust crate",
   },
   {
+    // Cargo.lock carries the crate's own version in its `name = "yt2mp"`
+    // entry. Cargo rewrites it on the next build anyway, but if it is left
+    // stale the commit that bumps everything else still shows a dirty tree
+    // afterwards — and it silently drifted to 0.6.4 that way once already.
+    // Anchored to this package's own entry so no dependency is touched.
+    file: "app-tauri/src-tauri/Cargo.lock",
+    // `\r?\n`, not `\n`: git checks this file out with CRLF endings on Windows,
+    // and a bare `\n` silently stops matching there — the script would report
+    // "not found" and refuse the bump on the one platform that builds it.
+    find: /(name = "yt2mp"\r?\nversion = ")([^"]+)(")/,
+    what: "Cargo.lock entry for this crate",
+  },
+  {
     file: "package.json",
     find: /("version"\s*:\s*")([^"]+)(")/,
     what: "landing site package.json",
