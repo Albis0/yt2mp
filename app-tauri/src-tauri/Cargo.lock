@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "yt2mp"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "dirs 5.0.1",
  "reqwest 0.12.28",
