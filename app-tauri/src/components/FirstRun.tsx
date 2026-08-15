@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { ensureTools, onToolsProgress, type ToolsStatus } from "@/lib/api";
 
-/// Shown once, on the first launch after install, while the three binaries
-/// yt2mp drives are fetched.
+/// Recovery screen for a broken install.
 ///
-/// They used to ride inside the installer, which made every app update a
-/// ~120 MB download for the sake of a few megabytes of changed code. Moving
-/// them out is what makes updates quick — and it lets yt-dlp be updated on its
-/// own when a site breaks, which is the far more common need.
+/// The three binaries yt2mp drives ship inside the installer, so a normal
+/// install never reaches this — `tools::status()` finds them next to the exe
+/// and the app goes straight to the main window. This is what happens when
+/// they are genuinely absent: a partial install, an antivirus quarantine, or
+/// a user who deleted them.
 ///
-/// The cost of that trade is this screen, so it states the size up front
-/// rather than showing a bar and hoping nobody minds.
+/// It stays because the alternative is an app that silently cannot work. The
+/// same download path also backs "Update yt-dlp", which is how a site that
+/// stops working gets fixed without shipping a new release.
 export default function FirstRun({
   onReady,
 }: {
@@ -50,11 +51,12 @@ export default function FirstRun({
   return (
     <div className="firstrun">
       <div className="firstrun-card">
-        <h2 className="firstrun-title">Getting yt2mp ready</h2>
+        <h2 className="firstrun-title">Repairing yt2mp</h2>
         <p className="firstrun-text">
-          yt2mp uses ffmpeg and yt-dlp to do the actual downloading. They are
-          about 120&nbsp;MB together and are fetched now, once, instead of
-          riding inside every update.
+          The tools yt2mp downloads with — ffmpeg and yt-dlp — are missing.
+          They normally come with the app, so something removed them; an
+          antivirus quarantine is the usual reason. Fetching them again now,
+          about 120&nbsp;MB.
         </p>
 
         {error ? (
@@ -85,7 +87,7 @@ export default function FirstRun({
 
         {running && !error ? (
           <p className="firstrun-text firstrun-dim">
-            This only happens once. Later updates to yt2mp are a few megabytes.
+            If this keeps happening, add yt2mp to your antivirus exclusions.
           </p>
         ) : null}
       </div>

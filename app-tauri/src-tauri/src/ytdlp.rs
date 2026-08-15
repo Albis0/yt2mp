@@ -75,6 +75,36 @@ fn js_runtime_args() -> Vec<String> {
     }
 }
 
+/// Pins YouTube extraction to yt-dlp's default client set.
+///
+/// Downloads were failing with **HTTP 403** after a successful fetch: every
+/// format listed with a correct size, then a failure on the first byte —
+/// "Failed — unable to download video data: HTTP Error 403: Forbidden"
+/// against a file the app had just described as 29.3 MB.
+///
+/// The cause is *extra* clients, not the default one. Adding `tv` and
+/// `web_safari` as fallbacks makes yt-dlp prefer their format 258, and those
+/// clients are currently caught in YouTube's SABR-only experiment
+/// (yt-dlp#12482) — it announces the format but serves no usable URL, so the
+/// media request is refused. yt-dlp warns about this ("Some tv client https
+/// formats have been skipped as they are missing a URL"), but by then it has
+/// already committed to the format.
+///
+/// So this deliberately passes *only* `default`. It looks like a no-op and is
+/// not: without it, a future default-order change could reintroduce a broken
+/// client, and the failure would again look like a download bug rather than
+/// a format-selection one.
+///
+/// This tracks YouTube's current behaviour and will need revisiting. That is
+/// what "Update yt-dlp" is for — upstream adjusts its client list long before
+/// this app can ship a release.
+fn player_client_args() -> Vec<String> {
+    vec![
+        "--extractor-args".into(),
+        "youtube:player_client=default".into(),
+    ]
+}
+
 /// yt-dlp does NOT read any FFMPEG_LOCATION environment variable — the merge
 /// step only finds the bundled ffmpeg via this CLI flag. (On Windows it
 /// happens to work without it because process creation searches yt-dlp.exe's
@@ -163,6 +193,7 @@ fn platform_args(platform: crate::platform::Platform) -> Vec<String> {
              AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
                 .into(),
         ],
+        Platform::YouTube => player_client_args(),
         _ => Vec::new(),
     };
 

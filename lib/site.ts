@@ -57,9 +57,11 @@ export const DRIVE_URL =
 export const INSTALLER_SHA256: string | null =
     "60518a4583a0e7e47a921eaf3c6b354e176bf3872fd176cd7bf7718b6702b45c";
 
-// 2.7 MB, down from 45.9 MB: ffmpeg and yt-dlp are no longer bundled — the app
-// fetches them on first run, which is also what keeps updates small.
-export const INSTALLER_SIZE: string | null = "2.7 MB";
+// 46.8 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
+// fresh install works offline with nothing to fetch on first run. The app can
+// still update yt-dlp on its own afterwards, which is what fixes a site that
+// suddenly stops working.
+export const INSTALLER_SIZE: string | null = "46.8 MB";
 
 // Sites the app can download from, in the order the app's own tabs present
 // them. Single source for the page copy and the structured data.

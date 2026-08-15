@@ -92,12 +92,16 @@ jobs:
             patchelf \
             libfuse2
 
-      # NOTE: yt-dlp, ffmpeg and quickjs are deliberately NOT fetched here.
-      # They are no longer bundled into the installer — the app downloads them
-      # into its own data folder on first run (src-tauri/src/tools.rs). That
-      # is what keeps an update to ~5 MB instead of ~120 MB, and it also
-      # removed the old inconsistency where CI fetched Bellard's quickjs while
-      # the local script fetched quickjs-ng.
+      # yt-dlp, ffmpeg and quickjs are bundled into the installer, so they have
+      # to exist before the bundler runs. The app still knows how to fetch them
+      # at runtime (tools.rs) — that path now only covers a broken or deleted
+      # install, and the "Update yt-dlp" button, which is what fixes a site
+      # that stops working without shipping a new release.
+      #
+      # This script is the single source for the URLs, so CI and a local build
+      # can no longer disagree about which quickjs they use.
+      - name: Fetch bundled binaries
+        run: bun run fetch:binaries
 
       # GROQ_KEYS powers AI search. If the secret is unset, AI search falls
       # back to searching the raw query and the build still succeeds.

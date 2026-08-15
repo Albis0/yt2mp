@@ -68,7 +68,7 @@ const jsonLd = {
                     name: "Which operating systems does yt2mp support?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. It fetches yt-dlp and ffmpeg itself the first time you open it, so there is nothing to install separately.",
+                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. yt-dlp and ffmpeg are included, so there is nothing to install separately and nothing to download the first time you open it.",
                     },
                 },
             ],
@@ -344,14 +344,14 @@ export default function Home() {
                             </div>
 
                             <div className="card">
-                                <h3 className="card-title">A small installer, and small updates</h3>
+                                <h3 className="card-title">Everything in one installer</h3>
                                 <p className="card-text">
-                                    yt2mp draws its window with the WebView already in your OS rather than bundling a second copy of Chromium, so the download is {INSTALLER_SIZE}. The tools that do
-                                    the actual work — ffmpeg, yt-dlp and a small JavaScript runtime — are fetched once on first run instead of riding along inside the installer.
+                                    Install it and it works — there is no setup step, no second download, and no internet needed the first time you open it. The tools that do the actual work — ffmpeg,
+                                    yt-dlp and a small JavaScript runtime — are already inside, which is most of the {INSTALLER_SIZE}.
                                 </p>
                                 <div className="sizebar">
-                                    <div className="seg seg-app" style={{flexGrow: 3}}>
-                                        installer
+                                    <div className="seg seg-app" style={{flexGrow: 5}}>
+                                        app
                                     </div>
                                     <div className="seg seg-ffmpeg" style={{flexGrow: 98}}>
                                         ffmpeg
@@ -364,7 +364,7 @@ export default function Home() {
                                 <div className="sizekey">
                                     <span className="sizekey-item">
                                         <span className="swatch seg-app" />
-                                        installer {INSTALLER_SIZE}
+                                        app 5 MB
                                     </span>
                                     <span className="sizekey-item">
                                         <span className="swatch seg-ffmpeg" />
@@ -380,8 +380,12 @@ export default function Home() {
                                     </span>
                                 </div>
                                 <p className="card-text">
-                                    That split is what keeps updates quick: a new version is {INSTALLER_SIZE}, not a hundred. The old Electron build was ~215&nbsp;MB installed. It also means yt-dlp
-                                    can be updated on its own from inside the app — which is how a site that suddenly stops working starts working again, without waiting for a new release.
+                                    That is 123&nbsp;MB installed, compressed to a {INSTALLER_SIZE} download. ffmpeg is most of it, and it is the part that turns a video into an MP3.
+                                </p>
+                                <p className="card-text">
+                                    It still draws its window with the WebView already in your OS rather than carrying a second copy of Chromium, so it stays well under the old Electron build&apos;s
+                                    ~215&nbsp;MB. And yt-dlp can be updated on its own from inside the app — which is how a site that suddenly stops working starts working again, without waiting for
+                                    a new release.
                                 </p>
                             </div>
 
@@ -418,7 +422,7 @@ export default function Home() {
                                         </tr>
                                         <tr>
                                             <th scope="row">Dependencies</th>
-                                            <td>none — fetched on first run</td>
+                                            <td>none — all included</td>
                                         </tr>
                                         <tr>
                                             <th scope="row">Network</th>
@@ -431,7 +435,7 @@ export default function Home() {
                             <div className="card card-wide">
                                 <h3 className="card-title">Running it on Linux</h3>
                                 <p className="card-text">
-                                    The Linux build is a portable AppImage — nothing to install. Download it, mark it executable, run it. It fetches yt-dlp and ffmpeg on first launch, same as on Windows.
+                                    The Linux build is a portable AppImage — nothing to install. Download it, mark it executable, run it. yt-dlp and ffmpeg are inside it, same as on Windows.
                                 </p>
                                 <div className="cmd-list">
                                     <CopyCommand command={`chmod +x ${APPIMAGE_NAME}`} />
