@@ -54,7 +54,8 @@ export const DRIVE_URL =
 // `null` means "no verified artifact for this version yet", and the page
 // omits the verification block rather than vouching for something it cannot
 // check.
-export const INSTALLER_SHA256: string | null = null;
+export const INSTALLER_SHA256: string | null =
+    "3ea2922dd17f52281782ad83675c2db070c3a57a3f931552270375b0406c6730";
 
 // 46.8 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
 // fresh install works offline with nothing to fetch on first run. The app can
