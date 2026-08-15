@@ -16,7 +16,12 @@ use crate::binaries::{ffmpeg_path, qjs_path, ytdlp_path};
 /// Without a deadline, a yt-dlp call stuck on a slow or dead network path
 /// hangs the "Fetching…" UI indefinitely instead of surfacing an error the
 /// user can act on.
-pub const INFO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
+///
+/// Raised from 25s once extraction started querying two player clients (see
+/// `player_client_args`). That takes ~10s on a fast connection here, and 25s
+/// left no room for anything slower — a fetch that works fine but reports
+/// "took too long to respond" is the worst of both.
+pub const INFO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
 
 /// Per-browser budget when testing logins. Several browsers are tried in a
 /// row, so one slow attempt must not hold up the whole check.
@@ -75,33 +80,51 @@ fn js_runtime_args() -> Vec<String> {
     }
 }
 
-/// Pins YouTube extraction to yt-dlp's default client set.
+/// Which YouTube player clients to extract from, in preference order.
 ///
-/// Downloads were failing with **HTTP 403** after a successful fetch: every
-/// format listed with a correct size, then a failure on the first byte —
-/// "Failed — unable to download video data: HTTP Error 403: Forbidden"
-/// against a file the app had just described as 29.3 MB.
+/// Extraction succeeds against every client — title, duration and a full
+/// format list with plausible sizes — and then the media request is refused.
+/// The user sees a download that fails instantly on a file the app has just
+/// offered them at 3.6 MB.
 ///
-/// The cause is *extra* clients, not the default one. Adding `tv` and
-/// `web_safari` as fallbacks makes yt-dlp prefer their format 258, and those
-/// clients are currently caught in YouTube's SABR-only experiment
-/// (yt-dlp#12482) — it announces the format but serves no usable URL, so the
-/// media request is refused. yt-dlp warns about this ("Some tv client https
-/// formats have been skipped as they are missing a URL"), but by then it has
-/// already committed to the format.
+/// Measured against the same video, one client at a time:
 ///
-/// So this deliberately passes *only* `default`. It looks like a no-op and is
-/// not: without it, a future default-order change could reintroduce a broken
-/// client, and the failure would again look like a download bug rather than
-/// a format-selection one.
+/// | client | result | extract time |
+/// |---|---|---|
+/// | `default` (starts at `android_vr`) | **HTTP 403** | 10s |
+/// | `ios` | **HTTP 403** | — |
+/// | `web`, `web_safari`, `tv` | "Requested format is not available" | — |
+/// | `mweb` | works | **31s** |
+/// | `android` | works | 9s |
 ///
-/// This tracks YouTube's current behaviour and will need revisiting. That is
-/// what "Update yt-dlp" is for — upstream adjusts its client list long before
-/// this app can ship a release.
+/// The three that report a missing format are caught in YouTube's SABR-only
+/// experiment (yt-dlp#12482): the format is announced but no usable URL comes
+/// with it. The 403s are clients whose media URLs YouTube no longer honours.
+///
+/// So: `android` first, `default` behind it as a safety net for the day
+/// YouTube turns `android` off too.
+///
+/// **`mweb` is deliberately not in this list even though it works.** It takes
+/// 31s to extract on its own and 43s combined, against an `INFO_TIMEOUT` of
+/// 45s — every fetch would sit at the edge of timing out, and on a connection
+/// slower than this one it would go over. A client that works but times out is
+/// not a working client.
+///
+/// **Do not "improve" this by adding more fallbacks.** An earlier attempt
+/// added `tv` and `web_safari` for exactly that reason and made things worse:
+/// the selector then prefers *their* format, so the extra clients caused the
+/// failure they were meant to prevent. Any change here needs measuring — both
+/// that it downloads *and* how long extraction takes — against a video that
+/// has not been fetched recently, since YouTube throttles repeat requests and
+/// a throttled 403 looks identical to a broken client.
+///
+/// This tracks YouTube's current behaviour and will go stale. That is what
+/// "Update yt-dlp" in Settings is for: upstream adjusts its client list far
+/// faster than this app ships releases.
 fn player_client_args() -> Vec<String> {
     vec![
         "--extractor-args".into(),
-        "youtube:player_client=default".into(),
+        "youtube:player_client=android,default".into(),
     ]
 }
 
@@ -344,82 +367,11 @@ pub async fn run_ytdlp(
         return Err(if stderr.is_empty() {
             format!("yt-dlp exited with {}", output.status)
         } else {
-            explain(&stderr, platform)
+            crate::platform::explain_error(&stderr, platform)
         });
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
-/// Turns yt-dlp's stderr into something a user can act on.
-///
-/// yt-dlp writes for people reading a terminal: its Instagram failure is a
-/// six-line paragraph containing three URLs and the phrase "fill out the
-/// appropriate issue template". Passed through verbatim into a desktop app it
-/// reads as a crash, and none of it says what to actually do.
-///
-/// Only cases with genuinely different advice are translated. Everything else
-/// keeps yt-dlp's own words — a wrong guess is worse than a technical
-/// message, and inventing an explanation for an error nobody has seen is how
-/// the confusing ones get created.
-fn explain(stderr: &str, platform: crate::platform::Platform) -> String {
-    use crate::platform::Platform;
-    let lower = stderr.to_ascii_lowercase();
-
-    // Instagram rate-limits by IP, hard, and it is the single most common
-    // Instagram failure. yt-dlp reports the 429 it gets back as a bare
-    // "HTTP Error 400: Bad Request", so the message names neither the cause
-    // nor the fact that waiting fixes it. Verified live: the same session and
-    // the same IP answer 429 to Instagram's own API for every request, while
-    // ordinary instagram.com pages still load normally.
-    if platform == Platform::Instagram
-        && (lower.contains("http error 400")
-            || lower.contains("http error 429")
-            || lower.contains("too many requests")
-            || lower.contains("video info extraction failed"))
-    {
-        return "Instagram is temporarily blocking this device for making too \
-                many requests. This is a limit on Instagram's side, not a \
-                problem with your login — waiting a few hours usually clears \
-                it. Downloading many posts in a row makes it happen sooner."
-            .to_string();
-    }
-
-    if lower.contains("empty media response")
-        || lower.contains("login required")
-        || lower.contains("requested content is not available")
-        || lower.contains("not granting access")
-    {
-        return "This post is only visible to signed-in accounts. Turn on \
-                browser sign-in in Settings so yt2mp can borrow the session \
-                from a browser you are already logged into."
-            .to_string();
-    }
-
-    if lower.contains("could not copy") && lower.contains("cookie database") {
-        return "Your browser is open and is holding its cookie file locked. \
-                Close it completely and try again, or pick a Firefox-based \
-                browser in Settings — those work while open."
-            .to_string();
-    }
-
-    if lower.contains("http error 403") {
-        return "The site refused to serve this file. This usually means it \
-                changed something on their end; try Update yt-dlp in Settings."
-            .to_string();
-    }
-
-    if lower.contains("video unavailable") || lower.contains("private video") {
-        return "This video is private or has been removed.".to_string();
-    }
-
-    // Unrecognised: keep yt-dlp's first ERROR line rather than the whole
-    // multi-paragraph dump, which is mostly links to its issue tracker.
-    stderr
-        .lines()
-        .find(|l| l.to_ascii_lowercase().contains("error"))
-        .map(|l| l.trim().trim_start_matches("ERROR:").trim().to_string())
-        .unwrap_or_else(|| stderr.to_string())
 }
 
 /// Collects the distinct video heights yt-dlp reported, highest first, so the
@@ -770,6 +722,46 @@ pub enum Control {
 ///
 /// `control` carries pause/resume/stop from the UI. Pause suspends the yt-dlp
 /// process rather than buffering its output (see src/suspend.rs).
+/// Audio format selectors to try, in order, when the previous one was refused.
+///
+/// YouTube gates individual formats rather than whole videos, and *which* ones
+/// vary per video and per session. Measured within minutes of each other:
+///
+/// | format | 4-hour lofi mix | Despacito |
+/// |---|---|---|
+/// | 140 (m4a, 129k) | works | **403** |
+/// | 251 (opus, 141k) | **403** | works |
+/// | 139 (m4a, 49k) | works | works |
+/// | 249 (opus, 53k) | works | **403** |
+///
+/// The two videos disagree on every high-bitrate format. That is why no single
+/// selector can be correct — `bestaudio` picks one gated format on one video
+/// and a different gated one on the next — and why this is a ladder rather
+/// than a cleverer guess. Each rung names a *different* stream so a retry is
+/// never the same request twice.
+///
+/// Quality only drops at the last rung, and all of these re-encode to the same
+/// 192 kbps MP3, so the audible cost of falling through is near zero.
+const AUDIO_FALLBACKS: [&str; 3] = [
+    "bestaudio[ext=m4a]/bestaudio/best",
+    "bestaudio[ext=webm]/bestaudio",
+    "worstaudio/worst",
+];
+
+/// True when yt-dlp refused at the *media* request rather than at extraction.
+///
+/// Extraction succeeded, a format was chosen and announced with a real size,
+/// and the byte request was then denied. That is the one failure a different
+/// format can fix; everything else (no such video, no network, a dead link)
+/// would fail identically on a retry and must surface immediately.
+fn is_format_refusal(err: &str) -> bool {
+    let e = err.to_ascii_lowercase();
+    e.contains("http error 403")
+        || e.contains("forbidden")
+        || e.contains("unable to download video data")
+        || e.contains("requested format is not available")
+}
+
 pub async fn download_to_path<F>(
     url: &str,
     format: &str,
@@ -778,6 +770,80 @@ pub async fn download_to_path<F>(
     platform: crate::platform::Platform,
     control: tokio::sync::watch::Receiver<Control>,
     mut on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(f64, &str) + Send,
+{
+    let selectors: Vec<String> = if format == "mp3" {
+        AUDIO_FALLBACKS.iter().map(|s| s.to_string()).collect()
+    } else {
+        video_format_fallbacks(quality)
+    };
+
+    let mut last_err = String::new();
+    for (attempt, selector) in selectors.iter().enumerate() {
+        let result = download_once(
+            url,
+            format,
+            selector,
+            dest,
+            platform,
+            control.clone(),
+            &mut on_progress,
+        )
+        .await;
+
+        match result {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // A stop is the user's decision, not a failure to work around.
+                if e == "Download stopped" {
+                    return Err(e);
+                }
+                if !is_format_refusal(&e) {
+                    return Err(crate::platform::explain_error(&e, platform));
+                }
+                // Nothing usable was produced; clear it before trying the next
+                // stream so a half-written file can never be mistaken for the
+                // finished download.
+                let _ = std::fs::remove_file(dest);
+                last_err = e;
+                if attempt + 1 < selectors.len() {
+                    on_progress(0.0, "Retrying with another stream");
+                }
+            }
+        }
+    }
+
+    // Every stream this site offered was refused. Only now is it worth
+    // translating: up to here the raw text was what decided each retry.
+    Err(crate::platform::explain_error(&last_err, platform))
+}
+
+/// Video selectors to try in turn. Same reasoning as `AUDIO_FALLBACKS`: the
+/// first prefers mp4/m4a, the second takes whatever other container exists,
+/// the third gives up on quality to get *something*.
+fn video_format_fallbacks(quality: Option<u32>) -> Vec<String> {
+    let cap = quality
+        .map(|h| format!("[height<={h}]"))
+        .unwrap_or_default();
+    vec![
+        build_video_format_selector(quality),
+        format!("bestvideo{cap}[ext=webm]+bestaudio[ext=webm]/bestvideo{cap}+bestaudio"),
+        format!("best{cap}/best"),
+    ]
+}
+
+/// One download attempt with one format selector.
+#[allow(clippy::too_many_arguments)]
+async fn download_once<F>(
+    url: &str,
+    format: &str,
+    selector: &str,
+    dest: &PathBuf,
+    platform: crate::platform::Platform,
+    control: tokio::sync::watch::Receiver<Control>,
+    on_progress: &mut F,
 ) -> Result<(), String>
 where
     F: FnMut(f64, &str) + Send,
@@ -794,7 +860,7 @@ where
         // step, with correct metadata and no second process to babysit.
         cmd.args([
             "-f",
-            "bestaudio/best",
+            selector,
             "--no-playlist",
             "--extract-audio",
             "--audio-format",
@@ -805,7 +871,7 @@ where
     } else {
         cmd.args([
             "-f",
-            &build_video_format_selector(quality),
+            selector,
             "--no-playlist",
             "--merge-output-format",
             "mp4",
@@ -934,11 +1000,16 @@ where
             use tokio::io::AsyncReadExt;
             let _ = err.read_to_string(&mut stderr).await;
         }
+        // Raw stderr on purpose: the caller decides whether another format is
+        // worth trying, and that decision reads yt-dlp's own words ("HTTP
+        // Error 403"). Translating here once hid the status code from
+        // `is_format_refusal`, so every retry was skipped and the ladder above
+        // was dead code that still looked correct.
         let trimmed = stderr.trim();
         return Err(if trimmed.is_empty() {
             "Download failed.".to_string()
         } else {
-            explain(trimmed, platform)
+            trimmed.to_string()
         });
     }
 
@@ -1042,52 +1113,52 @@ mod tests {
         assert!(lower.contains("http error 400"));
     }
 
-    /// Instagram's rate limit arrives as a 400, not a 429 — yt-dlp reports
-    /// what its extractor saw, not what the API returned. Matching only on
-    /// "429" would miss every real occurrence.
+    /// Only a refusal at the media request is worth another format. A dead
+    /// link or a missing video would fail identically on every rung, so
+    /// retrying it just makes the user wait three times for the same answer.
     #[test]
-    fn instagram_rate_limit_is_explained_not_echoed() {
-        use crate::platform::Platform;
-        let raw = "ERROR: [Instagram] DAmM8YXSb8-: Video info extraction \
-                   failed: HTTP Error 400: Bad Request";
-        let msg = explain(raw, Platform::Instagram);
-        assert!(msg.contains("too many requests"), "names the cause: {msg}");
-        assert!(msg.contains("waiting"), "says what actually helps: {msg}");
-        assert!(!msg.contains("400"), "no raw status code: {msg}");
+    fn only_media_refusals_are_retried() {
+        assert!(is_format_refusal(
+            "ERROR: unable to download video data: HTTP Error 403: Forbidden"
+        ));
+        assert!(is_format_refusal("ERROR: Requested format is not available"));
+        assert!(!is_format_refusal("ERROR: Video unavailable"));
+        assert!(!is_format_refusal("ERROR: Unsupported URL: foo"));
+        assert!(!is_format_refusal("Download stopped"));
     }
 
-    /// The same 400 on another site is not Instagram's rate limit and must
-    /// not borrow its explanation.
+    /// Every rung has to name a different stream. Two rungs that resolve to
+    /// the same format would send the identical refused request twice and
+    /// call it a fallback.
     #[test]
-    fn other_sites_do_not_get_the_instagram_explanation() {
-        use crate::platform::Platform;
-        let raw = "ERROR: [twitter] 1: HTTP Error 400: Bad Request";
-        let msg = explain(raw, Platform::Twitter);
-        assert!(!msg.contains("Instagram"), "must not blame Instagram: {msg}");
+    fn fallback_rungs_are_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for s in AUDIO_FALLBACKS {
+            assert!(seen.insert(s), "duplicate audio selector: {s}");
+        }
+        let video = video_format_fallbacks(Some(1080));
+        let mut seen_v = std::collections::HashSet::new();
+        for s in &video {
+            assert!(seen_v.insert(s.clone()), "duplicate video selector: {s}");
+        }
     }
 
-    /// yt-dlp's not-signed-in message is six lines with three issue-tracker
-    /// URLs in it. What reaches the user has to be the instruction, not the
-    /// paragraph.
+    /// The first audio rung must prefer m4a. It is the one that survives when
+    /// YouTube gates the opus stream, which is the common case that made
+    /// music downloads fail.
     #[test]
-    fn login_required_becomes_an_instruction() {
-        use crate::platform::Platform;
-        let raw = "ERROR: [Instagram] X: Instagram sent an empty media \
-                   response. Check if this post is accessible in your browser \
-                   without being logged-in. See https://github.com/yt-dlp/...";
-        let msg = explain(raw, Platform::Instagram);
-        assert!(msg.contains("Settings"), "points at the fix: {msg}");
-        assert!(!msg.contains("http"), "no URLs survive: {msg}");
+    fn first_audio_rung_prefers_m4a() {
+        assert!(AUDIO_FALLBACKS[0].contains("m4a"));
+        assert!(AUDIO_FALLBACKS[0].ends_with("/best"), "keeps a safety net");
     }
 
-    /// An error with no special handling keeps yt-dlp's own words — but only
-    /// the ERROR line, not the whole dump.
+    /// A height cap the user asked for must survive into every video rung
+    /// except the deliberate last-resort one.
     #[test]
-    fn unknown_errors_keep_ytdlp_wording() {
-        use crate::platform::Platform;
-        let raw = "WARNING: something\nERROR: Unsupported URL: foo\nSee docs";
-        let msg = explain(raw, Platform::Other);
-        assert_eq!(msg, "Unsupported URL: foo");
+    fn video_fallbacks_keep_the_quality_cap() {
+        let v = video_format_fallbacks(Some(720));
+        assert!(v[0].contains("height<=720"));
+        assert!(v[1].contains("height<=720"));
     }
 
     /// Cookie sharing stays off until it is switched on, whatever else is

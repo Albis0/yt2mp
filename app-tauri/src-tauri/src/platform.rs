@@ -161,6 +161,27 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
             .into();
     }
 
+    // Instagram rate-limits by device/IP and yt-dlp reports the 429 it got
+    // back as a bare "HTTP Error 400: Bad Request". Verified by calling
+    // Instagram's API directly with the same cookies, and with none: both
+    // answered 429 while ordinary instagram.com pages still loaded.
+    //
+    // Checked before the login branch because the symptom reads like one and
+    // the advice is the opposite: signing in again cannot help, waiting does.
+    if platform == Platform::Instagram
+        && (lower.contains("http error 400")
+            || lower.contains("http error 429")
+            || lower.contains("too many requests")
+            || lower.contains("rate-limit reached")
+            || lower.contains("video info extraction failed"))
+    {
+        return "Instagram is temporarily blocking this device for making too \
+                many requests. That is a limit on Instagram's side, not a \
+                problem with your login — waiting a few hours usually clears \
+                it. Downloading many posts in a row brings it on sooner."
+            .into();
+    }
+
     if lower.contains("login required")
         || lower.contains("requested content is not available")
         || lower.contains("empty media response")
@@ -202,6 +223,19 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
         return "That post is private.".into();
     }
 
+    // A 403 arrives *after* extraction succeeded: the format was listed with
+    // a real size and the media request was then refused. On YouTube that is
+    // the site rotating which player clients it will serve, which yt-dlp
+    // tracks far faster than this app can ship releases.
+    if lower.contains("http error 403") || lower.contains("forbidden") {
+        return format!(
+            "{} refused to hand over the file. This usually means the site \
+             changed something — try Update yt-dlp in Settings, which fixes \
+             it more often than not.",
+            platform.label()
+        );
+    }
+
     // Unexpected-response failures are usually the extractor itself breaking
     // against a site change, not anything the user did — say so, since
     // "check your link" would send them chasing a non-problem.
@@ -232,6 +266,38 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Instagram's rate limit arrives labelled 400, not 429 — yt-dlp reports
+    /// what its extractor saw, not the status underneath. Matching only on
+    /// "429" would miss every real occurrence.
+    #[test]
+    fn instagram_rate_limit_is_named_not_echoed() {
+        let raw = "ERROR: [Instagram] X: Video info extraction failed: \
+                   HTTP Error 400: Bad Request";
+        let msg = explain_error(raw, Platform::Instagram);
+        assert!(msg.contains("too many requests"), "names the cause: {msg}");
+        assert!(msg.contains("waiting"), "says what helps: {msg}");
+        assert!(!msg.contains("400"), "no raw status code: {msg}");
+    }
+
+    /// The same 400 on another site is not Instagram's rate limit and must
+    /// not borrow its explanation.
+    #[test]
+    fn other_sites_do_not_get_the_instagram_explanation() {
+        let msg = explain_error("ERROR: HTTP Error 400", Platform::Twitter);
+        assert!(!msg.contains("too many requests"), "{msg}");
+    }
+
+    /// A 403 means extraction worked and the media request was then refused —
+    /// the site changed something. Updating yt-dlp is the action that helps,
+    /// so the message has to say so rather than printing the status code.
+    #[test]
+    fn forbidden_points_at_updating_ytdlp() {
+        let raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden";
+        let msg = explain_error(raw, Platform::YouTube);
+        assert!(msg.contains("Update yt-dlp"), "{msg}");
+        assert!(!msg.contains("403"), "no raw status code: {msg}");
+    }
 
     #[test]
     fn detects_each_supported_platform() {
