@@ -55,7 +55,7 @@ export const DRIVE_URL =
 // omits the verification block rather than vouching for something it cannot
 // check.
 export const INSTALLER_SHA256: string | null =
-    "22e6b540955c1e43a42e9af06eb594c033450d534a2f07110c3ebd2f41ff94cf";
+    "530b4c65b76c407a6582f84cb6a5e3dcf45026d1c691c3488ab325094c4929ff";
 
 // 46.8 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
 // fresh install works offline with nothing to fetch on first run. The app can
