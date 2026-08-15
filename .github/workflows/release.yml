@@ -73,15 +73,20 @@ jobs:
           workspaces: app-tauri/src-tauri
           key: ${{ matrix.os }}
 
-      # Tauri's Linux target links against WebKitGTK. 22.04 is pinned because
-      # 24.04 ships webkit2gtk-4.1 only, which Tauri v2's default features do
-      # not build against cleanly.
+      # Tauri v2 links against WebKitGTK **4.1**, not 4.0: the webkit2gtk
+      # crate in Cargo.lock is 2.x, whose -sys bindings look for
+      # webkit2gtk-4.1.pc. Installing the 4.0 dev package instead is what
+      # failed the first 0.6.2 run — pkg-config found nothing and the build
+      # died before it ever reached the bundler. 22.04 carries both, so the
+      # pin stays; only the package name was wrong.
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
