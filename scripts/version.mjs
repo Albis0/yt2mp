@@ -10,6 +10,12 @@
 //
 // tauri.conf.json is not in the list below: it reads "../package.json"
 // directly, so the Tauri bundler picks up app-tauri/package.json on its own.
+//
+// RULE: bump the patch digit only. A release is 0.7.1, then 0.7.2 — never
+// 0.8.0, no matter how large the change feels. The project reached 0.7.0 by
+// minor-bumping ordinary fixes, which made the number meaningless. Only the
+// repo owner decides a minor or major bump; this script refuses to make one
+// unless it is told to explicitly with --minor / --major.
 
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -51,8 +57,19 @@ async function read(rel) {
   return readFile(path.join(ROOT, rel), "utf8");
 }
 
+// True when `next` is exactly one patch step above `current` — the only jump
+// allowed without an explicit override.
+function isPatchStep(current, next) {
+  const c = current.split("-")[0].split(".").map(Number);
+  const n = next.split("-")[0].split(".").map(Number);
+  if (c.length !== 3 || n.length !== 3 || [...c, ...n].some(Number.isNaN)) return false;
+  return n[0] === c[0] && n[1] === c[1] && n[2] === c[2] + 1;
+}
+
 async function main() {
-  const next = process.argv[2];
+  const args = process.argv.slice(2);
+  const forced = args.includes("--minor") || args.includes("--major");
+  const next = args.find((a) => !a.startsWith("--"));
 
   // No argument: report rather than change anything. Useful on its own for
   // checking whether the files have drifted apart again.
@@ -93,6 +110,18 @@ async function main() {
       process.exit(1);
     }
     edits.push({ ...t, body, from: m[2], next: body.replace(t.find, `$1${next}$3`) });
+  }
+
+  // Refuse anything but a single patch step. Checked against the app's own
+  // version, after every file has been read, so a rejected bump writes nothing.
+  const current = edits[0].from;
+  if (!forced && current !== next && !isPatchStep(current, next)) {
+    console.error(`Refusing ${current} → ${next}: only patch bumps are automatic.`);
+    console.error(`The next release is ${current.split(".").slice(0, 2).join(".")}.${
+      Number(current.split(".")[2].split("-")[0]) + 1
+    }.`);
+    console.error("A minor or major bump is the repo owner's call: pass --minor or --major.");
+    process.exit(1);
   }
 
   for (const e of edits) {
