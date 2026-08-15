@@ -25,7 +25,12 @@ env:
   # reject every release — so the manifest job below fails loudly if they are
   # missing rather than publishing something unusable.
   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+  # The key was generated without a password. GitHub refuses to store an empty
+  # secret value, so there is no TAURI_SIGNING_PRIVATE_KEY_PASSWORD secret to
+  # read — an unset secret expands to "", which is what the bundler wants for
+  # an unencrypted key. Do not "fix" this by adding a placeholder password:
+  # a wrong password fails the signing step outright.
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
 jobs:
   build:
