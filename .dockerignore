@@ -1,5 +1,5 @@
 node_modules
 .next
-desktop-app
+app-tauri
 .git
 *.md

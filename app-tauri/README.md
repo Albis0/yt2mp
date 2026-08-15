@@ -1,7 +1,9 @@
 # yt2mp — desktop app (Tauri)
 
 A MP3/MP4 downloader for YouTube, TikTok, Instagram, X and Twitch, rebuilt on
-Tauri. Replaces the Electron build in `../desktop-app/`.
+Tauri. It replaced an earlier Electron build, which was removed from the repo
+once this one shipped; the comparisons below are kept because they are the
+reasons the rewrite happened, not a description of anything still in the tree.
 
 ## Supported sites
 

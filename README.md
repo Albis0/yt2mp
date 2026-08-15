@@ -14,15 +14,16 @@ This repo has two independent parts:
 - **Root** (this directory): a small Next.js landing page, deployed to Render. It only
   describes the project and links to the desktop app download — it does no downloading
   itself.
-- **`desktop-app/`**: the Electron desktop app that does the actual work. See
-  [desktop-app/README.md](desktop-app/README.md) for how it's built, what's bundled,
+- **`app-tauri/`**: the Tauri desktop app that does the actual work. See
+  [app-tauri/README.md](app-tauri/README.md) for how it's built, what's bundled,
   and how AI search is configured.
 
 ## Download
 
 - **[Latest release](https://github.com/Albis0/yt2mp/releases/latest)** — grab the
-  Windows installer (`yt2mp Setup x.y.z.exe`) and run it.
-- A Google Drive mirror is linked on the landing page as a fallback.
+  Windows installer (`yt2mp_x.y.z_x64-setup.exe`) and run it. The app updates itself
+  from then on.
+- Linux: `yt2mp_x.y.z_amd64.AppImage` from the same release.
 
 ## ⚠️ Disclaimer — use at your own risk
 
@@ -96,4 +97,9 @@ Visit `http://localhost:3000`.
 Render builds the landing page from the root `Dockerfile` (a minimal bun image that
 serves the static Next.js page on `$PORT`). Push to `main` and Render redeploys
 automatically.
+
+The desktop app is built and published separately by
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which runs on a
+version tag and attaches the signed Windows and Linux artifacts — plus the
+`latest.json` the app's updater reads — to the GitHub release.
 

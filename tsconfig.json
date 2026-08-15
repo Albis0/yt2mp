@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "desktop-app", "app-tauri"]
+  "exclude": ["node_modules", "app-tauri"]
 }
