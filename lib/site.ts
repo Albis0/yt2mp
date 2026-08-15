@@ -38,15 +38,24 @@ export const DRIVE_URL =
 
 // sha256 and size of the Windows installer, measured from the built artifact.
 //
-// These cannot be known until the artifact exists, so they are measured from
-// the built installer and updated together with VERSION. CI does NOT write
-// them back today — it only embeds its own hash in latest.json — so bumping
-// the version without re-measuring here leaves the page printing a hash that
-// matches nothing, which is what happened before. `null` means "no verified
-// artifact for this version yet", and the page omits the verification block
-// rather than vouching for something it cannot check.
+// These cannot be known until the artifact exists. CI does NOT write them
+// back — it only embeds its own hash in latest.json — so they are measured by
+// hand from the file GitHub actually serves:
+//
+//   curl -sL https://github.com/Albis0/yt2mp/releases/latest/download/\
+//     yt2mp_<VERSION>_x64-setup.exe | sha256sum
+//
+// Measure the *downloaded* artifact, never a local build. NSIS output is not
+// reproducible: the same commit built twice yields a different hash, so a
+// locally measured value describes a file nobody can download. Re-running the
+// release workflow on an existing tag replaces the artifact and invalidates
+// this value too.
+//
+// `null` means "no verified artifact for this version yet", and the page
+// omits the verification block rather than vouching for something it cannot
+// check.
 export const INSTALLER_SHA256: string | null =
-    "c56db5ce6c0c6491f23bf59039819bb537523d1b7a9139b182c6a38835b4d597";
+    "60518a4583a0e7e47a921eaf3c6b354e176bf3872fd176cd7bf7718b6702b45c";
 
 // 2.7 MB, down from 45.9 MB: ffmpeg and yt-dlp are no longer bundled — the app
 // fetches them on first run, which is also what keeps updates small.
