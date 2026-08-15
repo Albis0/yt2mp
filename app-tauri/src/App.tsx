@@ -23,7 +23,7 @@ import {
 import ResultCard from "@/components/ResultCard";
 import HistoryList from "@/components/HistoryList";
 import PlaylistView from "@/components/PlaylistView";
-import PlatformTabs, { type TabId } from "@/components/PlatformTabs";
+import SourceRail, { type TabId } from "@/components/SourceRail";
 import WindowControls from "@/components/WindowControls";
 import SettingsPanel from "@/components/SettingsPanel";
 import FirstRun from "@/components/FirstRun";
@@ -414,7 +414,9 @@ export default function App() {
     // The tab sets --accent for the whole window. Surfaces stay neutral in
     // every tab; only the controls that carry meaning take the colour.
     <div className={`page page-${tab}`}>
-      {/* Two rows: title bar on top, tabs below with the full width. */}
+      {/* One title bar across the top, source rail down the left. The rail
+          used to be a second chrome row, which cost 42px of height on every
+          screen — the thing a 768px laptop has least of. */}
       <div className="chrome">
         <div className="chrome-bar">
           {/* Empty space drags the window. It has to come before the buttons
@@ -476,10 +478,16 @@ export default function App() {
           </button>
           <WindowControls />
         </div>
-
-        <PlatformTabs active={tab} onSelect={switchTab} degraded={DEGRADED_TABS} />
       </div>
 
+      {/* The rail is hidden while the tools are still downloading: it is a
+          source picker for a form that cannot run yet. */}
+      <div className="body">
+        {needsTools ? null : (
+          <SourceRail active={tab} onSelect={switchTab} degraded={DEGRADED_TABS} />
+        )}
+
+        <div className="body-main">
       {update && !needsTools ? (
         <UpdateBanner
           update={update}
@@ -575,6 +583,8 @@ export default function App() {
         />
       </main>
       )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -177,10 +177,15 @@ button {
 
 /* ---------- Window ---------- */
 
+/* Fixed to the viewport rather than growing with content: the rail
+   and the content pane each scroll on their own below, so the
+   window itself never gets a scrollbar and the title bar cannot be
+   scrolled off the top. */
 .page {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   /* Undecorated window: without this the app has no edge at all
      against a dark desktop. */
@@ -189,27 +194,24 @@ button {
 
 /* ---------- Chrome ---------- */
 
-/* Two rows, not one. Seven tabs at a readable size cannot share a
-   row with the window controls at this window's width — one of
-   them always loses, and it was the last tab's label. Splitting
-   them means the tabs get the full width and the title bar keeps
-   its own, which is also how a browser does it. */
+/* One row now. The source picker moved to a rail down the left
+   edge, so the title bar keeps the full width to itself and the
+   window gets back the 42px the tab row used to take. */
 .chrome {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--chrome);
   border-bottom: 1px solid var(--border);
 }
 
-/* Top row: drag handle plus the window controls. Deliberately
-   short — it is chrome, not content. */
+/* 40px, not the old 32px. This is the only place the window can be
+   dragged from, and a 32px strip with three buttons in it left
+   very little to actually grab. */
 .chrome-bar {
   display: flex;
   align-items: stretch;
-  height: 32px;
+  height: 40px;
 }
 
 .chrome-drag {
@@ -258,110 +260,128 @@ button {
   color: var(--text);
 }
 
-/* ---------- Tabs ----------
-   Flat, underlined. The old raised "browser tab" shape needed a
-   border on three sides plus a 1px overlap trick to join the
-   chrome; an underline says the same thing with one rule and
-   survives a theme swap without redrawing. */
+/* ---------- Source rail ----------
+   A vertical strip of sources down the left edge, replacing the
+   horizontal tab row that used to sit under the title bar.
 
-/* min-width:0 lets the strip shrink inside the flex chrome instead of
-   overflowing it — without it the last tab's label gets clipped at
-   narrow window widths. */
-/* Second row: the tabs, with the full window width to themselves.
-   They stretch to fill it, so the strip reads as a segmented
-   control rather than a huddle of buttons on the left. */
-.tabstrip {
+   The tabs were moved for one concrete reason: seven of them at a
+   readable size need a full row, and that row cost 42px of height
+   on every screen. At 1080p nobody notices; on a 1366x768 laptop
+   the app has roughly 700px of usable height and every one of them
+   is worth more than the horizontal space the rail takes, which
+   the content column was never using anyway. */
+
+.rail {
   display: flex;
-  align-items: stretch;
-  height: 42px;
-  padding: 0 6px;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 66px;
+  padding: 6px 0;
   gap: 2px;
-  min-width: 0;
-  overflow-x: auto;
+  background: var(--chrome);
+  border-right: 1px solid var(--border);
+  /* A short window scrolls the rail rather than squashing the items
+     into unreadable slivers. */
+  overflow-y: auto;
   scrollbar-width: none;
 }
 
-.tabstrip::-webkit-scrollbar {
+.rail::-webkit-scrollbar {
   display: none;
 }
 
-.tab {
+.rail-item {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  /* Share the row evenly, but never shrink a label to ellipsis:
-     flex-basis 0 + grow gives each tab an equal slice, and the
-     min-width floor keeps the longest label ("Instagram") intact. */
-  flex: 1 1 0;
-  min-width: fit-content;
-  justify-content: center;
-  padding: 0 12px;
+  gap: 3px;
+  padding: 8px 2px 7px;
   border: none;
   background: none;
   color: var(--text-3);
-  font-size: 0.92rem;
-  font-weight: 500;
-  white-space: nowrap;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
   transition: color 0.12s ease, background 0.12s ease;
 }
 
-.tab:hover:not(.tab-active) {
-  color: var(--text);
-  background: var(--surface-3);
+.rail-item:hover:not(.rail-item-active) {
+  color: var(--text-2);
+  background: var(--surface-2);
 }
 
-/* The active tab carries its site's colour, and says so twice:
-   in the accent and in the weight, so the state survives a
-   greyscale screenshot or a colour-blind reader. */
-.tab-active {
+/* The active source takes the site's colour, and says so twice: the
+   mark is tinted and a bar runs down the edge beside it. Colour is
+   never the only signal. */
+.rail-item-active {
   color: var(--accent);
-  font-weight: 600;
 }
 
-/* The marker sits on the chrome's own bottom border, so the active
-   tab reads as connected to the content below it. */
-.tab-active::after {
+.rail-item-active::before {
   content: "";
   position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
   background: var(--accent);
 }
 
-/* Inactive icons stay muted so seven brand colours never shout at
-   once; the active one takes the tab's accent. */
-.tab-icon {
-  display: inline-flex;
-  opacity: 0.55;
-  transition: opacity 0.12s ease;
-}
-
-.tab:hover .tab-icon,
-.tab-active .tab-icon {
-  opacity: 1;
-}
-
-/* A tab whose downloads are failing upstream. A bare dot reads as
-   decoration and prompts "why is this here?"; the glyph is legible
-   as a warning without waiting for the tooltip. */
-.tab-warn {
+.rail-icon {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 13px;
+  width: 30px;
+  height: 26px;
+  color: inherit;
+}
+
+.rail-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sits on the mark itself: a source that is currently broken should
+   carry the warning where the eye already is. */
+.rail-warn {
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  display: grid;
+  place-items: center;
+  min-width: 13px;
   height: 13px;
-  border-radius: 50%;
+  padding: 0 3px;
+  border-radius: 7px;
   background: var(--warn);
-  color: var(--chrome);
+  color: var(--warn-bg);
   font-size: 0.6rem;
   font-weight: 800;
   line-height: 1;
-  flex-shrink: 0;
 }
 
+/* ---------- Body ----------
+   Rail and content side by side, filling what is left under the
+   title bar. */
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.body-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
 /* ---------- Window controls ---------- */
 
 .wincontrols {
@@ -413,12 +433,13 @@ button {
    window rather than leaving it pinned to the top edge of a mostly empty
    screen. Bottom-weighted padding puts it slightly above true centre,
    which is where the eye expects it. */
+/* The content pane is already a flex child that fills the window, so
+   this only has to say "use all of it" — no viewport arithmetic. The
+   previous version subtracted a hard-coded chrome height, which was
+   wrong the moment the chrome changed and showed up as a scrollbar on
+   a window with nothing to scroll. */
 .app-shell-empty {
-  /* 75px of chrome above (32 title + 42 tabs + its bottom border) plus
-     this element's own 22px top padding. Subtracting both is what keeps
-     the centred state from overflowing into a scrollbar on a window that
-     has nothing to scroll. */
-  min-height: calc(100vh - 75px - 22px);
+  flex: 1;
   justify-content: center;
   padding-bottom: 64px;
 }
@@ -541,10 +562,17 @@ button {
   overflow: hidden;
 }
 
+/* 16:9 of an 820px column is ~460px tall, which on a 768px laptop
+   pushes the format buttons — the thing the user came for — below
+   the fold on every single fetch. Capping the preview at a third of
+   the window height keeps at least the MP3 button in view at any
+   window size, and costs nothing on a large one where the cap is
+   never the smaller of the two. */
 .result-preview {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
+  max-height: 34vh;
   background: #000;
 }
 

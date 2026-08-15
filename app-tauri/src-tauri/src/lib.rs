@@ -118,6 +118,55 @@ struct ProgressEvent {
     stage: String,
 }
 
+/// Preferred window size, in logical pixels, on a screen large enough for it.
+const PREFERRED_W: f64 = 900.0;
+const PREFERRED_H: f64 = 760.0;
+
+/// Shrink the window to fit the screen it opens on, and re-centre it.
+///
+/// The configured 900x760 is a good size at 1080p and does not fit a 1366x768
+/// laptop at all: 760px of window plus a taskbar exceeds the 768px screen, so
+/// the bottom of the app — including whatever the user was reaching for —
+/// ends up under the taskbar or off-screen entirely, on a window with no
+/// title bar to drag it back by.
+///
+/// Work-area rather than full screen size, so the taskbar is already excluded
+/// rather than guessed at. Only ever shrinks: on a large monitor this leaves
+/// the configured size alone.
+fn fit_window_to_screen(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    // No monitor information is a reason to leave the window as configured,
+    // not to guess at a size.
+    let Ok(Some(monitor)) = window.current_monitor() else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let avail_w = area.size.width as f64 / scale;
+    let avail_h = area.size.height as f64 / scale;
+
+    // Leave a margin so the window reads as a window rather than something
+    // wedged into the screen edge to edge.
+    let w = PREFERRED_W.min(avail_w - 40.0);
+    let h = PREFERRED_H.min(avail_h - 40.0);
+
+    if w >= PREFERRED_W && h >= PREFERRED_H {
+        return;
+    }
+
+    // Never below the minimums the layout needs to stay usable; on a screen
+    // smaller than that, a window running off the edge is still better than
+    // one whose contents overlap.
+    let w = w.max(560.0);
+    let h = h.max(480.0);
+
+    let _ = window.set_size(tauri::LogicalSize::new(w, h));
+    let _ = window.center();
+}
+
 /// Opens a native save dialog, then downloads straight to the chosen path.
 ///
 /// Unlike the Electron build, nothing is buffered and nothing is written
@@ -418,6 +467,7 @@ pub fn run() {
             binaries::init(app.handle());
             groq::init(app.handle().path().resource_dir().ok());
             settings::init(app.handle().path().app_config_dir().ok());
+            fit_window_to_screen(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
