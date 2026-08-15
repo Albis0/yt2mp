@@ -46,7 +46,7 @@ export const DRIVE_URL =
 // artifact for this version yet", and the page omits the verification block
 // rather than vouching for something it cannot check.
 export const INSTALLER_SHA256: string | null =
-    "bdd6239862353e5afab2f9f29c3e1f88507425736d5b2dfae7c5a73cf58e44f5";
+    "c56db5ce6c0c6491f23bf59039819bb537523d1b7a9139b182c6a38835b4d597";
 
 // 2.7 MB, down from 45.9 MB: ffmpeg and yt-dlp are no longer bundled — the app
 // fetches them on first run, which is also what keeps updates small.

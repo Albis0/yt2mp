@@ -142,11 +142,18 @@ jobs:
 
       # Passed to the manifest job, which cannot see other jobs' outputs
       # except through artifacts.
+      #
+      # Written under the workspace, not /tmp. Git Bash on Windows maps /tmp
+      # into its own install root, but upload-artifact is a Node action that
+      # reads the path literally — so a /tmp glob matched nothing there, the
+      # step still "succeeded", and latest.json shipped with only the Linux
+      # platform in it. Windows would then never be offered an update.
       - name: Record platform metadata
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
-          mkdir -p /tmp/meta
-          cat > /tmp/meta/${{ matrix.platform }}.json <<EOF
+          mkdir -p meta
+          cat > meta/${{ matrix.platform }}.json <<EOF
           {
             "platform": "${{ matrix.platform }}",
             "file": "${{ steps.collect.outputs.name }}",
@@ -155,11 +162,13 @@ jobs:
             "sizeMb": "${{ steps.collect.outputs.size }}"
           }
           EOF
+          test -s "meta/${{ matrix.platform }}.json"
 
       - uses: actions/upload-artifact@v4
         with:
           name: meta-${{ matrix.platform }}
-          path: /tmp/meta/*.json
+          path: meta/*.json
+          if-no-files-found: error
 
       - name: Attach to the release
         uses: softprops/action-gh-release@v2
@@ -210,8 +219,19 @@ jobs:
             };
           }
 
-          if (Object.keys(platforms).length === 0) {
-            console.error("No platform metadata — refusing to publish an empty manifest.");
+          // Both platforms are required, not just one. The first published
+          // 0.6.2 manifest carried Linux alone — the Windows metadata never
+          // uploaded — and a manifest missing a platform is silently useless:
+          // the updater simply never offers anything to those users, with no
+          // error anywhere to notice.
+          const required = ["windows-x86_64", "linux-x86_64"];
+          const missing = required.filter((p) => !platforms[p]);
+          if (missing.length) {
+            console.error(
+              `Missing platform metadata for: ${missing.join(", ")}.\n` +
+                `Got: ${Object.keys(platforms).join(", ") || "(none)"}.\n` +
+                `Refusing to publish a manifest that leaves a platform unable to update.`
+            );
             process.exit(1);
           }
 
