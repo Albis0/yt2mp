@@ -47,6 +47,14 @@ fn hide_window(_cmd: &mut Command) {}
 pub fn base_command(program: PathBuf) -> Command {
     let mut cmd = Command::new(program);
     hide_window(&mut cmd);
+    // Make yt-dlp write UTF-8 whatever the console code page is. yt-dlp is a
+    // frozen Python build, so it follows PYTHONIOENCODING and encodes its
+    // output — titles included — in the system code page otherwise. On a
+    // Windows install using a legacy code page that produced bytes we could
+    // not decode, and the download failed with "stream did not contain valid
+    // UTF-8". The readers decode lossily as a second line of defence; this
+    // stops the bad bytes being produced at all.
+    cmd.env("PYTHONIOENCODING", "utf-8");
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -898,7 +906,17 @@ where
         .map_err(|e| format!("Could not start yt-dlp ({e})."))?;
 
     let stdout = child.stdout.take().ok_or("Could not read yt-dlp output")?;
-    let mut reader = BufReader::new(stdout).lines();
+    // Bytes, not `.lines()`. Tokio's line reader returns an InvalidData error
+    // on the first byte that is not valid UTF-8 and the download dies with
+    // "stream did not contain valid UTF-8" — which is what happened on a
+    // Windows 10 machine whose console code page is not UTF-8: yt-dlp echoes
+    // the video title into its progress output, and one non-UTF-8 byte in a
+    // title was enough to fail a download that was otherwise working.
+    //
+    // Progress parsing only ever looks for ASCII ("Destination:", "45.6%"), so
+    // decoding lossily costs nothing and a mangled character in a title we
+    // merely print is far better than a failed download.
+    let mut reader = BufReader::new(stdout).split(b'\n');
 
     let pid = child.id().ok_or("Could not track the download process")?;
 
@@ -955,9 +973,14 @@ where
                 let _ = child.kill().await;
                 return Err("Timed out — download took too long.".into());
             }
-            line = reader.next_line() => {
+            line = reader.next_segment() => {
                 match line {
-                    Ok(Some(line)) => {
+                    Ok(Some(raw)) => {
+                        // `\r` is kept out: yt-dlp redraws progress with
+                        // carriage returns and --newline only converts the
+                        // final one.
+                        let line = String::from_utf8_lossy(&raw);
+                        let line = line.trim_end_matches('\r');
                         // A new "Destination:" after real progress means
                         // yt-dlp moved on to the next stream (video → audio).
                         if line.contains("Destination:") && last_percent_in_stream > 0.0 {
@@ -995,10 +1018,15 @@ where
         .map_err(|e| format!("yt-dlp failed: {e}"))?;
 
     if !status.success() {
+        // Read stderr as bytes for the same reason as stdout above:
+        // `read_to_string` fails outright on non-UTF-8, and losing the error
+        // text is how a real failure turns into a blank message.
         let mut stderr = String::new();
         if let Some(mut err) = child.stderr.take() {
             use tokio::io::AsyncReadExt;
-            let _ = err.read_to_string(&mut stderr).await;
+            let mut buf = Vec::new();
+            let _ = err.read_to_end(&mut buf).await;
+            stderr = String::from_utf8_lossy(&buf).into_owned();
         }
         // Raw stderr on purpose: the caller decides whether another format is
         // worth trying, and that decision reads yt-dlp's own words ("HTTP
@@ -1038,6 +1066,37 @@ mod tests {
     fn progress_line_parses_percent() {
         let line = "[download]  34.5% of   29.01MiB at   20.51MiB/s ETA 00:00";
         assert_eq!(parse_progress_percent(line), Some(34.5));
+    }
+
+    // The Windows 10 bug: yt-dlp echoes the title into its progress output,
+    // and on a machine whose console encoding is not UTF-8 that produced bytes
+    // `String::from_utf8` rejects, killing the download with "stream did not
+    // contain valid UTF-8". 0xFF is invalid UTF-8 in any position.
+    //
+    // Decoding lossily has to leave the ASCII around the damage intact, or the
+    // percentage would be lost along with the bad byte.
+    #[test]
+    fn a_progress_line_with_invalid_utf8_still_parses() {
+        let mut raw: Vec<u8> = b"[download]  34.5% of   29.01MiB at 1MiB/s ".to_vec();
+        raw.extend_from_slice(&[0xFF, 0xFE]); // undecodable, mid-line
+        raw.extend_from_slice(b" ETA 00:00");
+
+        assert!(String::from_utf8(raw.clone()).is_err(), "test input must be invalid");
+
+        let line = String::from_utf8_lossy(&raw);
+        assert_eq!(parse_progress_percent(&line), Some(34.5));
+    }
+
+    // --newline turns the final redraw into a newline, but carriage returns
+    // still arrive on the segments in between, and a trailing \r would be
+    // carried into every "Destination:" comparison.
+    #[test]
+    fn carriage_returns_are_trimmed_from_segments() {
+        let raw = b"[download] 100% of 5.00MiB in 00:01\r".to_vec();
+        let line = String::from_utf8_lossy(&raw);
+        let line = line.trim_end_matches('\r');
+        assert!(!line.ends_with('\r'));
+        assert_eq!(parse_progress_percent(line), Some(100.0));
     }
 
     #[test]

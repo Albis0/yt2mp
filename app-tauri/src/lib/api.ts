@@ -102,6 +102,15 @@ export interface StartDownloadArgs {
   format: DownloadFormat;
   quality?: number;
   title: string;
+  /**
+   * Save straight into this folder instead of opening the save dialog. Set
+   * only by the whole-playlist download, which asks for a folder once up
+   * front — a dialog per track would make a 40-song mix 40 prompts.
+   *
+   * The name is derived from the title, and a clash gets " (2)" appended
+   * rather than overwriting.
+   */
+  intoDir?: string;
 }
 
 /**
@@ -118,7 +127,16 @@ export function startDownload(args: StartDownloadArgs): Promise<string> {
     format: args.format,
     quality: args.quality ?? null,
     title: args.title,
+    intoDir: args.intoDir ?? null,
   });
+}
+
+/**
+ * Asks for a folder, once, before a playlist download starts. Resolves with
+ * null if the user closes the dialog.
+ */
+export function pickFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_folder");
 }
 
 export function stopDownload(id: string): Promise<void> {

@@ -1060,6 +1060,91 @@ button {
   font-size: 0.78rem;
 }
 
+/* "Download everything" — the row of bulk buttons, and the progress strip that
+   replaces them while a run is going. Both sit directly under the playlist
+   header so the state of the run is the first thing read. */
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+
+.bulk-actions-label {
+  font-size: 0.82rem;
+  color: var(--text-2);
+  margin-right: 2px;
+}
+
+.bulk-actions-note {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.bulk-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin: 10px 0 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.bulk-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulk-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.bulk-track {
+  font-size: 0.78rem;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulk-meter {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bulk-meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+/* Failures are listed rather than counted: "3 failed" with no names leaves
+   someone re-downloading a 40-track mix to find out which three. */
+.bulk-failed {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 96px;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.bulk-failed-title {
+  color: var(--text-2);
+}
+
 .playlist-list {
   list-style: none;
   display: flex;

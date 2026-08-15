@@ -16,7 +16,7 @@ mod ytdlp;
 
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -167,6 +167,73 @@ fn fit_window_to_screen(app: &AppHandle) {
     let _ = window.center();
 }
 
+/// Returns a path that does not exist yet, adding " (2)", " (3)" … before the
+/// extension.
+///
+/// Only used for whole-playlist downloads. The save dialog asks about
+/// overwriting on its own, but a playlist saving unattended has no one to ask
+/// — and mixes really do repeat titles, so without this a 40-track mix with
+/// two "Intro" entries would silently end up with 39 files.
+fn unique_path(desired: &Path) -> PathBuf {
+    if !desired.exists() {
+        return desired.to_path_buf();
+    }
+    let dir = desired.parent().unwrap_or(Path::new("."));
+    let stem = desired
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "download".into());
+    let ext = desired
+        .extension()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    for n in 2..1000 {
+        let candidate = dir.join(if ext.is_empty() {
+            format!("{stem} ({n})")
+        } else {
+            format!("{stem} ({n}).{ext}")
+        });
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    desired.to_path_buf()
+}
+
+/// Asks once for a folder to save a whole playlist into.
+///
+/// Separate from `start_download` so the prompt happens a single time before
+/// the queue starts, rather than once per track.
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
+    let downloads_dir = app
+        .path()
+        .download_dir()
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let picked = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_directory(&downloads_dir)
+                .blocking_pick_folder()
+        }
+    })
+    .await
+    .map_err(|e| format!("Folder dialog failed: {e}"))?;
+
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+
+    let path = picked
+        .into_path()
+        .map_err(|e| format!("Invalid folder: {e}"))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// Opens a native save dialog, then downloads straight to the chosen path.
 ///
 /// Unlike the Electron build, nothing is buffered and nothing is written
@@ -181,6 +248,7 @@ async fn start_download(
     format: String,
     quality: Option<u32>,
     title: String,
+    into_dir: Option<String>,
 ) -> Result<String, String> {
     let Some(detected) = platform::detect(&url) else {
         return Err("That doesn't look like a link.".into());
@@ -192,35 +260,47 @@ async fn start_download(
     let ext = if format == "mp3" { "mp3" } else { "mp4" };
     let default_name = format!("{}.{}", safe_file_name(&title), ext);
 
-    let downloads_dir = app
-        .path()
-        .download_dir()
-        .unwrap_or_else(|_| PathBuf::from("."));
-
-    // The dialog plugin's blocking API is used from inside a spawned task so
-    // the async command itself never blocks the IPC thread.
-    let file_path = tauri::async_runtime::spawn_blocking({
-        let app = app.clone();
-        let default_name = default_name.clone();
-        move || {
-            app.dialog()
-                .file()
-                .set_file_name(&default_name)
-                .set_directory(&downloads_dir)
-                .add_filter(if ext == "mp3" { "Audio" } else { "Video" }, &[ext])
-                .blocking_save_file()
+    // `into_dir` is the whole-playlist path: the folder was chosen once, up
+    // front, so each track saves without a dialog. Asking per track would mean
+    // sitting through one prompt per song, which defeats the point of a
+    // "download everything" button.
+    let dest: PathBuf = if let Some(dir) = into_dir {
+        let dir = PathBuf::from(dir);
+        if !dir.is_dir() {
+            return Err("That folder no longer exists.".into());
         }
-    })
-    .await
-    .map_err(|e| format!("Save dialog failed: {e}"))?;
+        unique_path(&dir.join(&default_name))
+    } else {
+        let downloads_dir = app
+            .path()
+            .download_dir()
+            .unwrap_or_else(|_| PathBuf::from("."));
 
-    let Some(file_path) = file_path else {
-        return Err("Save cancelled".into());
+        // The dialog plugin's blocking API is used from inside a spawned task
+        // so the async command itself never blocks the IPC thread.
+        let file_path = tauri::async_runtime::spawn_blocking({
+            let app = app.clone();
+            let default_name = default_name.clone();
+            move || {
+                app.dialog()
+                    .file()
+                    .set_file_name(&default_name)
+                    .set_directory(&downloads_dir)
+                    .add_filter(if ext == "mp3" { "Audio" } else { "Video" }, &[ext])
+                    .blocking_save_file()
+            }
+        })
+        .await
+        .map_err(|e| format!("Save dialog failed: {e}"))?;
+
+        let Some(file_path) = file_path else {
+            return Err("Save cancelled".into());
+        };
+
+        file_path
+            .into_path()
+            .map_err(|e| format!("Invalid save location: {e}"))?
     };
-
-    let dest: PathBuf = file_path
-        .into_path()
-        .map_err(|e| format!("Invalid save location: {e}"))?;
 
     // Control channel: the command holds the receiver, the map holds the
     // sender so pause/resume/stop can signal it by id.
@@ -473,6 +553,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fetch_info,
             start_download,
+            pick_folder,
             stop_download,
             pause_download,
             resume_download,
@@ -501,6 +582,33 @@ mod tests {
     #[test]
     fn strips_characters_windows_rejects() {
         assert_eq!(safe_file_name("a/b:c*d?e\"f<g>h|i"), "abcdefghi");
+    }
+
+    #[test]
+    fn an_unused_name_is_left_alone() {
+        let dir = std::env::temp_dir().join("yt2mp-unique-free");
+        let _ = std::fs::create_dir_all(&dir);
+        let want = dir.join("song.mp3");
+        let _ = std::fs::remove_file(&want);
+        assert_eq!(unique_path(&want), want);
+    }
+
+    // Mixes really do repeat titles. Without this, the second "Intro" would
+    // overwrite the first and a 40-track playlist would quietly yield 39 files.
+    #[test]
+    fn a_taken_name_gets_a_number_and_keeps_its_extension() {
+        let dir = std::env::temp_dir().join("yt2mp-unique-taken");
+        let _ = std::fs::create_dir_all(&dir);
+        let first = dir.join("Intro.mp3");
+        std::fs::write(&first, b"x").unwrap();
+
+        let second = unique_path(&first);
+        assert_eq!(second, dir.join("Intro (2).mp3"));
+
+        std::fs::write(&second, b"x").unwrap();
+        assert_eq!(unique_path(&first), dir.join("Intro (3).mp3"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
