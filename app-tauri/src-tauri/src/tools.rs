@@ -375,8 +375,29 @@ async fn extract_ffmpeg(
     Ok(())
 }
 
+/// Whether one tool should be fetched this run.
+///
+/// Two distinct jobs share [`ensure`]: "set this machine up" (empty `force`,
+/// fetch anything absent) and "update exactly these" (non-empty `force`, touch
+/// nothing else). Kept as its own function so both rules can be tested without
+/// a running app or a network.
+fn wanted(base: &str, force: &[String], present: bool) -> bool {
+    if force.is_empty() {
+        !present
+    } else {
+        force.iter().any(|f| f == base)
+    }
+}
+
 /// Downloads whatever is missing. Already-present binaries are left alone, so
 /// this is safe to call on every launch and safe to retry after a failure.
+///
+/// `force` re-downloads the named tools even when present. When it is
+/// non-empty it also **limits** the run to those tools: "update yt-dlp" must
+/// fetch yt-dlp and nothing else. Without that limit the missing-file rule
+/// below would sweep up every other absent tool — on a machine using a bundled
+/// ffmpeg rather than a downloaded one, pressing "update yt-dlp" would quietly
+/// start a 100 MB ffmpeg download and sit on "Updating…" for minutes.
 pub async fn ensure(app: &AppHandle, force: Vec<String>) -> Result<ToolsStatus, String> {
     let root = dir(app).ok_or("Could not work out where to keep the tools.")?;
     tokio::fs::create_dir_all(&root)
@@ -386,9 +407,7 @@ pub async fn ensure(app: &AppHandle, force: Vec<String>) -> Result<ToolsStatus, 
     let all = tools();
     let needed: Vec<&Tool> = all
         .iter()
-        .filter(|t| {
-            force.iter().any(|f| f == t.base) || !root.join(binary_name(t.base)).exists()
-        })
+        .filter(|t| wanted(t.base, &force, root.join(binary_name(t.base)).exists()))
         .collect();
 
     if needed.is_empty() {
@@ -451,4 +470,105 @@ pub async fn ensure(app: &AppHandle, force: Vec<String>) -> Result<ToolsStatus, 
 /// only way to get that fix was a whole new yt2mp release.
 pub async fn update_ytdlp(app: &AppHandle) -> Result<ToolsStatus, String> {
     ensure(app, vec!["yt-dlp".to_string()]).await
+}
+
+/// What a check against yt-dlp's releases found.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YtdlpCheck {
+    /// The version installed right now, if yt-dlp can be run at all.
+    pub current: Option<String>,
+    /// The newest published version, if the check reached GitHub.
+    pub latest: Option<String>,
+    /// True only when both versions are known and they differ. Unknown stays
+    /// false: offering an update we cannot justify is worse than saying the
+    /// check failed.
+    pub update_available: bool,
+}
+
+/// Asks GitHub what the newest yt-dlp release is and compares it with what is
+/// installed.
+///
+/// Split out from [`update_ytdlp`] so the button can say *whether* there is
+/// anything to do before doing it. Re-downloading a 17 MB binary to discover it
+/// was already current is the behaviour this replaces.
+///
+/// yt-dlp tags its releases by date (`2026.08.14`), so a string comparison is
+/// enough to know they differ — and "differ" is all that is claimed here. No
+/// ordering is inferred: a pinned older build is still reported as a
+/// difference, which is honest, rather than silently called up to date.
+pub async fn check_ytdlp(_app: &AppHandle) -> Result<YtdlpCheck, String> {
+    let current = ytdlp_version().await;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        // GitHub's API rejects requests without one.
+        .user_agent("yt2mp")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest")
+        .send()
+        .await
+        .map_err(|_| "Could not reach GitHub. Are you online?".to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "GitHub answered {} when asked for the newest yt-dlp.",
+            resp.status().as_u16()
+        ));
+    }
+
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|_| "GitHub's answer could not be read.".to_string())?;
+
+    let latest = body
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim_start_matches('v').to_string());
+
+    let update_available = match (&current, &latest) {
+        (Some(c), Some(l)) => c != l,
+        _ => false,
+    };
+
+    Ok(YtdlpCheck {
+        current,
+        latest,
+        update_available,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// First run: nothing is installed, so everything absent gets fetched and
+    /// anything already there is left alone.
+    #[test]
+    fn a_setup_run_fetches_only_what_is_missing() {
+        let none: Vec<String> = Vec::new();
+        assert!(wanted("yt-dlp", &none, false), "missing tools must be fetched");
+        assert!(!wanted("ffmpeg", &none, true), "present tools must be left alone");
+    }
+
+    /// "Update yt-dlp" must fetch yt-dlp and nothing else.
+    ///
+    /// This is the regression that prompted the test: the old rule was
+    /// "forced OR missing", so on a machine whose ffmpeg lives in the bundle
+    /// rather than the tools folder, pressing "update yt-dlp" also started a
+    /// 100 MB ffmpeg download and left the button on "Updating…" for minutes.
+    #[test]
+    fn updating_one_tool_never_drags_in_another() {
+        let force = vec!["yt-dlp".to_string()];
+        assert!(wanted("yt-dlp", &force, true), "the named tool is re-fetched even when present");
+        assert!(
+            !wanted("ffmpeg", &force, false),
+            "an unrelated missing tool must NOT be pulled in by a targeted update"
+        );
+        assert!(!wanted("qjs", &force, false));
+    }
 }

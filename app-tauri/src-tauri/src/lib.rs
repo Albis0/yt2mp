@@ -524,6 +524,13 @@ async fn update_ytdlp(app: AppHandle) -> Result<tools::ToolsStatus, String> {
     tools::update_ytdlp(&app).await
 }
 
+/// Asks whether a newer yt-dlp exists, without downloading anything. Lets the
+/// settings panel behave like the app's own updater — look first, then offer.
+#[tauri::command]
+async fn check_ytdlp(app: AppHandle) -> Result<tools::YtdlpCheck, String> {
+    tools::check_ytdlp(&app).await
+}
+
 /// The running version, for the settings panel and the update check. Read
 /// from the bundle rather than a constant so it cannot disagree with what was
 /// actually installed.
@@ -566,6 +573,7 @@ pub fn run() {
             tools_status,
             ensure_tools,
             update_ytdlp,
+            check_ytdlp,
             app_version
         ])
         .run(tauri::generate_context!())

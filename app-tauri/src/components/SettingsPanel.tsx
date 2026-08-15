@@ -11,6 +11,7 @@ import {
   appVersion,
   toolsStatus,
   updateYtdlp,
+  checkYtdlp,
 } from "@/lib/api";
 import { look, install, openReleasePage, type Available } from "@/lib/updater";
 import type { ThemePref } from "@/lib/theme";
@@ -58,6 +59,10 @@ export default function SettingsPanel({
   const [ytdlp, setYtdlp] = useState<string | null>(null);
   const [ytdlpBusy, setYtdlpBusy] = useState(false);
   const [ytdlpNote, setYtdlpNote] = useState<string | null>(null);
+  /// Set only once a check has actually found a newer yt-dlp. Until then the
+  /// button offers to look, exactly like the app's own update check — it does
+  /// not re-download 17 MB to discover nothing changed.
+  const [ytdlpNewer, setYtdlpNewer] = useState<string | null>(null);
 
   const [update, setUpdate] = useState<Available | null>(null);
   const [updateNote, setUpdateNote] = useState<string | null>(null);
@@ -70,6 +75,33 @@ export default function SettingsPanel({
       .catch(() => {});
   }, []);
 
+  /// Looks for a newer yt-dlp without downloading it. Mirrors the app's own
+  /// update check so both rows in this panel behave the same way: ask first,
+  /// then offer. The old button always re-downloaded 17 MB and only then said
+  /// whether it had been necessary.
+  async function runYtdlpCheck() {
+    setYtdlpBusy(true);
+    setYtdlpNote(null);
+    setYtdlpNewer(null);
+    try {
+      const found = await checkYtdlp();
+      if (found.current) setYtdlp(found.current);
+      if (found.updateAvailable && found.latest) {
+        setYtdlpNewer(found.latest);
+      } else if (found.latest) {
+        setYtdlpNote("Already on the newest version.");
+      } else {
+        setYtdlpNote("Could not read the newest version number.");
+      }
+    } catch (err) {
+      setYtdlpNote(
+        typeof err === "string" ? err : "Could not check for a new yt-dlp."
+      );
+    } finally {
+      setYtdlpBusy(false);
+    }
+  }
+
   /// Re-downloads yt-dlp. This is the fix for "TikTok stopped working" — the
   /// extractor breaks upstream, yt-dlp ships a fix within days, and before
   /// this button existed the only way to get it was a whole new yt2mp build.
@@ -80,6 +112,7 @@ export default function SettingsPanel({
     try {
       const s = await updateYtdlp();
       setYtdlp(s.ytdlpVersion);
+      setYtdlpNewer(null);
       setYtdlpNote(
         s.ytdlpVersion && s.ytdlpVersion !== before
           ? `Updated to ${s.ytdlpVersion}.`
@@ -241,66 +274,86 @@ export default function SettingsPanel({
           </div>
         </div>
 
+        {/* Both updatable things live in one section, as two rows of the same
+            shape: name, version, one button on the right. They used to be
+            separate sections with different-looking controls, which made two
+            versions of the same idea look like two unrelated features. */}
         <div className="settings-section">
-          <span className="settings-label">Downloading tools</span>
-          <p className="settings-body">
-            yt-dlp is what reads each site. Sites change often and break it;
-            updating it here usually fixes a tab that stopped working, without
-            waiting for a new version of yt2mp.
-          </p>
-          <p className="settings-active">
-            yt-dlp <span className="num">{ytdlp ?? "not installed"}</span>
-          </p>
-          <button
-            type="button"
-            className="settings-primary"
-            onClick={runYtdlpUpdate}
-            disabled={ytdlpBusy}
-          >
-            {ytdlpBusy ? (
-              <>
-                <span className="submit-spinner" aria-hidden="true" />
-                Updating yt-dlp…
-              </>
-            ) : (
-              "Update yt-dlp"
-            )}
-          </button>
-          {ytdlpNote ? <p className="settings-status">{ytdlpNote}</p> : null}
-        </div>
+          <span className="settings-label">Updates</span>
 
-        <div className="settings-section">
-          <span className="settings-label">Version</span>
-          <p className="settings-active">
-            yt2mp <span className="num">{version ?? "…"}</span>
-          </p>
-          {update ? (
-            <>
-              <p className="settings-body">
-                Version <span className="num">{update.version}</span> is
-                available.
-              </p>
+          <div className="setting-row">
+            <div className="setting-row-text">
+              <span className="setting-row-name">yt2mp</span>
+              <span className="setting-row-meta num">{version ?? "…"}</span>
+            </div>
+            {update ? (
               <button
                 type="button"
-                className="settings-primary"
+                className="settings-primary settings-primary-sm"
                 onClick={() =>
                   update.canInstall ? install(update) : openReleasePage()
                 }
               >
-                {update.canInstall ? "Install it now" : "Get it from GitHub"}
+                {update.canInstall
+                  ? `Update to ${update.version}`
+                  : "Get it from GitHub"}
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="settings-choice"
-              onClick={checkForUpdate}
-              disabled={updateBusy}
-            >
-              {updateBusy ? "Checking…" : "Check for updates"}
-            </button>
-          )}
+            ) : (
+              <button
+                type="button"
+                className="settings-choice"
+                onClick={checkForUpdate}
+                disabled={updateBusy}
+              >
+                {updateBusy ? "Checking…" : "Check"}
+              </button>
+            )}
+          </div>
           {updateNote ? <p className="settings-status">{updateNote}</p> : null}
+
+          <div className="setting-row">
+            <div className="setting-row-text">
+              <span className="setting-row-name">yt-dlp</span>
+              <span className="setting-row-meta num">
+                {ytdlp ?? "not installed"}
+              </span>
+            </div>
+            {/* Check first, then offer — the same two steps as the row above.
+                The old single button always re-downloaded 17 MB and only then
+                reported whether it had been needed. */}
+            {ytdlpNewer ? (
+              <button
+                type="button"
+                className="settings-primary settings-primary-sm"
+                onClick={runYtdlpUpdate}
+                disabled={ytdlpBusy}
+              >
+                {ytdlpBusy ? (
+                  <>
+                    <span className="submit-spinner" aria-hidden="true" />
+                    Updating…
+                  </>
+                ) : (
+                  `Update to ${ytdlpNewer}`
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="settings-choice"
+                onClick={runYtdlpCheck}
+                disabled={ytdlpBusy}
+              >
+                {ytdlpBusy ? "Checking…" : "Check"}
+              </button>
+            )}
+          </div>
+          <p className="settings-body settings-body-dim">
+            yt-dlp is what reads each site. Sites change and break it, so
+            updating it here often fixes a source that stopped working —
+            without waiting for a new yt2mp.
+          </p>
+          {ytdlpNote ? <p className="settings-status">{ytdlpNote}</p> : null}
         </div>
 
         <div className="settings-section">
@@ -326,10 +379,24 @@ export default function SettingsPanel({
           )}
         </button>
 
-        {loaded && browsers.length === 0 ? (
-          <p className="settings-body settings-body-dim">
-            No browser was found on this computer.
-          </p>
+        {/* Which browsers were found, stated up front. Without this the list
+            behind "Choose a browser myself" looks like the app only supports a
+            few browsers, when it is simply reporting what is installed —
+            Chrome is absent from that list because Chrome is not on the
+            machine, not because it is unsupported. */}
+        {loaded ? (
+          browsers.length === 0 ? (
+            <p className="settings-body settings-body-dim">
+              No browser was found on this computer.
+            </p>
+          ) : (
+            <p className="settings-body settings-body-dim">
+              Found on this computer:{" "}
+              <strong>{browsers.map((b) => b.label).join(", ")}</strong>. Others
+              (Chrome, Brave, Opera and more) are supported too and appear here
+              once they are installed.
+            </p>
+          )
         ) : null}
 
         {activeLabel ? (

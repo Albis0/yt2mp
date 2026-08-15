@@ -281,6 +281,22 @@ export async function updateYtdlp(): Promise<ToolsStatus> {
   return toToolsStatus(await invoke<RawToolsStatus>("update_ytdlp"));
 }
 
+/// What a check against yt-dlp's releases found. Rust serialises this in
+/// camelCase already, so there is no snake_case shape to convert.
+export interface YtdlpCheck {
+  current: string | null;
+  latest: string | null;
+  /// True only when both versions are known and differ — an unknown answer is
+  /// never reported as "an update is waiting".
+  updateAvailable: boolean;
+}
+
+/// Asks whether a newer yt-dlp exists without downloading it, so the button
+/// can offer an update rather than always re-fetching 17 MB to find out.
+export function checkYtdlp(): Promise<YtdlpCheck> {
+  return invoke<YtdlpCheck>("check_ytdlp");
+}
+
 /// The running app version, read from the bundle rather than a constant so it
 /// always matches what was actually installed.
 export function appVersion(): Promise<string> {

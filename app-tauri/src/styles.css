@@ -214,9 +214,15 @@ button {
   height: 40px;
 }
 
+/* Full height, so the name inside can centre against the bar. Without this the
+   drag region collapses to its content and the wordmark sits ~12px above the
+   window buttons it shares the row with — the one thing on that row that did
+   not line up. */
 .chrome-drag {
   flex: 1;
   min-width: 24px;
+  display: flex;
+  align-items: center;
 }
 
 /* The app's name sits in the title bar, which is otherwise dead
@@ -1403,6 +1409,46 @@ button {
   font-size: 0.88rem;
   font-weight: 600;
   transition: background 0.14s ease, opacity 0.14s ease;
+}
+
+/* The row variant. A full-width filled button per row would put three loud
+   accents down one panel and leave nothing to indicate which action was the
+   important one. */
+.settings-primary-sm {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  font-size: 0.82rem;
+}
+
+/* One updatable thing: name and version on the left, its one control on the
+   right. yt2mp and yt-dlp use the same row, so the panel reads as a list of
+   things that update rather than two unrelated features. */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+
+.setting-row-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.setting-row-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.setting-row-meta {
+  font-size: 0.79rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-primary:hover:not(:disabled) {
