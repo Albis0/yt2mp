@@ -223,16 +223,23 @@ button {
    space, and gives the drag region something to be.
    Set at the same size as the tab labels rather than smaller: a
    shrunken grey wordmark in the corner reads as a leftover, not
-   as the app's name. */
+   as the app's name.
+
+   Left edge aligned to the rail's own optical left rather than set at an
+   arbitrary padding. The name is wider than the 66px rail, so centring it
+   in that column pushed it flush against the window frame; instead it
+   starts where the rail's content starts and is simply allowed to run past
+   the border into the drag area. */
 .chrome-title {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding-left: 14px;
+  padding-left: 18px;
   color: var(--text-2);
   font-size: 0.9rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+  white-space: nowrap;
   pointer-events: none;
 }
 
@@ -438,10 +445,18 @@ button {
    previous version subtracted a hard-coded chrome height, which was
    wrong the moment the chrome changed and showed up as a scrollbar on
    a window with nothing to scroll. */
+/* Sits above true centre, not below it. The shell's own top padding (22px)
+   is part of the flex box being centred, so an equal bottom value still
+   lands the block low; the bottom weight has to exceed the top padding by
+   the amount you want it lifted. ~140px puts the heading a little above
+   halfway, which is where the eye looks first on an otherwise empty screen.
+   `gap: 12px` because the entry column sets its own internal spacing; the
+   shell's 16px on top of that read as a seam. */
 .app-shell-empty {
   flex: 1;
   justify-content: center;
-  padding-bottom: 64px;
+  gap: 12px;
+  padding-bottom: 140px;
 }
 
 /* ---------- Entry ---------- */
@@ -452,13 +467,65 @@ button {
   gap: 10px;
 }
 
+/* On the empty screen the entry column is narrower than the shell and
+   centred. A full-width field stretched across 820px reads as a search bar
+   for a page that isn't there; at ~560px it reads as the one thing being
+   asked for. The cap only applies while the screen is bare — once a result
+   card is on screen the form lines up with it at full width. */
+.app-shell-empty .tab-panel {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  gap: 14px;
+}
+
+/* Names the active source. The rail marks it with colour and a bar, but the
+   main pane said nothing at all — the eye landed on an unlabelled input in
+   an empty field with no indication of what it was for. */
+.entry-head {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.entry-title {
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+}
+
+.entry-lead {
+  color: var(--text-2);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .download-form {
   display: flex;
   gap: 8px;
 }
 
+/* The submit button was being pushed off the right edge: the input is
+   `flex: 1` with a long placeholder, and at the default 900px window the
+   button had no room left and clipped outside the viewport. Letting the
+   input shrink below its content width is what actually keeps Fetch on
+   screen — `min-width: 0` alone was not enough, because the button itself
+   was allowed to shrink first. */
+.download-form .submit-btn {
+  flex: 0 0 auto;
+  min-width: fit-content;
+}
+
+/* `flex: 1 1 0`, not `flex: 1` with a min-width — an <input> carries an
+   intrinsic width from its default `size` attribute (~20 characters), and
+   with an `auto` basis the flex algorithm honours that width first and
+   pushes the submit button outside the container instead of shrinking the
+   field. That is what put Fetch off the right edge of the window. A zero
+   basis makes the input take only the space the button has not claimed. */
 .url-input {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   padding: 11px 13px;
   border-radius: var(--radius);
@@ -912,11 +979,22 @@ button {
   display: none;
 }
 
+/* Aligned to the entry column rather than centred in the shell. Centred, it
+   sat off to the right of a narrower form above it and read as a stray
+   caption belonging to nothing. Left-aligned under the field, at the same
+   width, it reads as the answer to "what happens after I fetch". */
+.app-shell-empty .history {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
 .app-shell-empty .history-empty {
   border: none;
-  padding: 4px;
+  padding: 0;
+  text-align: left;
   color: var(--text-3);
-  opacity: 0.75;
+  font-size: 0.82rem;
 }
 
 .history-list {

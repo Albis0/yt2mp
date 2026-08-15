@@ -23,7 +23,7 @@ import {
 import ResultCard from "@/components/ResultCard";
 import HistoryList from "@/components/HistoryList";
 import PlaylistView from "@/components/PlaylistView";
-import SourceRail, { type TabId } from "@/components/SourceRail";
+import SourceRail, { TABS, type TabId } from "@/components/SourceRail";
 import WindowControls from "@/components/WindowControls";
 import SettingsPanel from "@/components/SettingsPanel";
 import FirstRun from "@/components/FirstRun";
@@ -65,6 +65,19 @@ const AI_LOADING_PHRASES = [
   "Still waiting on AI (retrying a key)…",
   "Searching YouTube for a match…",
 ];
+
+/// One line under the heading on an empty screen, saying what this source
+/// takes. The rail already names the source; this says what to do with it,
+/// which is the question someone opening the app actually has.
+const TAB_LEADS: Record<TabId, string> = {
+  youtube: "Paste a video or playlist link to pull the audio or the video.",
+  tiktok: "Paste a TikTok link to save the clip.",
+  instagram: "Paste a reel or post link to save it.",
+  twitter: "Paste a post link to save the video in it.",
+  twitch: "Paste a VOD or clip link to save it.",
+  other: "Paste any link — yt-dlp handles around 1750 sites.",
+  ai: "Describe what you're after and yt2mp finds it on YouTube.",
+};
 
 /// Per-tab copy. The placeholder shows the shape of link that tab expects,
 /// which is faster to act on than a generic "paste a link" — people
@@ -410,6 +423,14 @@ export default function App() {
   // chrome stays, because the window still needs to be movable and closable.
   const needsTools = tools !== null && !tools.ready;
 
+  // Nothing fetched and nothing in history: the screen is otherwise a bare
+  // input in a black field, so it gets a heading naming the active source and
+  // a line saying what that source takes. Once there is a result or a history
+  // list on screen the page has its own subject and the heading would just be
+  // a second one competing with it.
+  const bare = !info && !playlist && history.length === 0;
+  const tabLabel = TABS.find((t) => t.id === tab)?.label ?? "yt2mp";
+
   return (
     // The tab sets --accent for the whole window. Surfaces stay neutral in
     // every tab; only the controls that carry meaning take the colour.
@@ -515,12 +536,15 @@ export default function App() {
           playlist exists there is enough to fill the page and it goes back
           to flowing from the top. */}
       {needsTools ? null : (
-      <main
-        className={`app-shell${
-          !info && !playlist && history.length === 0 ? " app-shell-empty" : ""
-        }`}
-      >
+      <main className={`app-shell${bare ? " app-shell-empty" : ""}`}>
         <div className="tab-panel" role="tabpanel">
+          {bare ? (
+            <div className="entry-head">
+              <h1 className="entry-title">{tabLabel}</h1>
+              <p className="entry-lead">{TAB_LEADS[tab]}</p>
+            </div>
+          ) : null}
+
           <form className="download-form" onSubmit={handleSubmit}>
             <input
               type="text"
