@@ -22,6 +22,66 @@ const THEME_OPTIONS: { id: ThemePref; label: string }[] = [
   { id: "dark", label: "Dark" },
 ];
 
+/// The panel's three pages.
+///
+/// One scrolling column was the previous shape, and it did not fit: the card
+/// ran past the bottom of the window, so the last paragraph was always cut in
+/// half and a scrollbar sat down the right edge of a settings dialog. Three
+/// short pages fit without scrolling at any window size this app supports, and
+/// each page holds one subject, so nothing has to be skimmed past.
+type PageId = "general" | "updates" | "accounts";
+
+const PAGES: { id: PageId; label: string; icon: () => React.ReactElement }[] = [
+  { id: "general", label: "General", icon: GeneralIcon },
+  { id: "updates", label: "Updates", icon: UpdatesIcon },
+  { id: "accounts", label: "Accounts", icon: AccountsIcon },
+];
+
+function GeneralIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        d="M12 3.4v2.1M12 18.5v2.1M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M3.4 12h2.1M18.5 12h2.1M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"
+      />
+    </svg>
+  );
+}
+
+function UpdatesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 4v10m0 0 3.6-3.6M12 14l-3.6-3.6M4.5 16.5v1.8A1.7 1.7 0 0 0 6.2 20h11.6a1.7 1.7 0 0 0 1.7-1.7v-1.8"
+      />
+    </svg>
+  );
+}
+
+function AccountsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="8.2" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        d="M4.8 20a7.2 7.2 0 0 1 14.4 0"
+      />
+    </svg>
+  );
+}
+
 /// The login setting.
 ///
 /// There is no password field here on purpose. Instagram treats a password
@@ -45,6 +105,7 @@ export default function SettingsPanel({
   theme: ThemePref;
   onThemeChange: (t: ThemePref) => void;
 }) {
+  const [page, setPage] = useState<PageId>("general");
   const [browsers, setBrowsers] = useState<Browser[]>([]);
   const [choice, setChoice] = useState<string | null>(null);
   const [choiceLabel, setChoiceLabel] = useState<string | null>(null);
@@ -53,7 +114,6 @@ export default function SettingsPanel({
   const [checking, setChecking] = useState(false);
   const [probing, setProbing] = useState<string | null>(null);
   const [steps, setSteps] = useState<ProbeStep[]>([]);
-  const [showManual, setShowManual] = useState(false);
 
   const [version, setVersion] = useState<string | null>(null);
   const [ytdlp, setYtdlp] = useState<string | null>(null);
@@ -244,228 +304,263 @@ export default function SettingsPanel({
         if (e.target === e.currentTarget && !checking) onClose();
       }}
     >
-      <div className="modal-card" role="dialog" aria-modal="true">
-        <div className="settings-head">
-          <h2 className="settings-title">Settings</h2>
-          <button
-            type="button"
-            className="settings-close"
-            onClick={onClose}
-            disabled={checking}
-          >
-            Done
-          </button>
-        </div>
-
-        <div className="settings-section">
-          <span className="settings-label">Appearance</span>
-          <div className="theme-switch" role="group" aria-label="Theme">
-            {THEME_OPTIONS.map((opt) => (
+      <div className="prefs" role="dialog" aria-modal="true" aria-label="Settings">
+        {/* Sidebar. The same shape as the app's own source rail, so the window
+            has one navigation idiom rather than two. */}
+        <nav className="prefs-nav" role="tablist" aria-orientation="vertical">
+          <span className="prefs-nav-title">Settings</span>
+          {PAGES.map((p) => {
+            const Icon = p.icon;
+            return (
               <button
-                key={opt.id}
+                key={p.id}
                 type="button"
-                className={`theme-opt${theme === opt.id ? " theme-opt-on" : ""}`}
-                aria-pressed={theme === opt.id}
-                onClick={() => onThemeChange(opt.id)}
+                role="tab"
+                aria-selected={page === p.id}
+                className={`prefs-tab${page === p.id ? " prefs-tab-on" : ""}`}
+                onClick={() => setPage(p.id)}
               >
-                {opt.label}
+                <Icon />
+                {p.label}
               </button>
-            ))}
+            );
+          })}
+        </nav>
+
+        <div className="prefs-main">
+          <div className="prefs-body" role="tabpanel">
+            {page === "general" ? (
+              <>
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Theme</span>
+                    <span className="prefs-field-hint">
+                      Follows your system unless you pick one.
+                    </span>
+                  </div>
+                  <div className="theme-switch" role="group" aria-label="Theme">
+                    {THEME_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`theme-opt${theme === opt.id ? " theme-opt-on" : ""}`}
+                        aria-pressed={theme === opt.id}
+                        onClick={() => onThemeChange(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Version</span>
+                    <span className="prefs-field-hint">
+                      The build running right now.
+                    </span>
+                  </div>
+                  <span className="prefs-value num">{version ?? "…"}</span>
+                </div>
+              </>
+            ) : null}
+
+            {page === "updates" ? (
+              <>
+                {/* Two rows of one shape: what it is, what version, one
+                    control. Both check before they download. */}
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">yt2mp</span>
+                    <span className="prefs-field-hint">
+                      {updateNote ?? "The app itself."}
+                    </span>
+                  </div>
+                  <div className="prefs-field-control">
+                    <span className="prefs-value num">{version ?? "…"}</span>
+                    {update ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() =>
+                          update.canInstall ? install(update) : openReleasePage()
+                        }
+                      >
+                        {update.canInstall
+                          ? `Update to ${update.version}`
+                          : "Get it from GitHub"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={checkForUpdate}
+                        disabled={updateBusy}
+                      >
+                        {updateBusy ? "Checking…" : "Check"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">yt-dlp</span>
+                    <span className="prefs-field-hint">
+                      {ytdlpNote ?? "Reads the sites. Update it when one breaks."}
+                    </span>
+                  </div>
+                  <div className="prefs-field-control">
+                    <span className="prefs-value num">
+                      {ytdlp ?? "missing"}
+                    </span>
+                    {ytdlpNewer ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={runYtdlpUpdate}
+                        disabled={ytdlpBusy}
+                      >
+                        {ytdlpBusy ? (
+                          <>
+                            <span className="submit-spinner" aria-hidden="true" />
+                            Updating…
+                          </>
+                        ) : (
+                          `Update to ${ytdlpNewer}`
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={runYtdlpCheck}
+                        disabled={ytdlpBusy}
+                      >
+                        {ytdlpBusy ? "Checking…" : "Check"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {page === "accounts" ? (
+              <>
+                <p className="prefs-intro">
+                  Instagram and TikTok hide most posts from logged-out visitors.
+                  yt2mp can borrow the login from a browser you already use.
+                </p>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Browser session</span>
+                    <span className="prefs-field-hint">
+                      {activeLabel ? (
+                        <>
+                          Using <strong>{activeLabel}</strong>
+                        </>
+                      ) : (
+                        "Not set up yet"
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={runCheck}
+                    disabled={checking || !loaded || browsers.length === 0}
+                  >
+                    {checking ? (
+                      <>
+                        <span className="submit-spinner" aria-hidden="true" />
+                        {probing ? `Trying ${probing}…` : "Checking…"}
+                      </>
+                    ) : (
+                      "Find it for me"
+                    )}
+                  </button>
+                </div>
+
+                {status ? <p className="prefs-note">{status}</p> : null}
+
+                {/* Per-browser results: without them "nothing worked" is
+                    unactionable, because a locked browser and a missing login
+                    need completely different fixes. */}
+                {steps.length > 0 ? (
+                  <ul className="probe-list">
+                    {steps.map((s) => (
+                      <li key={s.arg} className="probe-row">
+                        <span className={`probe-mark probe-${s.outcome.status}`}>
+                          {s.outcome.status === "works"
+                            ? "✓"
+                            : s.outcome.status === "signedinbutblocked"
+                              ? "!"
+                              : "×"}
+                        </span>
+                        <span className="probe-name">{s.label}</span>
+                        <span className="probe-note">{describe(s.outcome)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {/* The manual list doubles as the answer to "why isn't my
+                    browser supported?" — it is the browsers found on this
+                    computer, not the browsers the app knows about. */}
+                <div className="prefs-field prefs-field-stack">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Or pick one yourself</span>
+                    <span className="prefs-field-hint">
+                      {loaded && browsers.length === 0
+                        ? "No browser found on this computer."
+                        : "Found on this computer. Chrome, Brave, Opera and others show up here once installed."}
+                    </span>
+                  </div>
+                  {browsers.length > 0 ? (
+                    <div className="chips">
+                      <button
+                        type="button"
+                        className={`chip${choice === null ? " chip-on" : ""}`}
+                        onClick={() => choose(null)}
+                      >
+                        Off
+                      </button>
+                      {browsers.map((b) => (
+                        <button
+                          key={b.arg}
+                          type="button"
+                          className={`chip${choice === b.arg ? " chip-on" : ""}`}
+                          onClick={() => choose(b.arg)}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <p className="prefs-fine">
+                  No password is ever entered here. The session stays on this
+                  computer and is sent only to the site it belongs to.
+                </p>
+              </>
+            ) : null}
           </div>
-        </div>
 
-        {/* Both updatable things live in one section, as two rows of the same
-            shape: name, version, one button on the right. They used to be
-            separate sections with different-looking controls, which made two
-            versions of the same idea look like two unrelated features. */}
-        <div className="settings-section">
-          <span className="settings-label">Updates</span>
-
-          <div className="setting-row">
-            <div className="setting-row-text">
-              <span className="setting-row-name">yt2mp</span>
-              <span className="setting-row-meta num">{version ?? "…"}</span>
-            </div>
-            {update ? (
-              <button
-                type="button"
-                className="settings-primary settings-primary-sm"
-                onClick={() =>
-                  update.canInstall ? install(update) : openReleasePage()
-                }
-              >
-                {update.canInstall
-                  ? `Update to ${update.version}`
-                  : "Get it from GitHub"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="settings-choice"
-                onClick={checkForUpdate}
-                disabled={updateBusy}
-              >
-                {updateBusy ? "Checking…" : "Check"}
-              </button>
-            )}
-          </div>
-          {updateNote ? <p className="settings-status">{updateNote}</p> : null}
-
-          <div className="setting-row">
-            <div className="setting-row-text">
-              <span className="setting-row-name">yt-dlp</span>
-              <span className="setting-row-meta num">
-                {ytdlp ?? "not installed"}
-              </span>
-            </div>
-            {/* Check first, then offer — the same two steps as the row above.
-                The old single button always re-downloaded 17 MB and only then
-                reported whether it had been needed. */}
-            {ytdlpNewer ? (
-              <button
-                type="button"
-                className="settings-primary settings-primary-sm"
-                onClick={runYtdlpUpdate}
-                disabled={ytdlpBusy}
-              >
-                {ytdlpBusy ? (
-                  <>
-                    <span className="submit-spinner" aria-hidden="true" />
-                    Updating…
-                  </>
-                ) : (
-                  `Update to ${ytdlpNewer}`
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="settings-choice"
-                onClick={runYtdlpCheck}
-                disabled={ytdlpBusy}
-              >
-                {ytdlpBusy ? "Checking…" : "Check"}
-              </button>
-            )}
-          </div>
-          <p className="settings-body settings-body-dim">
-            yt-dlp is what reads each site. Sites change and break it, so
-            updating it here often fixes a source that stopped working —
-            without waiting for a new yt2mp.
-          </p>
-          {ytdlpNote ? <p className="settings-status">{ytdlpNote}</p> : null}
-        </div>
-
-        <div className="settings-section">
-          <span className="settings-label">Instagram &amp; TikTok login</span>
-          <p className="settings-body">
-            These sites hide most posts from logged-out visitors. yt2mp can
-            borrow the login from a browser you are already signed into.
-          </p>
-
-        <button
-          type="button"
-          className="settings-primary"
-          onClick={runCheck}
-          disabled={checking || !loaded || browsers.length === 0}
-        >
-          {checking ? (
-            <>
-              <span className="submit-spinner" aria-hidden="true" />
-              {probing ? `Trying ${probing}…` : "Checking…"}
-            </>
-          ) : (
-            "Find my login automatically"
-          )}
-        </button>
-
-        {/* Which browsers were found, stated up front. Without this the list
-            behind "Choose a browser myself" looks like the app only supports a
-            few browsers, when it is simply reporting what is installed —
-            Chrome is absent from that list because Chrome is not on the
-            machine, not because it is unsupported. */}
-        {loaded ? (
-          browsers.length === 0 ? (
-            <p className="settings-body settings-body-dim">
-              No browser was found on this computer.
-            </p>
-          ) : (
-            <p className="settings-body settings-body-dim">
-              Found on this computer:{" "}
-              <strong>{browsers.map((b) => b.label).join(", ")}</strong>. Others
-              (Chrome, Brave, Opera and more) are supported too and appear here
-              once they are installed.
-            </p>
-          )
-        ) : null}
-
-        {activeLabel ? (
-          <p className="settings-active">
-            Currently using <strong>{activeLabel}</strong>
-          </p>
-        ) : (
-          <p className="settings-body settings-body-dim">
-            Not using any browser session.
-          </p>
-        )}
-
-        {status ? <p className="settings-status">{status}</p> : null}
-
-        {/* Per-browser results: without them "nothing worked" is unactionable,
-            because the user cannot tell a locked browser from a missing login. */}
-        {steps.length > 0 ? (
-          <ul className="probe-list">
-            {steps.map((s) => (
-              <li key={s.arg} className="probe-row">
-                <span className={`probe-mark probe-${s.outcome.status}`}>
-                  {s.outcome.status === "works"
-                    ? "✓"
-                    : s.outcome.status === "signedinbutblocked"
-                      ? "!"
-                      : "×"}
-                </span>
-                <span className="probe-name">{s.label}</span>
-                <span className="probe-note">{describe(s.outcome)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        <button
-          type="button"
-          className="settings-link"
-          onClick={() => setShowManual((v) => !v)}
-        >
-          {showManual ? "Hide manual choice" : "Choose a browser myself"}
-        </button>
-
-        {showManual ? (
-          <div className="settings-choices">
+          {/* Done sits on the card's own footer rather than beside the title:
+              it is the way out of the dialog, and it should be in the same
+              place no matter which page is open. */}
+          <div className="prefs-foot">
             <button
               type="button"
-              className={`settings-choice${choice === null ? " settings-choice-on" : ""}`}
-              onClick={() => choose(null)}
+              className="btn"
+              onClick={onClose}
+              disabled={checking}
             >
-              Off
+              Done
             </button>
-            {browsers.map((b) => (
-              <button
-                key={b.arg}
-                type="button"
-                className={`settings-choice${choice === b.arg ? " settings-choice-on" : ""}`}
-                onClick={() => choose(b.arg)}
-              >
-                {b.label}
-              </button>
-            ))}
           </div>
-        ) : null}
-
-          <p className="settings-body settings-body-dim">
-            Your password is never entered here. The session is read from this
-            computer and sent only to the site it belongs to — downloads from
-            YouTube, X and Twitch never carry it.
-          </p>
         </div>
       </div>
     </div>

@@ -1348,6 +1348,296 @@ button {
   box-shadow: var(--shadow);
 }
 
+/* ---------- Preferences ----------
+   A sidebar dialog, not a scrolling column.
+
+   The previous panel stacked four sections in one card and relied on
+   `overflow-y: auto` to cope. It did not cope: the card ran past the bottom of
+   the window, so the last paragraph was permanently cut in half and a
+   scrollbar sat down the right edge of a settings dialog — the clearest
+   possible signal that a layout has more content than shape.
+
+   Splitting it into three pages fixes the cause rather than the symptom. Each
+   page holds one subject and is short enough that nothing scrolls at any
+   window size this app runs at. */
+
+.prefs {
+  display: flex;
+  width: 100%;
+  max-width: 620px;
+  /* Settings belong to the app, not to whichever source tab happens to be
+     open behind them. Without this the dialog turned pink on Instagram and
+     purple on Twitch — the accent tint is meaningful on the main screen
+     (it says which site you are downloading from) and meaningless here. */
+  --accent: #2f6fed;
+  --accent-press: #2559c8;
+  --on-accent: #ffffff;
+  /* Fixed, not min/max: every page settles at the same size, so switching
+     tabs does not resize the dialog under the pointer. Tall enough for the
+     longest page (Accounts, with probe results), short enough for a 768px
+     laptop with the 24px backdrop padding on both sides. */
+  /* Grows with its page instead of standing at one fixed height.
+     Measured: General and Updates need 226px, Accounts 361px. A fixed 400
+     left the two short pages with 174px of dead space under the last row —
+     the same "content floating in a void" the main screen was fixed for.
+     `min-height` keeps the short pages from collapsing into a strip, and the
+     sidebar's own height means the frame never jumps by more than the
+     difference between the pages. */
+  min-height: 300px;
+  max-height: min(560px, calc(100vh - 48px));
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* The neutral accent, lifted for a dark ground — the same adjustment every
+   per-tab accent gets, for the same reason: a colour that reads as "blue" on
+   white goes muddy on charcoal. */
+:root[data-theme="dark"] .prefs {
+  --accent: #5b8dff;
+  --accent-press: #7ba3ff;
+}
+
+.prefs-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 152px;
+  padding: 14px 10px;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+}
+
+/* The dialog's title lives in the sidebar rather than over the content. It
+   labels the whole panel, and putting it here leaves the content pane for
+   content only. */
+.prefs-nav-title {
+  padding: 2px 8px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.prefs-tab {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-2);
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.prefs-tab:hover:not(.prefs-tab-on) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.prefs-tab-on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.prefs-tab svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.prefs-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prefs-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  /* A safety net, not the layout. The card sizes itself to its page, so this
+     only catches the one case that can genuinely overflow — a long list of
+     probe results on a short window. */
+  overflow-y: auto;
+}
+
+/* One setting: what it is and what it does on the left, its control on the
+   right. Every row in the panel is this shape, which is what makes the pages
+   scannable — the eye learns one pattern instead of four. */
+.prefs-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.prefs-field:last-child {
+  border-bottom: none;
+}
+
+/* For a control too wide to sit beside its label — the browser chips. */
+.prefs-field-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.prefs-field-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.prefs-field-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+/* The explanation, one line, under the name it explains. The old panel put
+   these in standalone paragraphs between the controls, which read as a wall
+   of text and pushed the actual settings apart. */
+.prefs-field-hint {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.prefs-field-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.prefs-value {
+  font-size: 0.79rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.prefs-intro {
+  padding-bottom: 4px;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.prefs-note {
+  padding: 9px 11px;
+  margin-top: 8px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* Sits directly under the last row rather than being pushed to the bottom by
+   `margin-top: auto`. With the card sized to its content there is no bottom
+   to push it to, and the gap that trick produced read as a missing section. */
+.prefs-fine {
+  padding-top: 14px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.prefs-foot {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- Buttons, shared ----------
+   The panel had four button classes doing three jobs. Two remain: a quiet
+   default, and one filled variant for the action a page is actually about. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, opacity 0.14s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--text-3);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--accent-press);
+}
+
+/* Pick-one-of-many, e.g. which browser to borrow the session from. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.chip:hover:not(.chip-on) {
+  border-color: var(--text-3);
+  color: var(--text);
+}
+
+.chip-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .settings-head {
   display: flex;
   align-items: center;
@@ -1556,6 +1846,20 @@ button {
   color: var(--text);
   font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* Inside the preferences dialog the switch sits in a row of controls that all
+   use the same border treatment, so it takes one too — otherwise it reads as
+   a borderless panel floating next to bordered buttons. */
+.prefs .theme-switch {
+  flex-shrink: 0;
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.prefs .theme-opt {
+  padding: 5px 12px;
+  font-size: 0.79rem;
 }
 
 /* ---------- Update strip ----------
