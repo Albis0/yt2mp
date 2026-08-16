@@ -260,19 +260,30 @@ export default function SettingsPanel({
 
     // Stated first because it is the one case where the user is already
     // logged in and every "sign in again" instruction would be wrong.
+    //
+    // The old wording promised this clears "usually within a few hours",
+    // which was measured to be wrong: with a working session, every Instagram
+    // path fails and each one fails differently (a post gives HTTP 400, a
+    // profile gives "unable to extract data"), while instagram.com itself
+    // still loads normally in a browser. That is Instagram refusing yt-dlp's
+    // API, not a per-device rate limit, and it does not lift on a timer.
+    // Promising it will is worse than saying nothing, so this now says what
+    // is actually known and points at the only thing that has ever fixed it.
+    // Kept short on purpose. This sits directly above the per-browser results,
+    // which are the more useful half — a longer explanation pushed them out of
+    // view and put a scrollbar on the page.
     if (blocked.length > 0) {
       const names = blocked.map((s) => s.label).join(" and ");
-      return `Your ${names} login was found and accepted, but Instagram is refusing the requests themselves — it rate-limits a device that has asked for too much too quickly. Signing in again will not help, and neither will switching browsers: the block is on your connection, not your account. It clears on its own, usually within a few hours.`;
+      return `Your ${names} login works — nothing is wrong with your account. Instagram is currently refusing yt-dlp itself, so signing in again or switching browsers will not help. Only a yt-dlp update can fix it.`;
     }
     if (locked.length > 0 && locked.length === result.length) {
-      return `Close ${locked
-        .map((s) => s.label)
-        .join(" and ")} and run the check again — a running browser locks its own session file.`;
+      const names = locked.map((s) => s.label).join(" and ");
+      const them = locked.length > 1 ? "them" : "it";
+      return `Close ${names} completely — including the system tray — and check again. Chrome-based browsers lock their cookies while open, so ${them} cannot be read.`;
     }
     if (locked.length > 0) {
-      return `No browser was signed in to Instagram. ${locked
-        .map((s) => s.label)
-        .join(" and ")} could not be read while running — close it and retry, or sign in to Instagram in one of your browsers.`;
+      const names = locked.map((s) => s.label).join(" and ");
+      return `No browser was signed in to Instagram. ${names} could not be read while open — close ${locked.length > 1 ? "them" : "it"} and retry, or sign in to Instagram in Firefox, which can be read while running.`;
     }
     return "None of your browsers is signed in to Instagram. Sign in to Instagram in any browser, then run the check again.";
   }
@@ -574,9 +585,14 @@ function describe(outcome: ProbeStep["outcome"]): string {
     case "notsignedin":
       return "not signed in to Instagram";
     case "locked":
-      return "close this browser and retry";
+      // Says *why* it could not be read. A bare "close this browser and
+      // retry" reads as an arbitrary demand when a Firefox-family browser on
+      // the same list was tested fine while open.
+      return "open — close it to test (Chrome-based browsers lock cookies)";
     case "signedinbutblocked":
-      return "signed in — Instagram is rate-limiting this device";
+      // Not "rate-limiting this device": measured, the block applies to
+      // yt-dlp's API access generally, not to this connection's request rate.
+      return "signed in — Instagram is refusing yt-dlp";
     case "failed":
       return outcome.reason;
   }

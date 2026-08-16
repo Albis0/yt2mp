@@ -265,15 +265,18 @@ pub enum ProbeOutcome {
     Locked,
     /// The login was found and sent, but the site rejected the request itself.
     ///
-    /// On Instagram this is almost always rate limiting. Instagram answers
-    /// its own API with **HTTP 429** once a device has made too many
-    /// requests, and yt-dlp surfaces that as a bare "HTTP Error 400: Bad
-    /// Request" — verified live by calling the API directly with the same
-    /// cookies, and with no cookies at all, both of which returned 429 while
-    /// ordinary instagram.com pages still loaded.
+    /// Originally read as rate limiting, on an observation of HTTP 429. That
+    /// no longer matches: re-measured later, `i.instagram.com`'s API answered
+    /// **403**, every Instagram path failed with a working session (a post
+    /// with HTTP 400, a profile with "unable to extract data"), and
+    /// instagram.com itself still loaded normally in a browser. A per-device
+    /// rate limit would not be path-specific and would lift on a timer.
     ///
-    /// Kept separate from `NotSignedIn` because the advice is the opposite:
-    /// signing in again cannot help, and waiting does.
+    /// So this means "the session is good, Instagram is refusing yt-dlp" —
+    /// which may be rate limiting, an API change, or a deliberate block, and
+    /// the app deliberately does not guess between them. Kept separate from
+    /// `NotSignedIn` because the advice is still the opposite: signing in
+    /// again cannot help, and updating yt-dlp can.
     SignedInButBlocked,
     /// Anything else, carrying yt-dlp's own words.
     Failed { reason: String },
@@ -319,35 +322,60 @@ pub async fn probe_browser(browser: &str, url: &str) -> ProbeOutcome {
         return ProbeOutcome::Works;
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+    classify_probe(&String::from_utf8_lossy(&output.stderr))
+}
+
+/// Turns yt-dlp's stderr into an outcome.
+///
+/// Split out from [`probe_browser`] so the classification can be tested
+/// against real captured output — the branches are ordered, and getting the
+/// order wrong sends someone who is already signed in off to sign in again.
+pub fn classify_probe(raw: &str) -> ProbeOutcome {
+    let stderr = raw.to_ascii_lowercase();
+
     if stderr.contains("could not copy") && stderr.contains("cookie database") {
-        ProbeOutcome::Locked
-    } else if stderr.contains("empty media response")
+        return ProbeOutcome::Locked;
+    }
+
+    // Checked before the refusal branch: these are the phrases yt-dlp uses
+    // when there is genuinely no usable session, and some of them also
+    // contain words the refusal branch matches on.
+    if stderr.contains("empty media response")
         || stderr.contains("login required")
         || stderr.contains("requested content is not available")
-        || stderr.contains("not granting access")
     {
-        ProbeOutcome::NotSignedIn
-    } else if stderr.contains("http error 400")
+        return ProbeOutcome::NotSignedIn;
+    }
+
+    // The session was accepted and the request was still refused. Matched
+    // before the generic branch so this never surfaces as a raw "HTTP Error
+    // 400" the user cannot act on.
+    //
+    // 403 and "not granting access" are here rather than under NotSignedIn
+    // because they were measured on a session Instagram accepts: the same
+    // cookies that produce this also load instagram.com fine in the browser.
+    if stderr.contains("http error 400")
         || stderr.contains("http error 401")
+        || stderr.contains("http error 403")
         || stderr.contains("http error 429")
         || stderr.contains("too many requests")
+        || stderr.contains("not granting access")
         || stderr.contains("video info extraction failed")
+        // A profile URL fails this way rather than with a status code, but it
+        // is the same refusal — measured with a session the same run proved
+        // Instagram accepts.
+        || stderr.contains("unable to extract data")
     {
-        // The session was accepted as a session and then the API call was
-        // refused — on Instagram, a 429 wearing a 400's clothes. Checked
-        // before the generic branch so this does not surface as a raw
-        // "HTTP Error 400" the user cannot act on.
-        ProbeOutcome::SignedInButBlocked
-    } else {
-        let first = String::from_utf8_lossy(&output.stderr)
-            .lines()
-            .find(|l| l.to_ascii_lowercase().contains("error"))
-            .unwrap_or("Could not use this browser.")
-            .trim()
-            .to_string();
-        ProbeOutcome::Failed { reason: first }
+        return ProbeOutcome::SignedInButBlocked;
     }
+
+    let first = raw
+        .lines()
+        .find(|l| l.to_ascii_lowercase().contains("error"))
+        .unwrap_or("Could not use this browser.")
+        .trim()
+        .to_string();
+    ProbeOutcome::Failed { reason: first }
 }
 
 /// Runs yt-dlp to completion, capturing stdout. Errors carry yt-dlp's own
@@ -1170,6 +1198,66 @@ mod tests {
             "must not fall into the not-signed-in branch"
         );
         assert!(lower.contains("http error 400"));
+    }
+
+    /// Every string below is real yt-dlp output captured on this machine
+    /// while investigating a report that the login check "still doesn't
+    /// work". They are kept verbatim because the whole value of this
+    /// classifier is that it matches what yt-dlp actually prints.
+    #[test]
+    fn probe_outcomes_match_real_yt_dlp_output() {
+        // Edge, open. Chromium browsers hold an exclusive lock on their
+        // cookie DB — confirmed separately: even a shared-mode read fails.
+        assert_eq!(
+            classify_probe(
+                "ERROR: Could not copy Chrome cookie database. \
+                 See  https://github.com/yt-dlp/yt-dlp/issues/7271  for more info"
+            ),
+            ProbeOutcome::Locked
+        );
+
+        // No cookies at all. Must stay NotSignedIn: this one is fixed by
+        // signing in, and it is the only one that is.
+        assert_eq!(
+            classify_probe(
+                "ERROR: [Instagram] DAsMcJEyaGY: Instagram sent an empty media response. \
+                 Check if this post is accessible in your browser without being logged-in."
+            ),
+            ProbeOutcome::NotSignedIn
+        );
+
+        // Zen, signed in. Instagram accepts the session and refuses the API.
+        assert_eq!(
+            classify_probe(
+                "ERROR: [Instagram] DAsMcJEyaGY: Video info extraction failed: \
+                 HTTP Error 400: Bad Request (caused by <HTTP Error 400: Bad Request>)"
+            ),
+            ProbeOutcome::SignedInButBlocked
+        );
+
+        // Same session, profile URL. Fails without a status code but is the
+        // same refusal, so it must not land in the generic Failed branch
+        // where the UI would print it raw.
+        assert_eq!(
+            classify_probe(
+                "ERROR: [instagram:user] nasa: Unable to extract data; \
+                 please report this issue on https://github.com/yt-dlp/yt-dlp/issues"
+            ),
+            ProbeOutcome::SignedInButBlocked
+        );
+    }
+
+    /// A genuinely unknown failure keeps yt-dlp's own words rather than being
+    /// forced into one of the known buckets — a wrong specific diagnosis is
+    /// worse than an honest quotation.
+    #[test]
+    fn an_unrecognised_failure_is_quoted_not_guessed() {
+        match classify_probe("ERROR: Unsupported URL: https://example.com/x") {
+            ProbeOutcome::Failed { reason } => {
+                assert!(reason.contains("Unsupported URL"), "got: {reason}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
     }
 
     /// Only a refusal at the media request is worth another format. A dead

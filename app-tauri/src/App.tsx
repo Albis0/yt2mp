@@ -98,7 +98,7 @@ const TAB_NOTICES: Partial<Record<TabId, string>> = {
   tiktok:
     "TikTok downloads are broken upstream right now — yt-dlp can't read its pages. It'll start working again on a yt-dlp update, with no change here.",
   instagram:
-    "Instagram hides most posts from logged-out visitors. Open the gear (top right) and press “Find my login automatically” — yt2mp checks your browsers and uses the one you're signed in with.",
+    "Instagram is currently refusing yt-dlp even with a working login, so most posts fail right now — this is upstream, not something a setting here fixes. It'll start working again on a yt-dlp update (Settings → Updates). Setting up a browser login is still worth doing: it's needed for private and follower-only posts once Instagram accepts requests again.",
   ai: "AI search looks on YouTube only. For the other sites, paste a link.",
 };
 
@@ -106,6 +106,12 @@ const TAB_NOTICES: Partial<Record<TabId, string>> = {
 /// tab itself so it's visible before anyone commits to typing.
 const DEGRADED_TABS: Partial<Record<TabId, string>> = {
   tiktok: "Currently broken upstream in yt-dlp",
+  // Measured: with a session Instagram accepts, every path still fails —
+  // a post with HTTP 400, a profile with "unable to extract data" — while
+  // instagram.com loads fine in a browser. Marking the tab is more honest
+  // than letting someone paste a link and hit a wall, and it stops the
+  // failure reading as "my login is set up wrong".
+  instagram: "Instagram is refusing yt-dlp right now",
 };
 
 /// Which tab a pasted URL belongs to, so pasting an Instagram link while the
