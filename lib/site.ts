@@ -5,7 +5,7 @@
 // `scripts/version.mjs` rewrites this single line and the matching fields in
 // app-tauri/package.json, app-tauri/src-tauri/Cargo.toml and the root
 // package.json together. Do not hand-edit one of them.
-export const VERSION = "0.7.2";
+export const VERSION = "0.7.3";
 
 export const REPO_URL = "https://github.com/Albis0/yt2mp";
 export const LICENSE_URL = "https://github.com/Albis0/yt2mp/blob/main/LICENSE";
@@ -54,8 +54,7 @@ export const DRIVE_URL =
 // `null` means "no verified artifact for this version yet", and the page
 // omits the verification block rather than vouching for something it cannot
 // check.
-export const INSTALLER_SHA256: string | null =
-    "f968c866f68a013eea307fb0d93157ab13aac86889f68cefaa3d28e8db12b3d0";
+export const INSTALLER_SHA256: string | null = null;
 
 // 46.8 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
 // fresh install works offline with nothing to fetch on first run. The app can
