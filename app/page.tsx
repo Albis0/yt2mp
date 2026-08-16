@@ -278,7 +278,7 @@ export default function Home() {
                     <section className="wrap band">
                         <h2 className="band-title">A tab per site</h2>
                         <p className="band-dek">
-                            Each site gets its own tab with the link format it expects, so you always know what the app is about to do. The tab colours the window it opens in.
+                            Each site sits in the rail down the left, with the link format it expects, so you always know what the app is about to do. Sites that are having trouble are marked before you paste anything.
                         </p>
 
                         <div className="sites">
@@ -308,9 +308,25 @@ export default function Home() {
                             <Image
                                 src="/shots/app-formats.png"
                                 alt="The format list: MP3 at 3.3 MB, then video options from 2160p at 345.3 MB down to 720p at 25.2 MB, each with its size"
-                                width={1524}
-                                height={512}
+                                width={1508}
+                                height={572}
                                 sizes="(max-width: 760px) 100vw, 720px"
+                            />
+                        </div>
+                    </section>
+
+                    <section className="wrap band">
+                        <h2 className="band-title">It keeps itself current</h2>
+                        <p className="band-dek">
+                            Sites change and break downloaders constantly. yt2mp updates itself, and can update the part that reads the sites on its own — so a site that stopped working usually starts again without waiting for a new release. Both check before they download anything.
+                        </p>
+                        <div className="shot shot-inline">
+                            <Image
+                                src="/shots/app-settings.png"
+                                alt="The settings window: a sidebar with General, Updates and Accounts, showing yt2mp at version 0.7.4 and yt-dlp at 2026.07.04, each with its own Check button"
+                                width={1240}
+                                height={780}
+                                sizes="(max-width: 760px) 100vw, 620px"
                             />
                         </div>
                     </section>
