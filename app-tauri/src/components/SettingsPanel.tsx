@@ -155,7 +155,7 @@ export default function SettingsPanel({
       }
     } catch (err) {
       setYtdlpNote(
-        typeof err === "string" ? err : "Could not check for a new yt-dlp."
+        typeof err === "string" ? err : "Couldn't check. Are you online?"
       );
     } finally {
       setYtdlpBusy(false);
@@ -180,7 +180,7 @@ export default function SettingsPanel({
       );
     } catch (err) {
       setYtdlpNote(
-        typeof err === "string" ? err : "Could not update yt-dlp just now."
+        typeof err === "string" ? err : "The update didn't go through. Try again."
       );
     } finally {
       setYtdlpBusy(false);
@@ -272,20 +272,24 @@ export default function SettingsPanel({
     // Kept short on purpose. This sits directly above the per-browser results,
     // which are the more useful half — a longer explanation pushed them out of
     // view and put a scrollbar on the page.
+    //
+    // No tool names here either: someone reading this wants to know whether
+    // they broke something and what to press next, not which program is doing
+    // the downloading.
     if (blocked.length > 0) {
       const names = blocked.map((s) => s.label).join(" and ");
-      return `Your ${names} login works — nothing is wrong with your account. Instagram is currently refusing yt-dlp itself, so signing in again or switching browsers will not help. Only a yt-dlp update can fix it.`;
+      return `Your ${names} login works — nothing is wrong with your account. Instagram is blocking apps like this one at the moment, so signing in again or trying another browser won't change anything. It'll start working again by itself once the fix arrives.`;
     }
     if (locked.length > 0 && locked.length === result.length) {
       const names = locked.map((s) => s.label).join(" and ");
       const them = locked.length > 1 ? "them" : "it";
-      return `Close ${names} completely — including the system tray — and check again. Chrome-based browsers lock their cookies while open, so ${them} cannot be read.`;
+      return `Close ${names} and check again — also check the taskbar corner, ${them} often keeps running there. While ${locked.length > 1 ? "these browsers are" : "this browser is"} open, your login can't be read from ${them}.`;
     }
     if (locked.length > 0) {
       const names = locked.map((s) => s.label).join(" and ");
-      return `No browser was signed in to Instagram. ${names} could not be read while open — close ${locked.length > 1 ? "them" : "it"} and retry, or sign in to Instagram in Firefox, which can be read while running.`;
+      return `None of your browsers is signed in to Instagram. ${names} couldn't be checked while open — close ${locked.length > 1 ? "them" : "it"} and try again, or sign in to Instagram in Firefox, which works even while it's open.`;
     }
-    return "None of your browsers is signed in to Instagram. Sign in to Instagram in any browser, then run the check again.";
+    return "None of your browsers is signed in to Instagram. Sign in to Instagram in any browser, then check again.";
   }
 
   async function choose(next: string | null) {
@@ -416,9 +420,14 @@ export default function SettingsPanel({
 
                 <div className="prefs-field">
                   <div className="prefs-field-text">
+                    {/* The name stays as-is: it labels a version number, and
+                        renaming it to something friendlier would make the
+                        version meaningless. The line under it does the
+                        explaining instead. */}
                     <span className="prefs-field-name">yt-dlp</span>
                     <span className="prefs-field-hint">
-                      {ytdlpNote ?? "Reads the sites. Update it when one breaks."}
+                      {ytdlpNote ??
+                        "The part that fetches videos. Update it if a site stops working."}
                     </span>
                   </div>
                   <div className="prefs-field-control">
@@ -588,11 +597,11 @@ function describe(outcome: ProbeStep["outcome"]): string {
       // Says *why* it could not be read. A bare "close this browser and
       // retry" reads as an arbitrary demand when a Firefox-family browser on
       // the same list was tested fine while open.
-      return "open — close it to test (Chrome-based browsers lock cookies)";
+      return "it's open — close it, then check again";
     case "signedinbutblocked":
-      // Not "rate-limiting this device": measured, the block applies to
-      // yt-dlp's API access generally, not to this connection's request rate.
-      return "signed in — Instagram is refusing yt-dlp";
+      // Not "rate-limiting this device": measured, the block applies
+      // generally, not to this connection's request rate.
+      return "signed in — but Instagram is blocking downloads";
     case "failed":
       return outcome.reason;
   }

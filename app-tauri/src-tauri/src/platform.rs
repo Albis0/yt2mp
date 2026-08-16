@@ -151,34 +151,59 @@ pub fn is_collection(url: &str, platform: Platform) -> bool {
 pub fn explain_error(raw: &str, platform: Platform) -> String {
     let lower = raw.to_ascii_lowercase();
 
+    // No connection. Checked first: with the network down every other branch
+    // is a wrong guess, and the raw text is the worst offender in the whole
+    // set — yt-dlp hands back curl's own wording, so the user was shown
+    // "curl: (6) Could not resolve host … see libcurl-errors.html", which
+    // says nothing about the one thing they can act on.
+    if lower.contains("could not resolve host")
+        || lower.contains("failed to resolve")
+        || lower.contains("temporary failure in name resolution")
+        || lower.contains("connection refused")
+        || lower.contains("network is unreachable")
+        || lower.contains("connection reset")
+        || lower.contains("failed to perform")
+        || lower.contains("ssl connect error")
+    {
+        return "Couldn't reach the internet. Check your connection and try \
+                again."
+            .into();
+    }
+
     // Cookie extraction fails while the browser holds its database open —
     // a very common state, since people leave their browser running. This
     // has to be checked before the login branch, because the underlying
     // symptom the user then hits is "login required".
     if lower.contains("could not copy") && lower.contains("cookie database") {
-        return "Close your browser and try again — its cookie database is \
-                locked while it's running."
+        return "Close your browser completely and try again — check the \
+                taskbar corner too, it often keeps running there. Your login \
+                can't be read while it's open."
             .into();
     }
 
-    // Instagram rate-limits by device/IP and yt-dlp reports the 429 it got
-    // back as a bare "HTTP Error 400: Bad Request". Verified by calling
-    // Instagram's API directly with the same cookies, and with none: both
-    // answered 429 while ordinary instagram.com pages still loaded.
+    // Instagram refusing the request outright. Originally read as a per-device
+    // rate limit on an observation of HTTP 429; re-measured later that no
+    // longer held — the API answered 403, every Instagram path failed with a
+    // session Instagram demonstrably accepts, and instagram.com still loaded
+    // fine in a browser. A rate limit would not be path-specific.
     //
-    // Checked before the login branch because the symptom reads like one and
-    // the advice is the opposite: signing in again cannot help, waiting does.
+    // Checked before the login branch because the symptom reads like a missing
+    // login and the advice is the opposite: signing in again cannot help.
     if platform == Platform::Instagram
         && (lower.contains("http error 400")
+            || lower.contains("http error 401")
+            || lower.contains("http error 403")
             || lower.contains("http error 429")
             || lower.contains("too many requests")
             || lower.contains("rate-limit reached")
+            || lower.contains("not granting access")
+            || lower.contains("unable to extract data")
             || lower.contains("video info extraction failed"))
     {
-        return "Instagram is temporarily blocking this device for making too \
-                many requests. That is a limit on Instagram's side, not a \
-                problem with your login — waiting a few hours usually clears \
-                it. Downloading many posts in a row brings it on sooner."
+        return "Instagram is blocking downloads right now. It's not your \
+                account and not something you can fix here — signing in again \
+                won't help. It'll start working again by itself once the fix \
+                arrives."
             .into();
     }
 
@@ -227,11 +252,15 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // a real size and the media request was then refused. On YouTube that is
     // the site rotating which player clients it will serve, which yt-dlp
     // tracks far faster than this app can ship releases.
+    // Points at Settings by what the user sees there, not by the tool's name:
+    // the Updates page shows "yt-dlp" as a row, so "check for updates in
+    // Settings" lands them in the right place without needing to know what
+    // yt-dlp is beforehand.
     if lower.contains("http error 403") || lower.contains("forbidden") {
         return format!(
-            "{} refused to hand over the file. This usually means the site \
-             changed something — try Update yt-dlp in Settings, which fixes \
-             it more often than not.",
+            "{} wouldn't hand over the file. The site has usually changed \
+             something — open Settings and check for updates, which fixes \
+             this more often than not.",
             platform.label()
         );
     }
@@ -241,25 +270,47 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // "check your link" would send them chasing a non-problem.
     if lower.contains("unexpected response") || lower.contains("please report") {
         return format!(
-            "{} changed something and the downloader can't read it right now. \
-             This usually fixes itself in a yt-dlp update.",
+            "{} changed something and this app can't read it right now. \
+             Nothing is wrong on your end — open Settings and check for \
+             updates, or wait for the fix.",
             platform.label()
         );
     }
 
-    // Nothing matched: keep yt-dlp's own last line, trimmed of its prefix.
-    let cleaned = raw
-        .lines()
-        .last()
-        .unwrap_or(raw)
-        .trim()
-        .trim_start_matches("ERROR:")
-        .trim();
+    // Nothing matched. The raw line is still the most informative thing
+    // available, and a vague "something went wrong" would be worse — but it
+    // is written for a terminal, so the parts that only make sense there are
+    // stripped: the `ERROR:` prefix, the `[Instagram] Abc123:` extractor tag,
+    // and any URL to documentation the user has no reason to open.
+    let last = raw.lines().last().unwrap_or(raw).trim();
+    let mut cleaned = last.trim_start_matches("ERROR:").trim();
+
+    // "[Instagram] DAsMcJEyaGY: Unable to …" → "Unable to …". Split on ": ",
+    // never a bare ':', which would cut a URL apart at its scheme.
+    if cleaned.starts_with('[') {
+        if let Some((_, rest)) = cleaned.split_once("] ") {
+            cleaned = rest.split_once(": ").map_or(rest, |(_, r)| r.trim());
+        }
+    }
+
+    // Drop a trailing "See https://… for more details." and anything after it.
+    let cleaned = match cleaned.find(" See http") {
+        Some(i) => cleaned[..i].trim(),
+        None => cleaned,
+    };
+    let cleaned = match cleaned.find("http") {
+        Some(i) if i > 0 => cleaned[..i].trim().trim_end_matches('.').trim(),
+        _ => cleaned,
+    };
 
     if cleaned.is_empty() {
         format!("Couldn't fetch that {} link.", platform.label())
     } else {
-        cleaned.chars().take(200).collect()
+        let mut msg: String = cleaned.chars().take(180).collect();
+        if !msg.ends_with('.') {
+            msg.push('.');
+        }
+        msg
     }
 }
 
@@ -267,36 +318,108 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
 mod tests {
     use super::*;
 
-    /// Instagram's rate limit arrives labelled 400, not 429 — yt-dlp reports
-    /// what its extractor saw, not the status underneath. Matching only on
-    /// "429" would miss every real occurrence.
+    /// Instagram's refusal arrives labelled 400, not 429 — yt-dlp reports what
+    /// its extractor saw, not the status underneath. Matching only on "429"
+    /// would miss every real occurrence.
+    ///
+    /// The message must not blame the user's account or promise a wait: this
+    /// was measured to be a general block on downloaders, not a per-device
+    /// rate limit, and an earlier version told people to wait a few hours for
+    /// something that does not lift on a timer.
     #[test]
-    fn instagram_rate_limit_is_named_not_echoed() {
+    fn instagram_refusal_is_named_not_echoed() {
         let raw = "ERROR: [Instagram] X: Video info extraction failed: \
                    HTTP Error 400: Bad Request";
         let msg = explain_error(raw, Platform::Instagram);
-        assert!(msg.contains("too many requests"), "names the cause: {msg}");
-        assert!(msg.contains("waiting"), "says what helps: {msg}");
+        assert!(msg.contains("blocking"), "names the cause: {msg}");
+        assert!(
+            msg.contains("not your account"),
+            "must not leave the user suspecting their own login: {msg}"
+        );
         assert!(!msg.contains("400"), "no raw status code: {msg}");
     }
 
-    /// The same 400 on another site is not Instagram's rate limit and must
-    /// not borrow its explanation.
+    /// The same 400 on another site is not Instagram's block and must not
+    /// borrow its explanation.
     #[test]
     fn other_sites_do_not_get_the_instagram_explanation() {
         let msg = explain_error("ERROR: HTTP Error 400", Platform::Twitter);
-        assert!(!msg.contains("too many requests"), "{msg}");
+        assert!(!msg.contains("Instagram is blocking"), "{msg}");
     }
 
     /// A 403 means extraction worked and the media request was then refused —
-    /// the site changed something. Updating yt-dlp is the action that helps,
-    /// so the message has to say so rather than printing the status code.
+    /// the site changed something. Checking for updates is the action that
+    /// helps, so the message has to point there rather than printing a status
+    /// code the user cannot act on.
     #[test]
-    fn forbidden_points_at_updating_ytdlp() {
+    fn forbidden_points_at_checking_for_updates() {
         let raw = "ERROR: unable to download video data: HTTP Error 403: Forbidden";
         let msg = explain_error(raw, Platform::YouTube);
-        assert!(msg.contains("Update yt-dlp"), "{msg}");
+        assert!(msg.contains("Settings"), "says where to go: {msg}");
+        assert!(msg.contains("updates"), "says what to do there: {msg}");
         assert!(!msg.contains("403"), "no raw status code: {msg}");
+    }
+
+    /// Captured verbatim from the app while the connection dropped mid-test.
+    /// It is the worst raw message in the set — yt-dlp passes curl's own
+    /// wording straight through, so the user was shown a libcurl error code
+    /// and a link to libcurl's documentation.
+    #[test]
+    fn a_dropped_connection_says_so() {
+        let raw = "[Instagram] DAsMcJEyaGY: Unable to download webpage: \
+                   Failed to perform, curl: (6) Could not resolve host: \
+                   www.instagram.com. See https://curl.se/libcurl/c/libcurl-errors.html \
+                   first for more details.";
+        let msg = explain_error(raw, Platform::Instagram);
+        assert!(msg.contains("internet"), "{msg}");
+        assert!(!msg.contains("curl"), "leaks curl: {msg}");
+        assert!(!msg.contains("http"), "leaks a documentation link: {msg}");
+    }
+
+    /// An unrecognised failure still shows yt-dlp's own words — a vague
+    /// "something went wrong" would be less useful — but stripped of the
+    /// parts that only mean something in a terminal.
+    #[test]
+    fn an_unknown_error_is_cleaned_before_it_is_shown() {
+        let raw = "ERROR: [SomeSite] xyz789: The clip is still processing. \
+                   See https://example.com/help for more details.";
+        let msg = explain_error(raw, Platform::Other);
+        assert!(msg.starts_with("The clip is still processing"), "{msg}");
+        assert!(!msg.contains('['), "leaks the extractor tag: {msg}");
+        assert!(!msg.contains("xyz789"), "leaks the internal id: {msg}");
+        assert!(!msg.contains("http"), "leaks a link: {msg}");
+    }
+
+    /// Every message the user can be shown has to read as plain English.
+    /// These strings surface in the app's error area, where "yt-dlp",
+    /// "extractor" or a bare status code tells someone nothing they can act
+    /// on — the tool's name in particular means nothing to a person who just
+    /// wanted a video.
+    #[test]
+    fn user_facing_errors_avoid_tool_jargon() {
+        let cases = [
+            ("ERROR: Could not copy Chrome cookie database.", Platform::Instagram),
+            (
+                "ERROR: [Instagram] X: Video info extraction failed: HTTP Error 400: Bad Request",
+                Platform::Instagram,
+            ),
+            (
+                "ERROR: unable to download video data: HTTP Error 403: Forbidden",
+                Platform::YouTube,
+            ),
+            ("ERROR: Unexpected response; please report this issue", Platform::TikTok),
+            ("ERROR: Video unavailable", Platform::YouTube),
+        ];
+        for (raw, platform) in cases {
+            let msg = explain_error(raw, platform);
+            let lower = msg.to_ascii_lowercase();
+            for word in ["yt-dlp", "extractor", "http error", "stderr", "api"] {
+                assert!(
+                    !lower.contains(word),
+                    "message for {platform:?} leaks {word:?}: {msg}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -94,24 +94,30 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
 
 /// Tabs with a caveat worth stating before the user hits it. Empty string
 /// means no notice.
+///
+/// Written for the person using the app, not for someone who maintains it.
+/// The earlier wording leaned on "yt-dlp", "upstream" and "Settings →
+/// Updates" — three things that mean nothing to someone who just wants a
+/// video. What they need is: is it me or is it them, is there anything I can
+/// do, and will it come back. Nothing else belongs here.
 const TAB_NOTICES: Partial<Record<TabId, string>> = {
   tiktok:
-    "TikTok downloads are broken upstream right now — yt-dlp can't read its pages. It'll start working again on a yt-dlp update, with no change here.",
+    "TikTok downloads aren't working at the moment. It's a problem on TikTok's side, not with your computer or this app — there's nothing you need to change. It'll start working again by itself once the fix arrives.",
   instagram:
-    "Instagram is currently refusing yt-dlp even with a working login, so most posts fail right now — this is upstream, not something a setting here fixes. It'll start working again on a yt-dlp update (Settings → Updates). Setting up a browser login is still worth doing: it's needed for private and follower-only posts once Instagram accepts requests again.",
+    "Instagram downloads mostly aren't working at the moment. Instagram is blocking apps like this one, so it fails even when you're signed in — it's not your account and not something you can fix here. It'll start working again by itself once the fix arrives.",
   ai: "AI search looks on YouTube only. For the other sites, paste a link.",
 };
 
 /// Tabs whose downloads are known to be failing, surfaced as a dot on the
 /// tab itself so it's visible before anyone commits to typing.
 const DEGRADED_TABS: Partial<Record<TabId, string>> = {
-  tiktok: "Currently broken upstream in yt-dlp",
+  tiktok: "Not working at the moment — the problem is on TikTok's side",
   // Measured: with a session Instagram accepts, every path still fails —
   // a post with HTTP 400, a profile with "unable to extract data" — while
   // instagram.com loads fine in a browser. Marking the tab is more honest
   // than letting someone paste a link and hit a wall, and it stops the
   // failure reading as "my login is set up wrong".
-  instagram: "Instagram is refusing yt-dlp right now",
+  instagram: "Mostly not working at the moment — Instagram is blocking it",
 };
 
 /// Which tab a pasted URL belongs to, so pasting an Instagram link while the
@@ -577,7 +583,12 @@ export default function App() {
             </button>
           </form>
 
-          {TAB_NOTICES[tab] ? (
+          {/* The notice is a warning about what is likely to happen. Once it
+              has happened, the error below says the same thing about the
+              actual attempt, and showing both stacks two paragraphs of nearly
+              identical text on one screen. The error wins: it is about what
+              the user just did. */}
+          {TAB_NOTICES[tab] && !error ? (
             <p className={`tab-notice${DEGRADED_TABS[tab] ? " tab-notice-warn" : ""}`}>
               {TAB_NOTICES[tab]}
             </p>
