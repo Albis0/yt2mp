@@ -18,6 +18,21 @@ const exe = (name) => (IS_WINDOWS ? `${name}.exe` : name);
 
 const QUICKJS_VERSION = "v0.16.1";
 
+// Linux ffmpeg comes from BtbN's builds on GitHub Releases rather than from
+// johnvansickle.com, which is where it used to come from.
+//
+// The 0.7.3 release failed on exactly this: the Linux job died at "Fetch
+// bundled binaries" while every URL answered 200 from a normal connection, so
+// it was reachability from GitHub's runners rather than a dead link. A single
+// personal site is a fragile thing for a release to depend on — if it rate
+// limits, blocks a datacentre range, or goes down, no Linux build ships.
+//
+// Pinned to a release series rather than `master-latest`: a nightly ffmpeg
+// changing under the build is not a trade worth making for a downloader.
+const FFMPEG_LINUX_URL =
+  "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/" +
+  "ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz";
+
 const targets = [
   {
     name: exe("yt-dlp"),
@@ -76,7 +91,7 @@ async function fetchFfmpeg() {
   const tmp = path.join(OUT_DIR, IS_WINDOWS ? "_ffmpeg.zip" : "_ffmpeg.tar.xz");
   const url = IS_WINDOWS
     ? "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-    : "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz";
+    : FFMPEG_LINUX_URL;
 
   console.log(`  ${exe("ffmpeg")} — downloading (this one is large)…`);
   const res = await fetch(url, { redirect: "follow" });
@@ -103,9 +118,11 @@ async function fetchFfmpeg() {
   const dir = entries.find((e) => e.isDirectory() && e.name.startsWith("ffmpeg"));
   if (!dir) throw new Error("could not find the extracted ffmpeg directory");
 
-  const inner = IS_WINDOWS
-    ? path.join(OUT_DIR, dir.name, "bin", "ffmpeg.exe")
-    : path.join(OUT_DIR, dir.name, "ffmpeg");
+  // Both archives now put the binary under bin/ — BtbN's Linux build has the
+  // same layout as gyan.dev's Windows one, unlike johnvansickle's, which kept
+  // ffmpeg at the root of the extracted directory. Verified by listing the
+  // downloaded archive: `ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg`.
+  const inner = path.join(OUT_DIR, dir.name, "bin", exe("ffmpeg"));
 
   await rename(inner, dest);
   await rm(path.join(OUT_DIR, dir.name), { recursive: true, force: true });

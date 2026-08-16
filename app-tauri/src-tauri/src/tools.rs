@@ -110,9 +110,16 @@ fn tools() -> Vec<Tool> {
         Tool {
             base: "ffmpeg",
             label: "ffmpeg",
-            url: "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz",
+            // BtbN's builds on GitHub Releases, not johnvansickle.com. The
+            // 0.7.3 Linux CI build failed fetching from that host while every
+            // URL answered 200 from an ordinary connection, so it was
+            // reachability from a datacentre rather than a dead link. The same
+            // risk applies here, on a user's first run — with worse
+            // consequences, since there is no log to read.
+            url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/\
+                  ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz",
             archive: Some(Archive::TarFfmpeg),
-            approx_mb: 30,
+            approx_mb: 115,
         },
     ]
 }
@@ -136,6 +143,33 @@ mod version_guard {
             url.contains(QUICKJS_VERSION),
             "quickjs URL {url} does not contain {QUICKJS_VERSION} — update both"
         );
+    }
+
+    /// Every tool is fetched from a host that serves CI runners and users
+    /// alike.
+    ///
+    /// The 0.7.3 Linux release build failed downloading ffmpeg from
+    /// johnvansickle.com — a single personal site — while the same URL
+    /// answered 200 from an ordinary connection. Whatever the cause, one
+    /// hobby host going quiet must not be able to stop a release, and it must
+    /// not be able to break a user's first run either.
+    ///
+    /// This does not claim GitHub can never fail; it pins the decision, so
+    /// moving a download back to a one-person host is a deliberate act that
+    /// fails the build rather than a quiet edit.
+    #[test]
+    fn tools_come_from_hosts_that_serve_ci() {
+        for t in tools() {
+            let ok = t.url.starts_with("https://github.com/")
+                // gyan.dev is the Windows ffmpeg source and has served CI
+                // reliably for years; it is grandfathered in knowingly.
+                || t.url.starts_with("https://www.gyan.dev/");
+            assert!(
+                ok,
+                "{} is fetched from {} — see the note above before adding a host",
+                t.label, t.url
+            );
+        }
     }
 }
 
@@ -360,9 +394,24 @@ async fn extract_ffmpeg(
         return Err("ffmpeg unpacked, but its folder was not where expected.".into());
     };
 
+    // Both archives keep the binary under bin/. That is new on Linux: the
+    // previous source (johnvansickle) put ffmpeg at the root of the extracted
+    // directory, so this used to differ per platform.
+    //
+    // The root is still checked as a fallback — if the URL ever moves back to
+    // a flat archive, falling back is a great deal better than a first run
+    // that fails with "ffmpeg unpacked, but its folder was not where
+    // expected" on a machine whose owner cannot read a log.
     let inner = match kind {
         Archive::ZipFfmpeg => unpacked.join("bin").join("ffmpeg.exe"),
-        Archive::TarFfmpeg => unpacked.join("ffmpeg"),
+        Archive::TarFfmpeg => {
+            let in_bin = unpacked.join("bin").join("ffmpeg");
+            if in_bin.exists() {
+                in_bin
+            } else {
+                unpacked.join("ffmpeg")
+            }
+        }
     };
 
     tokio::fs::rename(&inner, dest)
