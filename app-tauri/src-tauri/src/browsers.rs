@@ -73,11 +73,57 @@ fn candidates() -> Vec<Candidate> {
             path: j(&local, "Packages/TheBrowserCompany.Arc_ttt1ap7aakyb4/LocalCache/Local/Arc/User Data") },
         Candidate { label: "Thorium", engine: Engine::Chromium, native: None,
             path: j(&local, "Thorium/User Data") },
+        // Chrome's own side-by-side channels. A developer or early-adopter is
+        // often signed in on Beta/Dev/Canary and not on stable, and each keeps
+        // a completely separate cookie store.
+        Candidate { label: "Chrome Beta", engine: Engine::Chromium, native: None,
+            path: j(&local, "Google/Chrome Beta/User Data") },
+        Candidate { label: "Chrome Dev", engine: Engine::Chromium, native: None,
+            path: j(&local, "Google/Chrome Dev/User Data") },
+        Candidate { label: "Chrome Canary", engine: Engine::Chromium, native: None,
+            path: j(&local, "Google/Chrome SxS/User Data") },
+        Candidate { label: "Edge Beta", engine: Engine::Chromium, native: None,
+            path: j(&local, "Microsoft/Edge Beta/User Data") },
+        Candidate { label: "Edge Dev", engine: Engine::Chromium, native: None,
+            path: j(&local, "Microsoft/Edge Dev/User Data") },
+        // Brave ships its beta and nightly as separate installs too.
+        Candidate { label: "Brave Beta", engine: Engine::Chromium, native: None,
+            path: j(&local, "BraveSoftware/Brave-Browser-Beta/User Data") },
+        Candidate { label: "Brave Nightly", engine: Engine::Chromium, native: None,
+            path: j(&local, "BraveSoftware/Brave-Browser-Nightly/User Data") },
+        // Widely used Chromium forks. Yandex and Opera are common in Turkey
+        // and eastern Europe; the rest are mainstream elsewhere.
+        Candidate { label: "Yandex", engine: Engine::Chromium, native: None,
+            path: j(&local, "Yandex/YandexBrowser/User Data") },
+        Candidate { label: "Opera Air", engine: Engine::Chromium, native: None,
+            path: j(&roaming, "Opera Software/Opera Air") },
+        Candidate { label: "Opera Beta", engine: Engine::Chromium, native: None,
+            path: j(&roaming, "Opera Software/Opera Next") },
+        Candidate { label: "Comodo Dragon", engine: Engine::Chromium, native: None,
+            path: j(&local, "Comodo/Dragon/User Data") },
+        Candidate { label: "Epic", engine: Engine::Chromium, native: None,
+            path: j(&local, "Epic Privacy Browser/User Data") },
+        Candidate { label: "CocCoc", engine: Engine::Chromium, native: None,
+            path: j(&local, "CocCoc/Browser/User Data") },
+        Candidate { label: "Whale", engine: Engine::Chromium, native: None,
+            path: j(&local, "Naver/Naver Whale/User Data") },
+        Candidate { label: "Ungoogled Chromium", engine: Engine::Chromium, native: None,
+            path: j(&local, "ungoogled-chromium/User Data") },
+        Candidate { label: "SRWare Iron", engine: Engine::Chromium, native: None,
+            path: j(&local, "Chromium/User Data/Iron") },
+        Candidate { label: "Slimjet", engine: Engine::Chromium, native: None,
+            path: j(&local, "Slimjet/User Data") },
+        Candidate { label: "Maxthon", engine: Engine::Chromium, native: None,
+            path: j(&roaming, "Maxthon/Users") },
 
         // Firefox family — the *Profiles* directory; a specific profile inside
         // it is chosen later.
         Candidate { label: "Firefox", engine: Engine::Firefox, native: Some("firefox"),
             path: j(&roaming, "Mozilla/Firefox/Profiles") },
+        Candidate { label: "Firefox Dev", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "Mozilla/Firefox Developer Edition/Profiles") },
+        Candidate { label: "Firefox Nightly", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "Mozilla/Firefox Nightly/Profiles") },
         Candidate { label: "Zen", engine: Engine::Firefox, native: None,
             path: j(&roaming, "zen/Profiles") },
         Candidate { label: "LibreWolf", engine: Engine::Firefox, native: None,
@@ -86,6 +132,16 @@ fn candidates() -> Vec<Candidate> {
             path: j(&roaming, "Waterfox/Profiles") },
         Candidate { label: "Floorp", engine: Engine::Firefox, native: None,
             path: j(&roaming, "Floorp/Profiles") },
+        Candidate { label: "Mullvad", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "Mullvad/MullvadBrowser/Profiles") },
+        Candidate { label: "Pale Moon", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "Moonchild Productions/Pale Moon/Profiles") },
+        Candidate { label: "Basilisk", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "Moonchild Productions/Basilisk/Profiles") },
+        // Tor Browser keeps its profile inside the install directory, but a
+        // standard install lands here.
+        Candidate { label: "Tor", engine: Engine::Firefox, native: None,
+            path: j(&roaming, "tor browser/Browser/TorBrowser/Data/Browser") },
     ]
 }
 
@@ -114,14 +170,34 @@ fn candidates() -> Vec<Candidate> {
             path: j(&lib, "Arc/User Data") },
         Candidate { label: "Safari", engine: Engine::Chromium, native: Some("safari"),
             path: home.as_ref().map(|p| p.join("Library/Cookies")) },
+        Candidate { label: "Chrome Beta", engine: Engine::Chromium, native: None,
+            path: j(&lib, "Google/Chrome Beta") },
+        Candidate { label: "Chrome Canary", engine: Engine::Chromium, native: None,
+            path: j(&lib, "Google/Chrome Canary") },
+        Candidate { label: "Edge Beta", engine: Engine::Chromium, native: None,
+            path: j(&lib, "Microsoft Edge Beta") },
+        Candidate { label: "Brave Beta", engine: Engine::Chromium, native: None,
+            path: j(&lib, "BraveSoftware/Brave-Browser-Beta") },
+        Candidate { label: "Yandex", engine: Engine::Chromium, native: None,
+            path: j(&lib, "Yandex/YandexBrowser") },
+        Candidate { label: "Whale", engine: Engine::Chromium, native: None,
+            path: j(&lib, "Naver/Whale") },
         Candidate { label: "Firefox", engine: Engine::Firefox, native: Some("firefox"),
             path: j(&lib, "Firefox/Profiles") },
+        Candidate { label: "Firefox Dev", engine: Engine::Firefox, native: None,
+            path: j(&lib, "Firefox Developer Edition/Profiles") },
+        Candidate { label: "Firefox Nightly", engine: Engine::Firefox, native: None,
+            path: j(&lib, "Firefox Nightly/Profiles") },
         Candidate { label: "Zen", engine: Engine::Firefox, native: None,
             path: j(&lib, "zen/Profiles") },
         Candidate { label: "LibreWolf", engine: Engine::Firefox, native: None,
             path: j(&lib, "librewolf/Profiles") },
         Candidate { label: "Waterfox", engine: Engine::Firefox, native: None,
             path: j(&lib, "Waterfox/Profiles") },
+        Candidate { label: "Floorp", engine: Engine::Firefox, native: None,
+            path: j(&lib, "Floorp/Profiles") },
+        Candidate { label: "Mullvad", engine: Engine::Firefox, native: None,
+            path: j(&lib, "MullvadBrowser/Profiles") },
     ]
 }
 
@@ -129,6 +205,11 @@ fn candidates() -> Vec<Candidate> {
 fn candidates() -> Vec<Candidate> {
     let home = env_path("HOME");
     let config = home.as_ref().map(|p| p.join(".config"));
+    // Flatpak and Snap sandbox each app's data into its own tree, so a
+    // Flatpak Firefox is invisible at the usual ~/.mozilla path. Both are the
+    // default way to install a browser on several mainstream distributions.
+    let flatpak = home.as_ref().map(|p| p.join(".var/app"));
+    let snap = home.as_ref().map(|p| p.join("snap"));
     let j = |base: &Option<PathBuf>, rel: &str| base.as_ref().map(|p| p.join(rel));
 
     vec![
@@ -144,6 +225,39 @@ fn candidates() -> Vec<Candidate> {
             path: j(&config, "chromium") },
         Candidate { label: "Opera", engine: Engine::Chromium, native: Some("opera"),
             path: j(&config, "opera") },
+        Candidate { label: "Chrome Beta", engine: Engine::Chromium, native: None,
+            path: j(&config, "google-chrome-beta") },
+        Candidate { label: "Chrome Unstable", engine: Engine::Chromium, native: None,
+            path: j(&config, "google-chrome-unstable") },
+        Candidate { label: "Brave Beta", engine: Engine::Chromium, native: None,
+            path: j(&config, "BraveSoftware/Brave-Browser-Beta") },
+        Candidate { label: "Opera GX", engine: Engine::Chromium, native: None,
+            path: j(&config, "opera-gx") },
+        Candidate { label: "Yandex", engine: Engine::Chromium, native: None,
+            path: j(&config, "yandex-browser") },
+        Candidate { label: "Thorium", engine: Engine::Chromium, native: None,
+            path: j(&config, "thorium") },
+        Candidate { label: "Ungoogled Chromium", engine: Engine::Chromium, native: None,
+            path: j(&config, "chromium-browser") },
+        // Flatpak Chromium-family.
+        Candidate { label: "Chrome (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "com.google.Chrome/config/google-chrome") },
+        Candidate { label: "Brave (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "com.brave.Browser/config/BraveSoftware/Brave-Browser") },
+        Candidate { label: "Chromium (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "org.chromium.Chromium/config/chromium") },
+        Candidate { label: "Vivaldi (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "com.vivaldi.Vivaldi/config/vivaldi") },
+        Candidate { label: "Edge (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "com.microsoft.Edge/config/microsoft-edge") },
+        Candidate { label: "Opera (Flatpak)", engine: Engine::Chromium, native: None,
+            path: j(&flatpak, "com.opera.Opera/config/opera") },
+        // Snap Chromium-family.
+        Candidate { label: "Chromium (Snap)", engine: Engine::Chromium, native: None,
+            path: j(&snap, "chromium/common/chromium") },
+        Candidate { label: "Brave (Snap)", engine: Engine::Chromium, native: None,
+            path: j(&snap, "brave/current/.config/BraveSoftware/Brave-Browser") },
+
         Candidate { label: "Firefox", engine: Engine::Firefox, native: Some("firefox"),
             path: home.as_ref().map(|p| p.join(".mozilla/firefox")) },
         Candidate { label: "Zen", engine: Engine::Firefox, native: None,
@@ -154,6 +268,19 @@ fn candidates() -> Vec<Candidate> {
             path: j(&config, "waterfox") },
         Candidate { label: "Floorp", engine: Engine::Firefox, native: None,
             path: j(&config, "floorp") },
+        Candidate { label: "Mullvad", engine: Engine::Firefox, native: None,
+            path: home.as_ref().map(|p| p.join(".mullvad/mullvadbrowser/profile.default")) },
+        Candidate { label: "Tor", engine: Engine::Firefox, native: None,
+            path: home.as_ref().map(|p| p.join(".local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Data/Browser")) },
+        // Flatpak / Snap Firefox-family.
+        Candidate { label: "Firefox (Flatpak)", engine: Engine::Firefox, native: None,
+            path: j(&flatpak, "org.mozilla.firefox/.mozilla/firefox") },
+        Candidate { label: "Zen (Flatpak)", engine: Engine::Firefox, native: None,
+            path: j(&flatpak, "app.zen_browser.zen/.zen") },
+        Candidate { label: "LibreWolf (Flatpak)", engine: Engine::Firefox, native: None,
+            path: j(&flatpak, "io.gitlab.librewolf-community/.librewolf") },
+        Candidate { label: "Firefox (Snap)", engine: Engine::Firefox, native: None,
+            path: j(&snap, "firefox/common/.mozilla/firefox") },
     ]
 }
 
@@ -269,6 +396,39 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Every candidate must be distinguishable in the UI. Two entries sharing
+    /// a label would show up as two identical chips with no way to tell which
+    /// is which — easy to introduce when adding channels like "Chrome Beta"
+    /// across three platforms.
+    #[test]
+    fn candidate_labels_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for c in candidates() {
+            assert!(
+                seen.insert(c.label),
+                "{} is listed twice — the picker would show two identical chips",
+                c.label
+            );
+        }
+    }
+
+    /// Two browsers must never resolve to the same `--cookies-from-browser`
+    /// argument. A duplicated path means one of them is pointing at the
+    /// other's cookie store, so picking either would silently use the wrong
+    /// session.
+    #[test]
+    fn detected_browsers_do_not_share_an_argument() {
+        let mut seen = std::collections::HashSet::new();
+        for b in detect() {
+            assert!(
+                seen.insert(b.arg.clone()),
+                "{} resolves to an argument another browser already uses: {}",
+                b.label,
+                b.arg
+            );
         }
     }
 

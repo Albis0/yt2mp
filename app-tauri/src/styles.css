@@ -1376,15 +1376,18 @@ button {
      tabs does not resize the dialog under the pointer. Tall enough for the
      longest page (Accounts, with probe results), short enough for a 768px
      laptop with the 24px backdrop padding on both sides. */
-  /* Grows with its page instead of standing at one fixed height.
-     Measured: General and Updates need 226px, Accounts 361px. A fixed 400
-     left the two short pages with 174px of dead space under the last row —
-     the same "content floating in a void" the main screen was fixed for.
-     `min-height` keeps the short pages from collapsing into a strip, and the
-     sidebar's own height means the frame never jumps by more than the
-     difference between the pages. */
-  min-height: 300px;
-  max-height: min(560px, calc(100vh - 48px));
+  /* One fixed height for every page. Letting the card hug its content made it
+     resize under the pointer: measured, General and Updates settle at 300px
+     and Accounts at 382px, so opening Accounts grew the dialog by 82px and
+     moved every control that was already on screen.
+     A dialog must not move while it is being used, so the frame is sized once
+     for the tallest page and the short ones simply have room to spare. 390px
+     covers Accounts with its browser chips; the page's own scroll handles the
+     one case that can exceed it — a long list of probe results — rather than
+     the frame growing to chase it.
+     Capped against the viewport so a 768px laptop can still see the whole
+     dialog. */
+  height: min(390px, calc(100vh - 48px));
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
