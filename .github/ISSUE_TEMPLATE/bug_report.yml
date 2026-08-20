@@ -1,0 +1,89 @@
+name: Bug report
+description: Something in the app does not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: open **Settings → Updates** and check for updates. A
+        surprising share of download failures are fixed by updating yt-dlp,
+        which the app can do on its own without a new release.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what the app did instead of what you expected.
+      placeholder: I pasted a playlist link and pressed Fetch. The window showed a spinner and never finished.
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-text
+    attributes:
+      label: The exact error text
+      description: >
+        Copy the message the app showed, word for word. This is the single most
+        useful thing in the whole report — the app rewrites yt-dlp's errors into
+        plain language, and the exact wording says which branch it took.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: link
+    attributes:
+      label: The link you pasted
+      description: >
+        If a specific download failed. Sites behave differently for different
+        content, so "a YouTube video" cannot be reproduced. Leave blank if the
+        link is private and say so below.
+      placeholder: https://...
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in Settings. Please update before reporting if it is not the latest.
+      placeholder: "0.7.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (AppImage)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: site
+    attributes:
+      label: Which site
+      options:
+        - YouTube
+        - TikTok
+        - Instagram
+        - X (Twitter)
+        - Twitch
+        - Another site
+        - Not about a specific site
+    validations:
+      required: true
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: >
+        Does it happen every time or only sometimes? Did it work in an earlier
+        version? Anything unusual about your setup?
+    validations:
+      required: false

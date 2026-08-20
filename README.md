@@ -103,3 +103,14 @@ The desktop app is built and published separately by
 version tag and attaches the signed Windows and Linux artifacts — plus the
 `latest.json` the app's updater reads — to the GitHub release.
 
+## Contributing
+
+Bug reports and pull requests are welcome. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) first — it covers how to get the app
+building locally, what to run before opening a PR, and which kinds of change
+will not be accepted.
+
+Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+Found a security problem? **Do not open a public issue** — see
+[SECURITY.md](SECURITY.md) for how to report it privately.

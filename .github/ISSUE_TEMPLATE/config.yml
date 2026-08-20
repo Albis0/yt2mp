@@ -1,0 +1,10 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A download broke on one specific site
+    url: https://github.com/Albis0/yt2mp/issues/new?template=bug_report.yml
+    about: >
+      First open Settings and update yt-dlp. Sites change constantly and most
+      breakage is fixed upstream without a new app release.
+  - name: Security vulnerability
+    url: https://github.com/Albis0/yt2mp/security/advisories/new
+    about: Report privately, never as a public issue.
