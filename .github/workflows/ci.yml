@@ -1,0 +1,178 @@
+name: CI
+
+# Runs on every push and pull request, so a mistake surfaces on the commit
+# that caused it rather than minutes into a release.
+#
+# The gap this fills is not hypothetical. Release builds are the only thing
+# that ever ran automatically, and they only run on a tag — so the 0.7.5
+# release failed on a retired ffmpeg URL that had been broken for a while,
+# after the tag was already pushed and the Windows half had already built and
+# signed. Everything below would have caught it on the commit instead.
+#
+# Deliberately not a copy of the release job: this does not sign anything,
+# does not bundle an installer, and does not touch a release. It answers one
+# question — would a release built from this commit work — as fast as it can.
+
+on:
+  push:
+    branches: [main]
+    # Tags are the release workflow's job; running both on a tag would build
+    # everything twice and say nothing new.
+    tags-ignore: ["**"]
+  pull_request:
+    branches: [main]
+  # The URL check below is the one thing here that goes red without anyone
+  # touching the repo: upstream retires a build and the next release is the
+  # first to find out. Weekly is often enough to hear about it before a
+  # release does, and rare enough to be ignorable noise otherwise.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+# A second push to the same branch makes the first run's answer irrelevant.
+# (The release workflow deliberately has no such group: cancelling a
+# half-finished release is how a release ends up with one platform's
+# artifacts.)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The fast checks. No Rust toolchain, no system libraries, no cache to warm:
+  # if the versions have drifted or the frontend does not type-check, that is
+  # worth knowing in under a minute rather than after a ten-minute compile.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The version lives in five files and they have drifted before — the
+      # site said 0.4.0 while the app said 0.5.0. With an updater in the
+      # picture a wrong number means the app either re-offers an update
+      # forever or never offers one at all. Run with no argument, this reports
+      # and exits non-zero when they disagree.
+      - name: Versions agree across every file
+        run: bun scripts/version.mjs
+
+      - name: Install frontend dependencies
+        working-directory: app-tauri
+        run: bun install --frozen-lockfile
+
+      # `bun run build` is `tsc --noEmit && vite build`, so this is the type
+      # check and the bundle in one step — exactly what the release runs.
+      - name: Type-check and build the frontend
+        working-directory: app-tauri
+        run: bun run build
+
+      - name: Install landing-site dependencies
+        run: bun install --frozen-lockfile
+
+      # The landing page is deployed straight from main, so a broken build
+      # here is a broken site — and nothing else in the repo would catch it.
+      - name: Build the landing site
+        run: bun run build
+
+  # Rust: formatting, lints and the test suite. Ubuntu only — the code that
+  # differs per platform is small, the tests that matter are platform-neutral,
+  # and the release job builds both anyway.
+  rust:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app-tauri/src-tauri
+
+      # Same WebKitGTK 4.1 packages the release needs: the tauri crate links
+      # against them even to compile the test binary.
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # No `cargo fmt --check` step. browsers.rs lays its candidate list out as
+      # a compact table — one browser per two lines — which rustfmt would
+      # explode into roughly 400 lines of one-field-per-line structs. The table
+      # is easier to scan and to add a browser to, so the formatter loses this
+      # argument; a check that fails on committed, deliberate formatting is a
+      # check people learn to ignore.
+
+      - name: Tests
+        working-directory: app-tauri
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      # Not -D warnings: the tree carries a few known ones (an MSRV note, an
+      # over-long argument list) that are not worth failing a build over.
+      # Printed so a new one is visible in the log without blocking a merge.
+      - name: Clippy
+        working-directory: app-tauri
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --lib --all-targets
+
+  # Every URL the app downloads from, checked with a HEAD request.
+  #
+  # This is the check that would have caught the 0.7.5 failure. Upstream
+  # retires builds on its own schedule — BtbN dropped the n7.1 ffmpeg series
+  # and its URL began answering 404 — and nothing in the repo noticed until a
+  # release tried to build. A unit test can only prove the two copies of a URL
+  # agree with each other; only a request proves the URL is still there.
+  #
+  # Scheduled as well as pushed, because these break without anyone touching
+  # the repo. A red run on a quiet Monday is the point.
+  urls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Every download URL still resolves
+        working-directory: app-tauri
+        run: |
+          set -u
+          # The script prints its own URLs — both platforms', whichever host
+          # this runs on. Re-listing them in the workflow would be a second
+          # copy to keep in step, which is the failure this job exists to
+          # catch in the first place.
+          mapfile -t urls < <(bun scripts/fetch-binaries.mjs --print-urls)
+
+          if [ "${#urls[@]}" -lt 6 ]; then
+            echo "::error::Expected 6 download URLs, got ${#urls[@]} — has the script changed?"
+            printf '%s\n' "${urls[@]}"
+            exit 1
+          fi
+
+          failed=0
+          for url in "${urls[@]}"; do
+            # -L follows the redirect GitHub's release downloads use. A HEAD
+            # is enough: this asks whether the file is still published, not
+            # whether it downloads correctly.
+            code=$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 60 "$url" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "  ok    $url"
+            else
+              echo "::error::$code — $url"
+              failed=1
+            fi
+          done
+
+          exit "$failed"

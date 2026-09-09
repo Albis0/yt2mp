@@ -42,6 +42,23 @@ const FFMPEG_LINUX_URL =
   "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/" +
   "ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz";
 
+const FFMPEG_WINDOWS_URL =
+  "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
+
+// Every URL this script can fetch, both platforms', regardless of which one it
+// is running on. CI checks these still resolve (`--print-urls`), and that only
+// means something if it sees the other platform's URLs too — the one that
+// broke and failed the 0.7.5 release was the Linux ffmpeg, which a Windows
+// developer never downloads.
+const ALL_URLS = [
+  "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+  "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux",
+  `https://github.com/quickjs-ng/quickjs/releases/download/${QUICKJS_VERSION}/qjs-windows-x86_64.exe`,
+  `https://github.com/quickjs-ng/quickjs/releases/download/${QUICKJS_VERSION}/qjs-linux-x86_64`,
+  FFMPEG_WINDOWS_URL,
+  FFMPEG_LINUX_URL,
+];
+
 const targets = [
   {
     name: exe("yt-dlp"),
@@ -98,9 +115,7 @@ async function fetchFfmpeg() {
   }
 
   const tmp = path.join(OUT_DIR, IS_WINDOWS ? "_ffmpeg.zip" : "_ffmpeg.tar.xz");
-  const url = IS_WINDOWS
-    ? "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-    : FFMPEG_LINUX_URL;
+  const url = IS_WINDOWS ? FFMPEG_WINDOWS_URL : FFMPEG_LINUX_URL;
 
   console.log(`  ${exe("ffmpeg")} — downloading (this one is large)…`);
   const res = await fetch(url, { redirect: "follow" });
@@ -130,7 +145,7 @@ async function fetchFfmpeg() {
   // Both archives now put the binary under bin/ — BtbN's Linux build has the
   // same layout as gyan.dev's Windows one, unlike johnvansickle's, which kept
   // ffmpeg at the root of the extracted directory. Verified by listing the
-  // downloaded archive: `ffmpeg-n7.1-latest-linux64-gpl-7.1/bin/ffmpeg`.
+  // downloaded archive: `ffmpeg-n8.1-latest-linux64-gpl-8.1/bin/ffmpeg`.
   const inner = path.join(OUT_DIR, dir.name, "bin", exe("ffmpeg"));
 
   await rename(inner, dest);
@@ -144,6 +159,16 @@ async function fetchFfmpeg() {
 }
 
 async function main() {
+  // `--print-urls` prints every URL, both platforms', one per line and
+  // nothing else. CI pipes this into a loop that HEADs each one, so a build
+  // upstream has retired is caught on an ordinary commit instead of halfway
+  // through a release. Printing them here rather than re-listing them in the
+  // workflow keeps one copy of the list.
+  if (process.argv.includes("--print-urls")) {
+    for (const url of ALL_URLS) console.log(url);
+    return;
+  }
+
   await mkdir(OUT_DIR, { recursive: true });
   console.log(`Fetching binaries into ${OUT_DIR}\n`);
 

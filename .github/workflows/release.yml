@@ -112,6 +112,28 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The tag says one version and five files say another only if someone
+      # tagged without bumping — and nothing downstream would notice. The
+      # manifest is built from the tag, so a mismatch ships a release whose
+      # manifest advertises a version the installed app never reports having:
+      # the updater then offers the same release forever, or never offers it.
+      #
+      # Checked here rather than only in CI because CI never runs on a tag.
+      - name: The tag matches the version in the tree
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          WANT="${TAG#v}"
+          GOT=$(node -p "require('./app-tauri/package.json').version")
+          if [ "$WANT" != "$GOT" ]; then
+            echo "::error::Tag $TAG says $WANT but the app is $GOT."
+            echo "::error::Run 'bun scripts/version.mjs $WANT', commit, and move the tag."
+            exit 1
+          fi
+          # Everything else is checked against that one file by the script.
+          bun scripts/version.mjs
+
       - name: Run tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
