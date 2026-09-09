@@ -460,13 +460,21 @@ mod tests {
 
         /// Builds a five-second video with a tone in it, so the fixture
         /// exercises the same "video in, audio out" path the tab is for.
+        ///
+        /// Encoded with `mpeg4` and `aac`, not `libx264`: x264 is a separate
+        /// library that a distro ffmpeg is frequently built without, and
+        /// Ubuntu's is — which failed this test in CI while the bundled
+        /// Windows build passed locally. mpeg4 is built into ffmpeg itself, so
+        /// it is available wherever ffmpeg is. What the fixture needs is a
+        /// video stream and an audio stream in one container; which codec
+        /// draws the blue rectangle is beside the point.
         async fn make_fixture(dir: &Path) -> Option<PathBuf> {
             let source = dir.join("fixture.mp4");
             let mut cmd = crate::ytdlp::base_command(ffmpeg());
             cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
                 .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=5"])
                 .args(["-f", "lavfi", "-i", "color=c=blue:s=320x240:d=5"])
-                .args(["-shortest", "-c:v", "libx264", "-c:a", "aac"])
+                .args(["-shortest", "-c:v", "mpeg4", "-c:a", "aac"])
                 .arg(&source);
             let out = cmd.output().await.ok()?;
             out.status.success().then_some(source)
@@ -485,10 +493,14 @@ mod tests {
 
             let dir = std::env::temp_dir().join("yt2mp-convert-roundtrip");
             let _ = std::fs::create_dir_all(&dir);
-            let Some(source) = make_fixture(&dir).await else {
-                eprintln!("skipping: could not build a fixture");
-                return;
-            };
+            // A failure here is a real failure, not a reason to skip. The
+            // earlier version returned quietly, which is how an ffmpeg without
+            // the fixture's video encoder read as "nothing to test" instead of
+            // "this machine cannot build the fixture" — the test went green
+            // having done nothing.
+            let source = make_fixture(&dir)
+                .await
+                .expect("ffmpeg is present, so it must be able to build the fixture");
 
             let info = probe(&source).await.expect("the fixture probes");
             assert!(info.has_audio, "the fixture has a tone in it");
