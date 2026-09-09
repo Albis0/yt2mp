@@ -54,13 +54,17 @@ export const DRIVE_URL =
 // `null` means "no verified artifact for this version yet", and the page
 // omits the verification block rather than vouching for something it cannot
 // check.
-export const INSTALLER_SHA256: string | null = null;
+export const INSTALLER_SHA256: string | null =
+    "69bb48d80a8f1a3a52b81983fbf2065631481011fe85bff0fceb37d8ec0c1b30";
 
-// 46.8 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
+// 46.5 MB: ffmpeg, yt-dlp and the JS runtime ship inside the installer, so a
 // fresh install works offline with nothing to fetch on first run. The app can
 // still update yt-dlp on its own afterwards, which is what fixes a site that
 // suddenly stops working.
-export const INSTALLER_SIZE: string | null = "46.8 MB";
+//
+// Measured from the published artifact alongside the hash above, not from a
+// local build — the two have to describe the same file.
+export const INSTALLER_SIZE: string | null = "46.5 MB";
 
 // Sites the app can download from, in the order the app's own tabs present
 // them. Single source for the page copy and the structured data.
