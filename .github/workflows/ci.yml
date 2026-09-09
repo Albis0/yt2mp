@@ -106,7 +106,20 @@ jobs:
             libsoup-3.0-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            ffmpeg
+
+      # The converter's end-to-end tests need an ffmpeg that can encode MP3.
+      # Without one they skip themselves, which is the right behaviour on a
+      # developer's machine and the wrong one here — CI is where they are
+      # supposed to actually run.
+      - name: The runner's ffmpeg can encode MP3
+        run: |
+          if ! ffmpeg -hide_banner -encoders | grep -q libmp3lame; then
+            echo "::error::This runner's ffmpeg has no libmp3lame — the converter tests would skip."
+            exit 1
+          fi
+          ffmpeg -version | head -1
 
       # No `cargo fmt --check` step. browsers.rs lays its candidate list out as
       # a compact table — one browser per two lines — which rustfmt would
@@ -115,9 +128,13 @@ jobs:
       # argument; a check that fails on committed, deliberate formatting is a
       # check people learn to ignore.
 
+      # --nocapture so a test that skips itself says so in the log. Several
+      # here depend on what the machine has (an ffmpeg with libmp3lame, a
+      # browser profile), and "passed" tells you nothing about which of those
+      # actually ran.
       - name: Tests
         working-directory: app-tauri
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture
 
       # Not -D warnings: the tree carries a few known ones (an MSRV note, an
       # over-long argument list) that are not worth failing a build over.

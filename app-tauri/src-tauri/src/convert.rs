@@ -17,6 +17,24 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::binaries::ffmpeg_path;
 
+/// Where this module's ffmpeg comes from.
+///
+/// Normally [`ffmpeg_path`], which reads the cache `binaries::init` fills at
+/// startup. Tests override it, because that cache is only ever populated by a
+/// running Tauri app: under `cargo test` it stays empty and resolves to the
+/// bare name "ffmpeg". An earlier version of the tests below checked for an
+/// absolute path and, finding none, skipped themselves on every machine —
+/// passing while testing nothing.
+#[cfg(not(test))]
+fn ffmpeg() -> PathBuf {
+    ffmpeg_path()
+}
+
+#[cfg(test)]
+fn ffmpeg() -> PathBuf {
+    tests::test_ffmpeg().unwrap_or_else(ffmpeg_path)
+}
+
 /// Long enough for a feature-length video's audio track on a slow machine,
 /// short enough that a wedged ffmpeg surfaces an error instead of hanging the
 /// row forever. Conversion is CPU-bound and local, so this needs nowhere near
@@ -69,7 +87,7 @@ pub async fn probe(path: &Path) -> Result<SourceInfo, String> {
 
     let size_bytes = std::fs::metadata(path).ok().map(|m| m.len());
 
-    let mut cmd = crate::ytdlp::base_command(ffmpeg_path());
+    let mut cmd = crate::ytdlp::base_command(ffmpeg());
     cmd.args(["-hide_banner", "-i"]).arg(path);
 
     let output = tokio::time::timeout(std::time::Duration::from_secs(30), cmd.output())
@@ -201,7 +219,7 @@ where
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| source.to_string_lossy().into_owned());
 
-    let mut cmd = crate::ytdlp::base_command(ffmpeg_path());
+    let mut cmd = crate::ytdlp::base_command(ffmpeg());
     cmd.args(["-hide_banner", "-nostdin", "-y", "-i"])
         .arg(source)
         // -vn drops any video stream: cover art in an MP4 would otherwise be
@@ -389,19 +407,62 @@ mod tests {
     /// Skipped rather than failed when ffmpeg is absent: a checkout without
     /// `bun run fetch:binaries` is a normal state, and failing there would
     /// report a missing download as a broken converter.
+    /// The ffmpeg these tests drive, and the one `ffmpeg()` returns under
+    /// `cfg(test)`.
+    ///
+    /// Deliberately NOT [`ffmpeg_path`]: that reads a cache filled by
+    /// `binaries::init`, which needs a running Tauri app, so under `cargo
+    /// test` it is always empty and resolves to the bare name "ffmpeg". The
+    /// first version of these tests asked `ffmpeg_path().is_absolute()` and so
+    /// skipped themselves on every machine — passing while testing nothing,
+    /// which is worse than not existing at all.
+    ///
+    /// So: look where a checkout actually keeps it, then fall back to whatever
+    /// is on PATH, which is what a CI runner has.
+    pub(super) fn test_ffmpeg() -> Option<PathBuf> {
+        let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(name);
+        if bundled.exists() {
+            return Some(bundled);
+        }
+
+        // On PATH? Ask it to identify itself rather than scanning directories.
+        let ok = std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        ok.then(|| PathBuf::from("ffmpeg"))
+    }
+
+    /// True when the resolved ffmpeg can actually encode MP3.
+    ///
+    /// A distro ffmpeg is routinely built without libmp3lame. A converter that
+    /// cannot produce an MP3 is exactly what these tests exist to catch, but on
+    /// a machine whose ffmpeg simply lacks the encoder that is a fact about the
+    /// machine rather than a broken tab — so it skips instead of failing.
+    fn has_mp3_encoder(ffmpeg: &Path) -> bool {
+        std::process::Command::new(ffmpeg)
+            .args(["-hide_banner", "-encoders"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains("libmp3lame"))
+            .unwrap_or(false)
+    }
+
     mod with_real_ffmpeg {
         use super::*;
-
-        fn ffmpeg_available() -> bool {
-            let path = ffmpeg_path();
-            path.is_absolute() && path.exists()
-        }
 
         /// Builds a five-second video with a tone in it, so the fixture
         /// exercises the same "video in, audio out" path the tab is for.
         async fn make_fixture(dir: &Path) -> Option<PathBuf> {
             let source = dir.join("fixture.mp4");
-            let mut cmd = crate::ytdlp::base_command(ffmpeg_path());
+            let mut cmd = crate::ytdlp::base_command(ffmpeg());
             cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
                 .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=5"])
                 .args(["-f", "lavfi", "-i", "color=c=blue:s=320x240:d=5"])
@@ -413,8 +474,12 @@ mod tests {
 
         #[tokio::test]
         async fn a_real_file_probes_and_converts() {
-            if !ffmpeg_available() {
-                eprintln!("skipping: bundled ffmpeg not present");
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !has_mp3_encoder(&ff) {
+                eprintln!("skipping: this ffmpeg has no libmp3lame");
                 return;
             }
 
@@ -463,8 +528,12 @@ mod tests {
         /// named as such rather than surfacing as a failed conversion later.
         #[tokio::test]
         async fn a_file_that_is_not_media_is_refused_at_probe() {
-            if !ffmpeg_available() {
-                eprintln!("skipping: bundled ffmpeg not present");
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !has_mp3_encoder(&ff) {
+                eprintln!("skipping: this ffmpeg has no libmp3lame");
                 return;
             }
 
