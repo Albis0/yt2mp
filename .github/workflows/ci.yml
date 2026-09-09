@@ -137,21 +137,33 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture
 
       # A failed test prints its assertion deep in the log, and the run's
-      # summary page shows only "Tests failed". Repeating the failures here
-      # puts them on the summary, where they are readable without downloading
-      # the log — which needs an authenticated request.
+      # summary page shows only "Process completed with exit code 101".
+      #
+      # Repeated two ways on purpose: into the step summary, which is the
+      # readable version for a person, and as ::error:: lines, which become
+      # annotations — the only form of this that can be read back without an
+      # authenticated log download.
       - name: Name the failures
         if: failure()
         working-directory: app-tauri
         run: |
+          out=$(cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 || true)
+
+          interesting=$(printf '%s\n' "$out" | grep -E \
+            "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:" \
+            | head -40)
+
           {
             echo "### Failing tests"
             echo '```'
-            cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 \
-              | grep -E "^(test .*FAILED|---- .* stdout|thread .* panicked|assertion|skipping:)|^ *(left|right):" \
-              | head -60
+            printf '%s\n' "$interesting"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # Annotations cannot carry newlines, so each line becomes its own.
+          printf '%s\n' "$interesting" | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error::$line"
+          done
 
       # Not -D warnings: the tree carries a few known ones (an MSRV note, an
       # over-long argument list) that are not worth failing a build over.
