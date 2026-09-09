@@ -91,23 +91,35 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # tauri_build::build() reads tauri.conf.json and resolves frontendDist
-      # ("../dist"), failing the build script outright when it is missing —
-      # which fails compilation before a single test runs.
+      # `cargo test` runs tauri_build::build() first, and that resolves
+      # everything tauri.conf.json declares — including
+      # `bundle.resources: ["resources/*"]`, which fails the build script with
       #
-      # dist/ is gitignored, so it exists on a developer's machine (left over
-      # from `bun run build`) and never on a fresh checkout. That is precisely
-      # why this failed only on CI, and why the failure looked like a broken
-      # test rather than a missing directory.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Build the frontend the Rust build script expects
+      #   glob pattern resources/* path not found or didn't match any files
+      #
+      # when the folder is empty. resources/ holds the three bundled binaries
+      # and is gitignored (they are far too large for the repo), so it exists
+      # on a developer's machine and never on a fresh checkout.
+      #
+      # That is why this compiled locally and failed only here, and why the
+      # failure read as "the tests broke" rather than "the binaries are
+      # missing": cargo reports it as a build-script exit code, and the script
+      # writes no stderr block explaining itself.
+      #
+      # The release workflow never hit this because it runs fetch:binaries
+      # before its tests, to bundle them into the installer.
+      # A placeholder rather than `bun run fetch:binaries`: the glob only has
+      # to match *something*, and fetching the real binaries would add ~140 MB
+      # of download to every push to satisfy a build script that never runs
+      # them. Nothing in the test suite executes these — the converter's tests
+      # resolve their own ffmpeg, and prefer this folder, so the file is named
+      # to be obviously not an ffmpeg if it ever were reached.
+      - name: Satisfy the bundle-resources glob
         working-directory: app-tauri
         run: |
-          bun install --frozen-lockfile
-          bun run build
+          mkdir -p src-tauri/resources
+          echo "placeholder for CI — see .github/workflows/ci.yml" \
+            > src-tauri/resources/README.txt
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -171,30 +183,26 @@ jobs:
           set +e
           out=$(cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1)
 
-          # A build-script failure prints its reason after "--- stderr", which
-          # an earlier version of this filter dropped — leaving twelve
-          # annotations that named the failing script and never said why. So
-          # when the output contains a stderr block, show that block whole.
-          if printf '%s\n' "$out" | grep -q -- "--- stderr"; then
-            interesting=$(printf '%s\n' "$out" | sed -n '/--- stderr/,$p' | head -40)
-          else
-            interesting=$(printf '%s\n' "$out" | grep -E \
-              "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:|^error(\[|:)" \
-              | head -40 || true)
-          fi
+          # Filtering has now hidden the cause twice: once by dropping the
+          # build script's stderr, and once because the script fails without
+          # writing a stderr block at all. So this no longer tries to be
+          # clever — the whole output goes to the step summary, and only the
+          # annotations (which cannot be long) are filtered.
+          {
+            echo "### Full test output"
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          # Nothing matched means the run died in some other way; the tail of
-          # the raw output is then the only thing worth showing.
+          interesting=$(printf '%s\n' "$out" | grep -E \
+            "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:|^error|warning: unused|cannot find|not found" \
+            | head -40 || true)
+
           if [ -z "$interesting" ]; then
             interesting=$(printf '%s\n' "$out" | tail -40)
           fi
 
-          {
-            echo "### Test output"
-            echo '```'
-            printf '%s\n' "$interesting"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
 
           # Annotations cannot carry newlines, so each line becomes its own.
           printf '%s\n' "$interesting" | while IFS= read -r line; do
