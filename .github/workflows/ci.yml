@@ -91,6 +91,24 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # tauri_build::build() reads tauri.conf.json and resolves frontendDist
+      # ("../dist"), failing the build script outright when it is missing —
+      # which fails compilation before a single test runs.
+      #
+      # dist/ is gitignored, so it exists on a developer's machine (left over
+      # from `bun run build`) and never on a fresh checkout. That is precisely
+      # why this failed only on CI, and why the failure looked like a broken
+      # test rather than a missing directory.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build the frontend the Rust build script expects
+        working-directory: app-tauri
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app-tauri/src-tauri
@@ -153,13 +171,20 @@ jobs:
           set +e
           out=$(cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1)
 
-          interesting=$(printf '%s\n' "$out" | grep -E \
-            "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:|^error(\[|:)" \
-            | head -40 || true)
+          # A build-script failure prints its reason after "--- stderr", which
+          # an earlier version of this filter dropped — leaving twelve
+          # annotations that named the failing script and never said why. So
+          # when the output contains a stderr block, show that block whole.
+          if printf '%s\n' "$out" | grep -q -- "--- stderr"; then
+            interesting=$(printf '%s\n' "$out" | sed -n '/--- stderr/,$p' | head -40)
+          else
+            interesting=$(printf '%s\n' "$out" | grep -E \
+              "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:|^error(\[|:)" \
+              | head -40 || true)
+          fi
 
-          # Nothing matched means the run died before any test reported — a
-          # compile error, most likely. The tail of the raw output is then the
-          # only thing worth showing.
+          # Nothing matched means the run died in some other way; the tail of
+          # the raw output is then the only thing worth showing.
           if [ -z "$interesting" ]; then
             interesting=$(printf '%s\n' "$out" | tail -40)
           fi
