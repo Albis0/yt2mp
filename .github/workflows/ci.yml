@@ -136,6 +136,23 @@ jobs:
         working-directory: app-tauri
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture
 
+      # A failed test prints its assertion deep in the log, and the run's
+      # summary page shows only "Tests failed". Repeating the failures here
+      # puts them on the summary, where they are readable without downloading
+      # the log — which needs an authenticated request.
+      - name: Name the failures
+        if: failure()
+        working-directory: app-tauri
+        run: |
+          {
+            echo "### Failing tests"
+            echo '```'
+            cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 \
+              | grep -E "^(test .*FAILED|---- .* stdout|thread .* panicked|assertion|skipping:)|^ *(left|right):" \
+              | head -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Not -D warnings: the tree carries a few known ones (an MSRV note, an
       # over-long argument list) that are not worth failing a build over.
       # Printed so a new one is visible in the log without blocking a merge.
