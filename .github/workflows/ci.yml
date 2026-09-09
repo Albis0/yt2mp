@@ -146,15 +146,26 @@ jobs:
       - name: Name the failures
         if: failure()
         working-directory: app-tauri
+        # `set +e` and a `|| true` on every filter: a non-matching grep exits
+        # 1, which under the default shell settings kills this step before it
+        # reports anything — which is exactly what happened the first time.
         run: |
-          out=$(cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 || true)
+          set +e
+          out=$(cargo test --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1)
 
           interesting=$(printf '%s\n' "$out" | grep -E \
-            "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:" \
-            | head -40)
+            "^test .*FAILED|^---- .* stdout|^thread .* panicked|assertion|^ *(left|right):|^skipping:|^error(\[|:)" \
+            | head -40 || true)
+
+          # Nothing matched means the run died before any test reported — a
+          # compile error, most likely. The tail of the raw output is then the
+          # only thing worth showing.
+          if [ -z "$interesting" ]; then
+            interesting=$(printf '%s\n' "$out" | tail -40)
+          fi
 
           {
-            echo "### Failing tests"
+            echo "### Test output"
             echo '```'
             printf '%s\n' "$interesting"
             echo '```'
@@ -162,8 +173,12 @@ jobs:
 
           # Annotations cannot carry newlines, so each line becomes its own.
           printf '%s\n' "$interesting" | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error::$line"
+            [ -n "$line" ] && echo "::error::${line}"
           done
+
+          # This step is a reporter, not a gate — the Tests step above already
+          # failed the job.
+          exit 0
 
       # Not -D warnings: the tree carries a few known ones (an MSRV note, an
       # over-long argument list) that are not worth failing a build over.
