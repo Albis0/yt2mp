@@ -116,10 +116,16 @@ fn tools() -> Vec<Tool> {
             // reachability from a datacentre rather than a dead link. The same
             // risk applies here, on a user's first run — with worse
             // consequences, since there is no log to read.
+            //
+            // The series must be one BtbN still publishes: n7.1 was dropped
+            // from the `latest` release and this URL began answering 404,
+            // which is what failed the 0.7.5 Linux build. Kept in step with
+            // `scripts/fetch-binaries.mjs`, which carries the same URL and the
+            // command for finding the current series.
             url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/\
-                  ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz",
+                  ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz",
             archive: Some(Archive::TarFfmpeg),
-            approx_mb: 115,
+            approx_mb: 121,
         },
     ]
 }
@@ -168,6 +174,77 @@ mod version_guard {
                 ok,
                 "{} is fetched from {} — see the note above before adding a host",
                 t.label, t.url
+            );
+        }
+    }
+
+    /// The same tool URLs are spelled twice: here, for the runtime download,
+    /// and in `scripts/fetch-binaries.mjs`, which CI runs to bundle them into
+    /// the installer. Nothing made the two agree, so one could be updated and
+    /// the other left behind.
+    ///
+    /// That is not hypothetical. BtbN retired the n7.1 ffmpeg series, its URL
+    /// began answering 404, and the 0.7.5 Linux build died at "Fetch bundled
+    /// binaries" — a failure that only shows up in CI, minutes into a release,
+    /// long after the commit that could have caught it.
+    ///
+    /// Reads both files as text rather than parsing them: the point is only
+    /// that every URL one declares also appears in the other.
+    ///
+    /// **Checks both platforms' URLs, not just this one's.** `tools()` is
+    /// `#[cfg]`-gated, so a test that walked it would check only the host it
+    /// runs on — and the URL that actually broke was the Linux one, which a
+    /// Windows machine never compiles. Reading this file's own source is what
+    /// makes the check platform-independent.
+    #[test]
+    fn the_fetch_script_downloads_the_same_urls() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let script_path = root.join("..").join("scripts").join("fetch-binaries.mjs");
+        let this_path = root.join("src").join("tools.rs");
+
+        let (Ok(script), Ok(this)) = (
+            std::fs::read_to_string(&script_path),
+            std::fs::read_to_string(&this_path),
+        ) else {
+            // A checkout without both files is not this test's business to
+            // fail — it guards agreement, not their existence.
+            eprintln!("skipping: could not read both files");
+            return;
+        };
+
+        // The downloadable names, both platforms'. Matched as whole words
+        // rather than by parsing URLs: several are built with `concat!` and
+        // split across source lines, so no substring of a whole URL survives
+        // intact. The patterns are the *download* names specifically —
+        // "ffmpeg.exe" is the name on disk, not something either file fetches,
+        // so it is deliberately not among them.
+        let interesting = |w: &str| {
+            w.ends_with(".zip")
+                || w.ends_with(".tar.xz")
+                || w == "yt-dlp.exe"
+                || w == "yt-dlp_linux"
+                || w.starts_with("qjs-")
+        };
+
+        let mut names: Vec<&str> = this
+            .split(|c: char| !(c.is_alphanumeric() || c == '.' || c == '-' || c == '_'))
+            .filter(|w| interesting(w))
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+
+        // Two ffmpeg archives, two yt-dlp binaries, two quickjs binaries.
+        assert!(
+            names.len() >= 6,
+            "expected both platforms' download names, found {names:?}"
+        );
+
+        for name in names {
+            assert!(
+                script.contains(name),
+                "tools.rs downloads {name}, which fetch-binaries.mjs does not \
+                 mention — the bundled and downloaded copies would differ, and \
+                 a retired URL only surfaces as a failed release build"
             );
         }
     }

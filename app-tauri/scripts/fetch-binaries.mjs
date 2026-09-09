@@ -29,9 +29,18 @@ const QUICKJS_VERSION = "v0.16.1";
 //
 // Pinned to a release series rather than `master-latest`: a nightly ffmpeg
 // changing under the build is not a trade worth making for a downloader.
+//
+// The series has to be one BtbN still publishes. n7.1 was dropped from the
+// `latest` release and the URL started answering 404, which failed the 0.7.5
+// Linux build at this exact step — a pin is only stable until upstream retires
+// it. When this 404s again, list the release's assets and move to the newest
+// `n<major>.<minor>` that is still there:
+//
+//   curl -s https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest \
+//     | grep -o 'ffmpeg-n[0-9.]*-latest-linux64-gpl[^"]*\.tar\.xz' | sort -u
 const FFMPEG_LINUX_URL =
   "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/" +
-  "ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz";
+  "ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz";
 
 const targets = [
   {
