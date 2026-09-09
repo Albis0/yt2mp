@@ -26,6 +26,7 @@ import PlaylistView from "@/components/PlaylistView";
 import SourceRail, { TABS, type TabId } from "@/components/SourceRail";
 import WindowControls from "@/components/WindowControls";
 import SettingsPanel from "@/components/SettingsPanel";
+import ConvertPanel from "@/components/ConvertPanel";
 import FirstRun from "@/components/FirstRun";
 import UpdateBanner from "@/components/UpdateBanner";
 import { toolsStatus, type ToolsStatus } from "@/lib/api";
@@ -77,6 +78,7 @@ const TAB_LEADS: Record<TabId, string> = {
   twitch: "Paste a VOD or clip link to save it.",
   other: "Paste any link — yt-dlp handles around 1750 sites.",
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
+  convert: "Turn files you already have into MP3s, without uploading them anywhere.",
 };
 
 /// Per-tab copy. The placeholder shows the shape of link that tab expects,
@@ -90,6 +92,9 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
   twitch: "twitch.tv/videos/…  ·  or a clip link",
   other: "Paste any link — yt-dlp supports ~1750 sites",
   ai: "Describe the song or video you want…",
+  // The convert tab has no input field — it uses a file picker instead — so
+  // this is never rendered. It exists because the record is keyed by tab.
+  convert: "",
 };
 
 /// Tabs with a caveat worth stating before the user hits it. Empty string
@@ -163,6 +168,10 @@ export default function App() {
   // moment rather than flashing the main UI and then covering it.
   const [tools, setTools] = useState<ToolsStatus | null>(null);
   const [update, setUpdate] = useState<Available | null>(null);
+  // A conversion runs in Rust the same way a download does, so it has to block
+  // the same things: switching tabs away from its Stop button, and installing
+  // an update that would kill the process.
+  const [converting, setConverting] = useState(false);
 
   // AI is the one tab that isn't a site — it takes free text rather than a URL.
   const mode: Mode = tab === "ai" ? "ai" : "link";
@@ -244,10 +253,12 @@ export default function App() {
 
   /// True while any transfer is still running. Two things check it: switching
   /// tabs (which would hide a live download's Stop button) and installing an
-  /// update (which would kill the transfer outright).
-  const downloadInProgress = Object.values(downloads).some(
-    (d) => !d.done && !d.error && !d.stopped
-  );
+  /// update (which would kill the transfer outright). A local conversion
+  /// counts for both reasons, so it is folded in here rather than checked
+  /// separately at each call site.
+  const downloadInProgress =
+    converting ||
+    Object.values(downloads).some((d) => !d.done && !d.error && !d.stopped);
 
   function switchTab(next: TabId) {
     if (next === tab) return;
@@ -257,7 +268,11 @@ export default function App() {
     // transfer with no way to get back to its Stop button. Leaving the tab is
     // allowed; wiping the evidence is not.
     if (downloadInProgress) {
-      setError("Finish or stop the download in progress before switching tabs.");
+      setError(
+        converting
+          ? "Finish or stop the conversion in progress before switching tabs."
+          : "Finish or stop the download in progress before switching tabs."
+      );
       return;
     }
 
@@ -440,7 +455,10 @@ export default function App() {
   // a line saying what that source takes. Once there is a result or a history
   // list on screen the page has its own subject and the heading would just be
   // a second one competing with it.
-  const bare = !info && !playlist && history.length === 0;
+  // The converter is never "bare": its own list is the subject of the screen
+  // from the first file on, and centring it would move the whole list every
+  // time a file was added.
+  const bare = tab !== "convert" && !info && !playlist && history.length === 0;
   const tabLabel = TABS.find((t) => t.id === tab)?.label ?? "yt2mp";
 
   return (
@@ -550,13 +568,23 @@ export default function App() {
       {needsTools ? null : (
       <main className={`app-shell${bare ? " app-shell-empty" : ""}`}>
         <div className="tab-panel" role="tabpanel">
-          {bare ? (
+          {/* The converter keeps its heading even once files are listed: it
+              is not centred like the empty state, and without it the tab opens
+              on a bare "Choose files" button that never says what it converts
+              to. */}
+          {bare || tab === "convert" ? (
             <div className="entry-head">
               <h1 className="entry-title">{tabLabel}</h1>
               <p className="entry-lead">{TAB_LEADS[tab]}</p>
             </div>
           ) : null}
 
+          {/* The converter takes files, not a link, so it replaces the entry
+              form rather than sitting under it — an input that does nothing on
+              this tab would be the most prominent dead control on screen. */}
+          {tab === "convert" ? (
+            <ConvertPanel onBusyChange={setConverting} />
+          ) : (
           <form className="download-form" onSubmit={handleSubmit}>
             <input
               type="text"
@@ -582,6 +610,7 @@ export default function App() {
               )}
             </button>
           </form>
+          )}
 
           {/* The notice is a warning about what is likely to happen. Once it
               has happened, the error below says the same thing about the
@@ -616,12 +645,18 @@ export default function App() {
           />
         ) : null}
 
-        <HistoryList
-          history={history}
-          onReplay={replayHistory}
-          onRemove={(id) => setHistory(removeHistory(id))}
-          onClear={() => setHistory(clearHistory())}
-        />
+        {/* History replays a link through the download path, which the
+            converter has no equivalent of — its files are already on disk and
+            its list is right above. Showing it here would offer a "fetch
+            again" button that jumps the user to a different tab. */}
+        {tab === "convert" ? null : (
+          <HistoryList
+            history={history}
+            onReplay={replayHistory}
+            onRemove={(id) => setHistory(removeHistory(id))}
+            onClear={() => setHistory(clearHistory())}
+          />
+        )}
       </main>
       )}
         </div>

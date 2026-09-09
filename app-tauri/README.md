@@ -133,8 +133,29 @@ Comma-separated — if one key is rate-limited (429) or rejected (401), the app
 rotates to the next. If `GROQ_KEYS` is missing or every key fails, AI search
 falls back to searching your raw text directly instead of breaking.
 
+## Converting files you already have
+
+The **To MP3** tab is the one entry point with no link in it: pick files
+already on disk and each comes back as an MP3 beside the original, at the same
+192 kbps the download path uses. Nothing is uploaded — the bundled ffmpeg does
+the work locally.
+
+There is no accepted-formats list on purpose. ffmpeg decodes what it decodes,
+and every picked file is probed before anything runs, so a file it cannot read
+says so on its own row rather than failing halfway through a queue. Files with
+no audio track are listed and refused for the same reason.
+
+Conversions share the download path's registry and progress channel, so Stop
+works identically. There is no Pause: a local conversion is CPU-bound and
+finishes in seconds to a couple of minutes, which is not long enough for a
+control anyone would reach for — unlike a multi-gigabyte download, where
+walking away mid-transfer is a real scenario.
+
 ## How it works
 
+- `src-tauri/src/convert.rs` — the To MP3 tab's backend: probing a file with
+  ffmpeg, parsing its `-progress` output, and turning ffmpeg's errors into
+  something worth showing. No network is involved anywhere in this path.
 - `src-tauri/src/lib.rs` — the IPC commands the UI calls (`fetch_info`,
   `start_download`, `pause_download`, `resume_download`, `stop_download`,
   `reveal_file`), plus filename sanitising and the in-flight download registry.
@@ -181,5 +202,8 @@ That is inherent to pausing a live transfer.
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-11 unit tests covering URL validation, playlist detection, filename
-sanitising, progress-line parsing, and the format-selector chain.
+69 tests covering URL validation, playlist detection, filename sanitising,
+progress-line parsing, the format-selector chain, browser detection, and the
+MP3 converter. Two of them drive the bundled ffmpeg end to end — they build a
+fixture, convert it, and check the result is real audio — and skip themselves
+with a note when the binaries have not been fetched yet.

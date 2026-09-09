@@ -158,6 +158,9 @@ button {
 .page-twitch { --accent: #7b3fe4; --accent-press: #6832c4; }
 .page-other { --accent: #2f6fed; --accent-press: #2559c8; }
 .page-ai { --accent: #97650f; --accent-press: #7d530b; }
+/* A green, because it is the only tab that is not a site and has no brand to
+   borrow from — and it keeps its distance from the blue "Any link" beside it. */
+.page-convert { --accent: #1c7a4b; --accent-press: #16643d; }
 
 :root[data-theme="dark"] .page-youtube { --accent: #ff4d67; --accent-press: #ff7186; }
 :root[data-theme="dark"] .page-tiktok { --accent: #25dbd3; --accent-press: #5ae7e1; }
@@ -166,12 +169,14 @@ button {
 :root[data-theme="dark"] .page-twitch { --accent: #a87bff; --accent-press: #bd9bff; }
 :root[data-theme="dark"] .page-other { --accent: #5b8dff; --accent-press: #7ba3ff; }
 :root[data-theme="dark"] .page-ai { --accent: #e3b45c; --accent-press: #edc77e; }
+:root[data-theme="dark"] .page-convert { --accent: #3fd48b; --accent-press: #69dea6; }
 
 /* The filled controls need dark text on the light accents, or the
    label disappears into the fill. */
 :root[data-theme="dark"] .page-tiktok,
 :root[data-theme="dark"] .page-twitter,
-:root[data-theme="dark"] .page-ai {
+:root[data-theme="dark"] .page-ai,
+:root[data-theme="dark"] .page-convert {
   --on-accent: #15161a;
 }
 
@@ -1107,6 +1112,155 @@ button {
 
 .history-remove:hover {
   color: var(--danger);
+}
+
+/* ---------- Converter ----------
+   The one tab with no link and no result card: its list *is* the
+   screen. So it borrows the history list's frame — same border,
+   same rows, same hover — rather than inventing a second way to
+   draw a list of files in the same window.
+
+   Rows are two columns: what the file is on the left, what is
+   happening to it on the right. The right column keeps a minimum
+   width so a bar appearing mid-conversion does not shove the file
+   name sideways. */
+
+.convert {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.convert-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Secondary to "Choose files": converting is the obvious next step
+   once files are listed, but picking them is what has to happen
+   first, and two filled buttons side by side would say neither. */
+.convert-all-btn {
+  padding: 9px 15px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: none;
+  color: var(--accent);
+  font-size: 0.87rem;
+  font-weight: 550;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.convert-all-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.convert-all-btn:disabled {
+  opacity: 0.55;
+}
+
+.convert-empty {
+  padding: 0;
+  color: var(--text-3);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-width: 52ch;
+}
+
+.convert-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.convert-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  border-top: 1px solid var(--border);
+  transition: background 0.12s ease;
+}
+
+.convert-item:first-child {
+  border-top: none;
+}
+
+.convert-item:hover {
+  background: var(--surface-2);
+}
+
+/* min-width:0 so a long file name truncates instead of pushing the
+   status column off the row. */
+.convert-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.convert-name {
+  font-size: 0.87rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Duration and size are figures being compared down a column, so
+   they take the mono face like every other number in the app. */
+.convert-sub {
+  font-family: var(--mono);
+  font-size: 0.73rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.convert-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 168px;
+  justify-content: flex-end;
+}
+
+.convert-state .dl-track {
+  width: 72px;
+}
+
+.convert-remove {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color 0.14s ease;
+}
+
+.convert-remove:hover {
+  color: var(--danger);
+}
+
+/* Narrow windows: the status column drops under the file name
+   rather than squeezing both into nothing. */
+@media (max-width: 560px) {
+  .convert-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .convert-state {
+    justify-content: flex-start;
+    min-width: 0;
+  }
 }
 
 /* ---------- Playlist ---------- */

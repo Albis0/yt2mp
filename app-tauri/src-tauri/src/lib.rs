@@ -7,6 +7,7 @@
 
 mod binaries;
 mod browsers;
+mod convert;
 mod groq;
 mod platform;
 mod settings;
@@ -232,6 +233,126 @@ async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
         .into_path()
         .map_err(|e| format!("Invalid folder: {e}"))?;
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Opens a file picker for the converter tab and reports what was chosen.
+///
+/// No extension filter is offered on purpose: the tab's promise is that
+/// whatever you put in comes out as an MP3, and a filter listing twelve
+/// extensions would both misrepresent that and hide a working file whose
+/// extension nobody thought to include. ffmpeg decides what it can read, and
+/// [`convert::probe`] reports the verdict per file before anything runs.
+///
+/// Files that cannot be read are returned as errors rather than dropped, so
+/// the UI can say which file it refused and why instead of silently picking
+/// up four of the five files someone selected.
+#[tauri::command]
+async fn pick_media_files(app: AppHandle) -> Result<Vec<ProbedFile>, String> {
+    let start_dir = app
+        .path()
+        .audio_dir()
+        .or_else(|_| app.path().download_dir())
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let picked = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_directory(&start_dir)
+                .blocking_pick_files()
+        }
+    })
+    .await
+    .map_err(|e| format!("File dialog failed: {e}"))?;
+
+    let Some(picked) = picked else {
+        return Ok(Vec::new());
+    };
+
+    let mut out = Vec::new();
+    for entry in picked {
+        let Ok(path) = entry.into_path() else { continue };
+        out.push(match convert::probe(&path).await {
+            Ok(info) => ProbedFile::Ok { info },
+            Err(reason) => ProbedFile::Bad {
+                path: path.to_string_lossy().into_owned(),
+                name: path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                reason,
+            },
+        });
+    }
+
+    Ok(out)
+}
+
+/// One picked file: either something convertible, or a named reason it is not.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum ProbedFile {
+    Ok { info: convert::SourceInfo },
+    Bad { path: String, name: String, reason: String },
+}
+
+/// Converts one already-on-disk file to MP3, beside the original.
+///
+/// Shares the download path's registry and its `download:progress` channel, so
+/// the same stop button and the same progress plumbing work here — a converted
+/// row and a downloaded row behave identically from the UI's side.
+#[tauri::command]
+async fn convert_to_mp3(
+    app: AppHandle,
+    downloads: State<'_, Downloads>,
+    id: String,
+    path: String,
+    duration: Option<f64>,
+) -> Result<String, String> {
+    let source = PathBuf::from(&path);
+    if !source.is_file() {
+        return Err("That file isn't where it was — it may have been moved.".into());
+    }
+
+    // Never write over the file being read: converting "song.mp3" would
+    // otherwise truncate the source ffmpeg is still decoding.
+    let desired = convert::default_dest(&source);
+    let dest = if desired == source {
+        unique_path(&source.with_extension("").with_extension("mp3"))
+    } else {
+        unique_path(&desired)
+    };
+
+    let (tx, rx) = tokio::sync::watch::channel(Control::Run);
+    {
+        downloads.inner.lock().unwrap().insert(id.clone(), tx);
+    }
+
+    let emit_id = id.clone();
+    let result = convert::to_mp3(&source, &dest, duration, rx, |percent, stage| {
+        let _ = app.emit(
+            "download:progress",
+            ProgressEvent {
+                id: emit_id.clone(),
+                percent,
+                stage: stage.to_string(),
+            },
+        );
+    })
+    .await;
+
+    downloads.inner.lock().unwrap().remove(&id);
+
+    match result {
+        Ok(()) => Ok(dest.to_string_lossy().into_owned()),
+        Err(e) => {
+            // A half-written MP3 is worse than none: it plays, badly, and
+            // looks like a finished file in the folder.
+            let _ = std::fs::remove_file(&dest);
+            Err(e)
+        }
+    }
 }
 
 /// Opens a native save dialog, then downloads straight to the chosen path.
@@ -561,6 +682,8 @@ pub fn run() {
             fetch_info,
             start_download,
             pick_folder,
+            pick_media_files,
+            convert_to_mp3,
             stop_download,
             pause_download,
             resume_download,

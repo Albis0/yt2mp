@@ -139,6 +139,58 @@ export function pickFolder(): Promise<string | null> {
   return invoke<string | null>("pick_folder");
 }
 
+/// A file on disk the converter can read.
+export interface SourceInfo {
+  /** Absolute path. Also the id the converter list keys its rows by. */
+  path: string;
+  name: string;
+  sizeBytes: number | null;
+  /** Seconds, or null when the container reports none — not an error. */
+  duration: number | null;
+  /** False when there is no audio stream; the UI refuses to queue those. */
+  hasAudio: boolean;
+}
+
+/// One picked file: convertible, or a named reason it is not.
+///
+/// Files that cannot be read come back as entries rather than being dropped,
+/// so picking five files and getting four rows never happens silently — the
+/// fifth says what was wrong with it.
+export type PickedFile =
+  | { kind: "ok"; info: SourceInfo }
+  | { kind: "bad"; path: string; name: string; reason: string };
+
+/**
+ * Opens a file picker for the converter tab.
+ *
+ * No extension filter is offered: the tab's promise is that whatever goes in
+ * comes out as an MP3, and a filter listing a dozen extensions would both
+ * misrepresent that and hide a working file nobody thought to include.
+ * Resolves with an empty array if the dialog is closed.
+ */
+export function pickMediaFiles(): Promise<PickedFile[]> {
+  return invoke<PickedFile[]>("pick_media_files");
+}
+
+/**
+ * Converts one file already on disk to MP3, written beside the original.
+ *
+ * Reports progress on the same channel as downloads, so `onDownloadProgress`
+ * works here unchanged. Rejects with "Conversion stopped" when the user stops
+ * it — a deliberate action, which the UI treats as such rather than a failure.
+ */
+export function convertToMp3(args: {
+  id: string;
+  path: string;
+  duration: number | null;
+}): Promise<string> {
+  return invoke<string>("convert_to_mp3", {
+    id: args.id,
+    path: args.path,
+    duration: args.duration,
+  });
+}
+
 export function stopDownload(id: string): Promise<void> {
   return invoke("stop_download", { id });
 }

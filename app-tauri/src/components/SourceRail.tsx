@@ -10,11 +10,12 @@ import type { Platform } from "@/lib/api";
 /// content column is capped anyway) for vertical space (there is never
 /// enough).
 ///
-/// "ai" is not a platform — it is the free-text search entry point — but it
-/// belongs in the same rail because from the user's point of view it is just
-/// another way to start, and a separate control would mean two competing
-/// mode switches on one screen.
-export type TabId = Platform | "ai";
+/// "ai" and "convert" are not platforms — one is the free-text search entry
+/// point, the other takes files already on disk and never touches the network.
+/// Both belong in the same rail because from the user's point of view they are
+/// just other ways to start, and a separate control would mean competing mode
+/// switches on one screen.
+export type TabId = Platform | "ai" | "convert";
 
 interface TabDef {
   id: TabId;
@@ -106,9 +107,25 @@ function LinkIcon() {
   );
 }
 
+/// A music note over a downward arrow: something already in hand becoming an
+/// audio file. Deliberately not another link or globe glyph — this is the one
+/// tab that never goes near the network, and the icon should say so.
+function ConvertIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M14.5 3v8.6a3.4 3.4 0 1 0 1.8 3V6.3h3.4V3h-5.2zM7.2 10.6V3.4H5.4v7.2H2.6L6.3 15l3.7-4.4H7.2z"
+      />
+    </svg>
+  );
+}
+
 /// Order matters: the sites people reach for most sit at the top. "Any link"
 /// is near the end because it is the catch-all, and AI search sits beside it
 /// since both are "I don't have a specific site in mind" entry points.
+/// "Convert" is last: it is the only entry that takes no link at all, so it
+/// belongs after everything that does rather than interrupting that run.
 export const TABS: TabDef[] = [
   { id: "youtube", label: "YouTube", short: "YouTube", icon: YouTubeIcon },
   { id: "tiktok", label: "TikTok", short: "TikTok", icon: TikTokIcon },
@@ -117,6 +134,7 @@ export const TABS: TabDef[] = [
   { id: "twitch", label: "Twitch", short: "Twitch", icon: TwitchIcon },
   { id: "other", label: "Any link", short: "Link", icon: LinkIcon },
   { id: "ai", label: "AI search", short: "AI", icon: SparkIcon },
+  { id: "convert", label: "To MP3", short: "MP3", icon: ConvertIcon },
 ];
 
 interface SourceRailProps {
