@@ -530,3 +530,108 @@ mod tests {
         assert!(msg.contains("something extremely specific broke"));
     }
 }
+
+/// Live checks against the real sites, `#[ignore]`d so CI never goes red
+/// because a site was slow, rate-limited this runner's IP, or changed a page.
+///
+/// Run by hand when a tab is reported broken, or before a release:
+///
+/// ```bash
+/// cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored --nocapture sites
+/// ```
+///
+/// These answer the question the tab notices claim to answer. Both notices
+/// were wrong at some point — TikTok's said the problem was on TikTok's side
+/// and unfixable when it was actually a stale bundled downloader, which is
+/// exactly the kind of claim that should be measured rather than remembered.
+#[cfg(test)]
+mod sites {
+    use std::path::PathBuf;
+    use std::process::Stdio;
+
+    /// The downloader these tests must use: the one in `resources/`, which is
+    /// what ships in the app.
+    ///
+    /// Not `binaries::ytdlp_path()`. That reads a cache only a running Tauri
+    /// app fills, so under `cargo test` it returns a bare "yt-dlp" and the
+    /// test silently measures whatever is on PATH instead. Here that was a
+    /// Python install whose `--version` claims the current release while
+    /// behaving like an older one — it failed every TikTok link while the
+    /// bundled binary downloaded them. A test that reports on the wrong
+    /// binary is worse than no test: this one blamed the app for a fault that
+    /// was not in it.
+    fn bundled_ytdlp() -> Option<PathBuf> {
+        let name = if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" };
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(name);
+        p.is_file().then_some(p)
+    }
+
+    /// Asks the bundled downloader for a title, the cheapest thing that
+    /// proves extraction works end to end.
+    async fn title_of(url: &str) -> Result<String, String> {
+        let exe = bundled_ytdlp()
+            .ok_or_else(|| "no bundled yt-dlp in resources/ — run fetch:binaries".to_string())?;
+
+        let mut cmd = tokio::process::Command::new(exe);
+        cmd.env("PYTHONIOENCODING", "utf-8")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .args(["--no-warnings", "--print", "%(title)s", url]);
+
+        let out = cmd
+            .output()
+            .await
+            .map_err(|e| format!("could not run the downloader: {e}"))?;
+
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(err.lines().next().unwrap_or("failed").to_string());
+        }
+
+        let text = String::from_utf8_lossy(&out.stdout);
+        let title = text.lines().next().unwrap_or("").trim().to_string();
+        if title.is_empty() {
+            return Err("no title came back".into());
+        }
+        Ok(title)
+    }
+
+    /// Measured 2026-09-18: broken on the downloader bundled with 0.7.6
+    /// (2026.07.04), working on 2026.08.19, which learned to answer TikTok's
+    /// challenge. If this fails, the fix is a downloader update, not app code.
+    #[tokio::test]
+    #[ignore = "hits the network"]
+    async fn tiktok_still_works() {
+        let url = "https://www.tiktok.com/@tiktok/video/7106594312292453675";
+        match title_of(url).await {
+            Ok(t) => println!("TikTok ok: {t}"),
+            Err(e) => panic!(
+                "TikTok extraction failed: {e}\n\
+                 Try a newer yt-dlp before changing anything here."
+            ),
+        }
+    }
+
+    /// The opposite expectation, and deliberately so: Instagram refuses these
+    /// requests, signed in or not, on the newest downloader. Re-measured
+    /// 2026-09-18 with and without browser cookies — every attempt refused.
+    ///
+    /// This passes while Instagram is broken and *fails once it works*, which
+    /// is the only way anyone will notice that the tab's warning has become a
+    /// lie. A stale warning is how people learn to ignore warnings.
+    #[tokio::test]
+    #[ignore = "hits the network"]
+    async fn instagram_is_still_blocked() {
+        let url = "https://www.instagram.com/reel/C0YQX0Ppqxx/";
+        match title_of(url).await {
+            Err(e) => println!("Instagram still refuses, as expected: {e}"),
+            Ok(t) => panic!(
+                "Instagram worked and returned {t:?}.\n\
+                 Good news — now remove the warning from the Instagram tab."
+            ),
+        }
+    }
+}

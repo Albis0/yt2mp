@@ -211,26 +211,34 @@ pub struct PlaylistInfo {
 
 /// Extra arguments needed by specific sites.
 ///
-/// Instagram and TikTok serve different (often better) media to a mobile
-/// browser than to a desktop one, and both are quicker to block a default
-/// python-requests-shaped client. A regular browser user-agent avoids the
-/// most common empty-response failures without pretending to be logged in.
+/// There is deliberately no forced user-agent here any more. Instagram and
+/// TikTok used to be handed an iPhone one, on the theory that mobile clients
+/// are served better media and blocked less often. Measured on 2026-09-18,
+/// against the same video, one flag apart:
+///
+///   TikTok    with it: "Video not available, status code 0"
+///           without it: downloads fine
+///   Instagram with it: "Instagram sent an empty media response"
+///           without it: the same error, unchanged
+///
+/// So it broke the one site it could have helped and did nothing for the
+/// other. yt-dlp now answers TikTok's bot challenge itself with headers it
+/// chooses to match; overriding one of them makes that answer inconsistent
+/// and TikTok rejects it.
+///
+/// The general form of the mistake, since it will be tempting again:
+/// pretending to be a phone is a guess about what a site wants, while yt-dlp
+/// already carries a measured answer per extractor. Do not add one back
+/// without a measurement showing it helps.
 fn platform_args(platform: crate::platform::Platform) -> Vec<String> {
     use crate::platform::Platform;
     let mut args = match platform {
-        Platform::Instagram | Platform::TikTok => vec![
-            "--user-agent".into(),
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) \
-             AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-                .into(),
-        ],
         Platform::YouTube => player_client_args(),
         _ => Vec::new(),
     };
 
-    // Instagram in particular refuses most media to logged-out clients
-    // ("Instagram sent an empty media response"), and a user-agent alone does
-    // not fix it. If the user has opted into sharing a browser's cookies,
+    // Instagram refuses most media to logged-out clients ("Instagram sent an
+    // empty media response"). If the user has opted into sharing cookies,
     // pass them through — that is the only way those posts become
     // downloadable, and it uses the login they already have rather than
     // asking for credentials.

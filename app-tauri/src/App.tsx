@@ -111,22 +111,27 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
 /// do, and will it come back. Nothing else belongs here.
 const TAB_NOTICES: Partial<Record<TabId, string>> = {
   tiktok:
-    "TikTok downloads aren't working at the moment. It's a problem on TikTok's side, not with your computer or this app — there's nothing you need to change. It'll start working again by itself once the fix arrives.",
+    "If TikTok links aren't working, open Settings and check for updates — TikTok changed something and the fix ships as an update to the downloader, not to the app itself. Measured 2026-09-18: broken on the version that shipped with 0.7.6, working again after updating.",
   instagram:
-    "Instagram downloads mostly aren't working at the moment. Instagram is blocking apps like this one, so it fails even when you're signed in — it's not your account and not something you can fix here. It'll start working again by itself once the fix arrives.",
+    "Instagram downloads aren't working. Instagram is blocking apps like this one, so it fails even when you're signed in — it's not your account, and updating won't help either. Re-measured 2026-09-18 on the newest downloader, with and without browser sign-in: every attempt refused. It'll start working again by itself once the fix arrives.",
   ai: "AI search looks on YouTube only. For the other sites, paste a link.",
 };
 
 /// Tabs whose downloads are known to be failing, surfaced as a dot on the
 /// tab itself so it's visible before anyone commits to typing.
 const DEGRADED_TABS: Partial<Record<TabId, string>> = {
-  tiktok: "Not working at the moment — the problem is on TikTok's side",
+  // TikTok is deliberately no longer marked degraded. Measured 2026-09-18:
+  // the bundled downloader (2026.07.04) fails every link, and the current
+  // one (2026.08.19) downloads them — it learned to answer TikTok's
+  // challenge. So the tab is not broken, it is out of date, and the notice
+  // says where the update button is. A warning dot that stays up after the
+  // thing works is how people learn to ignore warning dots.
   // Measured: with a session Instagram accepts, every path still fails —
   // a post with HTTP 400, a profile with "unable to extract data" — while
   // instagram.com loads fine in a browser. Marking the tab is more honest
   // than letting someone paste a link and hit a wall, and it stops the
   // failure reading as "my login is set up wrong".
-  instagram: "Mostly not working at the moment — Instagram is blocking it",
+  instagram: "Not working at the moment — Instagram is blocking it",
 };
 
 /// Which tab a pasted URL belongs to, so pasting an Instagram link while the
