@@ -565,3 +565,40 @@ mod tests {
         }
     }
 }
+
+/// Run by hand (`cargo test -- --ignored --nocapture`): checks the names and
+/// paths the converter produces against real files, which is the pairing the
+/// UI depends on — the row shows the name of the file that was written, so a
+/// disagreement here puts a wrong name on screen.
+#[cfg(test)]
+mod naming {
+    use super::*;
+
+    #[test]
+    fn the_extension_is_replaced_not_appended() {
+        let got = default_dest(Path::new(r"C:\music\My Song.flac"));
+        assert_eq!(got.file_name().unwrap(), "My Song.mp3");
+    }
+
+    /// Only the last dot is an extension. "my.clip.v2.mkv" becoming "my.mp3"
+    /// would rename the user's file out from under them.
+    #[test]
+    fn only_the_final_segment_is_treated_as_an_extension() {
+        let got = default_dest(Path::new(r"C:\v\my.clip.v2.mkv"));
+        assert_eq!(got.file_name().unwrap(), "my.clip.v2.mp3");
+    }
+
+    #[test]
+    fn a_file_with_no_extension_gains_one() {
+        let got = default_dest(Path::new(r"C:\v\recording"));
+        assert_eq!(got.file_name().unwrap(), "recording.mp3");
+    }
+
+    /// Converting an MP3 resolves to the source itself, which is what makes
+    /// the caller's unique_path() guard load-bearing rather than decorative.
+    #[test]
+    fn converting_an_mp3_collides_with_its_own_source() {
+        let source = Path::new(r"C:\v\already.mp3");
+        assert_eq!(default_dest(source), source);
+    }
+}

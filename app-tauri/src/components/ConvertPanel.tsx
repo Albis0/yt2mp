@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   convertToMp3,
+  fileSize,
   formatBytes,
   formatDuration,
   onDownloadProgress,
   pickMediaFiles,
   revealFile,
+  saveACopy,
   stopDownload,
   type SourceInfo,
 } from "@/lib/api";
@@ -22,6 +24,12 @@ import {
 /// row rather than in a banner that could belong to any of them.
 
 /// One file in the list, with whatever has happened to it so far.
+///
+/// A row is not "a source file" — it is one slot in the list, which starts out
+/// holding the file you picked and afterwards holds the MP3 that replaced it.
+/// That is the whole point of the tab: you put a file in, and the MP3 is what
+/// comes back out. Keeping the original visible next to its own output would
+/// leave the user to work out which of the two rows is the one they wanted.
 interface Row {
   /// Absolute path. Doubles as the row key — the same file cannot be queued
   /// twice, which is the behaviour people expect from a drop list.
@@ -43,6 +51,41 @@ interface Row {
   outputPath: string | null;
   error: string | null;
   stopped: boolean;
+  /// True while the save dialog is open for this row.
+  saving: boolean;
+  /// Where the user last saved a copy, so the row can confirm it.
+  savedTo: string | null;
+  /// Set once the MP3 exists. From here on the row shows the MP3's name and
+  /// size, and the original is remembered only so a failed save can still say
+  /// what it came from.
+  converted: ConvertedInfo | null;
+}
+
+/// What the row shows after the conversion — the MP3, not the source.
+interface ConvertedInfo {
+  path: string;
+  name: string;
+  sizeBytes: number | null;
+}
+
+/// The name to show for a converted file, taken from the path it was actually
+/// written to.
+///
+/// Deliberately not computed from the source name. The obvious version of this
+/// — swap the extension for ".mp3" — is right until it is not: converting an
+/// MP3 cannot overwrite its own source, so the backend writes "song (2).mp3",
+/// and if *that* name is taken too it writes "(3)". A predicted name would
+/// then label a row with a file that is not the one behind it, and the Show
+/// button would open a different file than the row claims to be.
+///
+/// The backend already returns the real path. Reading the name off it cannot
+/// disagree with what is on disk.
+function mp3NameFor(outputPath: string): string {
+  const cut = Math.max(outputPath.lastIndexOf("\\"), outputPath.lastIndexOf("/"));
+  const name = cut >= 0 ? outputPath.slice(cut + 1) : outputPath;
+  // A path that somehow ends in a separator would leave nothing to show; the
+  // whole path is a poor label but an honest one.
+  return name || outputPath;
 }
 
 function rowFromSource(info: SourceInfo): Row {
@@ -61,6 +104,9 @@ function rowFromSource(info: SourceInfo): Row {
     outputPath: null,
     error: null,
     stopped: false,
+    saving: false,
+    savedTo: null,
+    converted: null,
   };
 }
 
@@ -175,12 +221,21 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
         path: row.path,
         duration: row.duration,
       });
+
+      // The row stops being the source file here and becomes the MP3. Both
+      // its name and its size come from the file that was actually written,
+      // never from a prediction about it: a row that names a file it does not
+      // point at is the one kind of wrong nobody would think to check.
+      const mp3Name = mp3NameFor(outputPath);
+      const mp3Size = await fileSize(outputPath).catch(() => null);
+
       patch(row.path, {
         running: false,
         done: true,
         percent: 100,
         stage: "Done",
         outputPath,
+        converted: { path: outputPath, name: mp3Name, sizeBytes: mp3Size },
       });
     } catch (err) {
       const message = typeof err === "string" ? err : "Conversion failed.";
@@ -209,6 +264,23 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
 
   function stopRow(row: Row) {
     if (row.id) stopDownload(row.id);
+  }
+
+  /// Saves a finished MP3 somewhere the user chooses. The file already exists
+  /// beside the original, so this is a copy — cancelling leaves everything as
+  /// it was, which is why a closed dialog is not treated as an error.
+  async function download(row: Row) {
+    if (!row.converted) return;
+    patch(row.path, { saving: true, error: null });
+    try {
+      const saved = await saveACopy(row.converted.path, row.converted.name);
+      patch(row.path, { saving: false, savedTo: saved ?? null });
+    } catch (err) {
+      patch(row.path, {
+        saving: false,
+        error: typeof err === "string" ? err : "Couldn't save that file.",
+      });
+    }
   }
 
   function removeRow(path: string) {
@@ -262,48 +334,74 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
 
       {rows.length === 0 ? (
         <p className="convert-empty">
-          Pick any audio or video file and it comes back as an MP3, saved next
-          to the original. Nothing is uploaded — the conversion runs on this
-          computer.
+          Pick any audio or video file and press Convert. The file in the list
+          turns into the MP3, ready to download wherever you want it. Nothing is
+          uploaded — the conversion runs on this computer.
         </p>
       ) : (
         <ul className="convert-list">
           {rows.map((row) => (
             <li className="convert-item" key={row.path}>
+              {/* Once converted the row *is* the MP3: it shows the MP3's
+                  name and size, not the source file's. The original is gone
+                  from the list because it is no longer the thing on offer. */}
               <div className="convert-meta">
-                <span className="convert-name" title={row.path}>
-                  {row.name}
+                <span
+                  className="convert-name"
+                  title={row.converted ? row.converted.path : row.path}
+                >
+                  {row.converted ? row.converted.name : row.name}
                 </span>
                 <span className="convert-sub">
                   {row.unreadable
                     ? row.unreadable
                     : !row.hasAudio
                       ? "No sound in this file"
-                      : [
-                          row.duration !== null
-                            ? formatDuration(row.duration)
-                            : null,
-                          row.sizeBytes !== null
-                            ? formatBytes(row.sizeBytes)
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
+                      : row.converted
+                        ? [
+                            "MP3",
+                            row.duration !== null
+                              ? formatDuration(row.duration)
+                              : null,
+                            row.converted.sizeBytes !== null
+                              ? formatBytes(row.converted.sizeBytes)
+                              : null,
+                            row.savedTo ? "Saved" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : [
+                            row.duration !== null
+                              ? formatDuration(row.duration)
+                              : null,
+                            row.sizeBytes !== null
+                              ? formatBytes(row.sizeBytes)
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                 </span>
               </div>
 
               <div className="convert-state">
                 {row.done ? (
                   <>
-                    <div className="dl-track">
-                      <div className="dl-fill dl-fill-done" />
-                    </div>
-                    <span className="dl-status">Saved</span>
+                    {/* No progress bar on a finished row: the bar answered
+                        "how far along", and that question is closed. What is
+                        live now is the MP3 and what can be done with it. */}
+                    <button
+                      type="button"
+                      className="convert-download-btn"
+                      onClick={() => download(row)}
+                      disabled={row.saving}
+                    >
+                      {row.saving ? "Saving…" : "Download"}
+                    </button>
                     {row.outputPath ? (
                       <button
                         type="button"
                         className="dl-ctrl-btn"
-                        onClick={() => revealFile(row.outputPath!)}
+                        onClick={() => revealFile(row.savedTo ?? row.outputPath!)}
                       >
                         Show
                       </button>
