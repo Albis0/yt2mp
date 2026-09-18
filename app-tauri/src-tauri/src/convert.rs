@@ -566,17 +566,27 @@ mod tests {
     }
 }
 
-/// Run by hand (`cargo test -- --ignored --nocapture`): checks the names and
-/// paths the converter produces against real files, which is the pairing the
-/// UI depends on — the row shows the name of the file that was written, so a
+/// The names the converter produces. This is the pairing the UI depends on —
+/// the row shows the name of the file that was actually written, so a
 /// disagreement here puts a wrong name on screen.
+///
+/// Paths are built with PathBuf rather than written as literals: a Windows
+/// literal has no separator at all on Linux, so the whole string becomes one
+/// filename and the test asserts something different there than it does here.
+/// That is exactly how these first went red in CI while passing locally.
 #[cfg(test)]
 mod naming {
     use super::*;
 
+    fn in_a_folder(name: &str) -> PathBuf {
+        let mut p = PathBuf::from("music");
+        p.push(name);
+        p
+    }
+
     #[test]
     fn the_extension_is_replaced_not_appended() {
-        let got = default_dest(Path::new(r"C:\music\My Song.flac"));
+        let got = default_dest(&in_a_folder("My Song.flac"));
         assert_eq!(got.file_name().unwrap(), "My Song.mp3");
     }
 
@@ -584,13 +594,13 @@ mod naming {
     /// would rename the user's file out from under them.
     #[test]
     fn only_the_final_segment_is_treated_as_an_extension() {
-        let got = default_dest(Path::new(r"C:\v\my.clip.v2.mkv"));
+        let got = default_dest(&in_a_folder("my.clip.v2.mkv"));
         assert_eq!(got.file_name().unwrap(), "my.clip.v2.mp3");
     }
 
     #[test]
     fn a_file_with_no_extension_gains_one() {
-        let got = default_dest(Path::new(r"C:\v\recording"));
+        let got = default_dest(&in_a_folder("recording"));
         assert_eq!(got.file_name().unwrap(), "recording.mp3");
     }
 
@@ -598,7 +608,15 @@ mod naming {
     /// the caller's unique_path() guard load-bearing rather than decorative.
     #[test]
     fn converting_an_mp3_collides_with_its_own_source() {
-        let source = Path::new(r"C:\v\already.mp3");
-        assert_eq!(default_dest(source), source);
+        let source = in_a_folder("already.mp3");
+        assert_eq!(default_dest(&source), source);
+    }
+
+    /// The folder must survive, or the MP3 would land somewhere other than
+    /// beside its source.
+    #[test]
+    fn the_output_stays_in_the_sources_folder() {
+        let got = default_dest(&in_a_folder("song.wav"));
+        assert_eq!(got.parent(), Some(Path::new("music")));
     }
 }
