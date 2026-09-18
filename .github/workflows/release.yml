@@ -103,6 +103,31 @@ jobs:
       - name: Fetch bundled binaries
         run: bun run fetch:binaries
 
+      # Which downloader actually went into this build.
+      #
+      # Nothing pins it — the fetch script asks for "latest" — which is what
+      # lets a release pick up an upstream extractor fix without a code
+      # change. The cost is that the tag alone does not tell you what shipped,
+      # and that mattered: TikTok was broken in 0.7.6 purely because the
+      # bundled downloader predated TikTok's change, and answering "which
+      # version is in there?" afterwards meant unpacking the installer and
+      # still not being able to tell, because the binary is compressed.
+      #
+      # So it is recorded here, in the run that built it.
+      - name: Record the bundled downloader version
+        shell: bash
+        working-directory: app-tauri
+        run: |
+          YTDLP=$(ls src-tauri/resources/yt-dlp* | head -n1)
+          chmod +x "$YTDLP" || true
+          VERSION=$("$YTDLP" --version 2>/dev/null || echo "unknown")
+          echo "yt-dlp bundled in this build: $VERSION"
+          {
+            echo "### Bundled downloader"
+            echo ""
+            echo "yt-dlp \`$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # GROQ_KEYS powers AI search. If the secret is unset, AI search falls
       # back to searching the raw query and the build still succeeds.
       - name: Write .env
