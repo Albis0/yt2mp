@@ -196,10 +196,23 @@ jobs:
           path: meta/*.json
           if-no-files-found: error
 
-      - name: Attach to the release
+      # draft: true is the whole point of this step.
+      #
+      # Without it each platform publishes the moment it finishes, so a run
+      # where one platform fails leaves a live, public release carrying only
+      # the other one. That happened on 0.7.6: Windows built and signed,
+      # Linux failed its tests, and the tag was left advertising a release
+      # with one installer in it and no manifest. The matrix comment above
+      # already says a half-published release is worse than a clean failure —
+      # this is what makes that true rather than aspirational.
+      #
+      # A draft is invisible to everyone but the repo owner, and the manifest
+      # job below publishes it only once both platforms have uploaded.
+      - name: Attach to the release (still a draft)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: true
           files: |
             ${{ steps.collect.outputs.path }}
             ${{ steps.collect.outputs.path }}.sig
@@ -277,7 +290,43 @@ jobs:
           console.log(fs.readFileSync("latest.json", "utf8"));
           EOF
 
-      - uses: softprops/action-gh-release@v2
+      # The one step that makes a release visible. Everything above uploaded
+      # into a draft, and this runs only because `needs: build` succeeded for
+      # both platforms and the manifest above refused to be written without
+      # both signatures — so by the time anyone can see this release, it is
+      # complete.
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
           files: latest.json
+
+  # A build that fails leaves the draft behind, holding whichever platform did
+  # finish. Nobody can see it, but the next run for this tag would upload
+  # alongside those stale files rather than replacing them — so the tag has to
+  # be left as it was found: no release at all.
+  #
+  # Only ever deletes a draft. A published release is something people may
+  # already have downloaded, and no failure here is worth taking that away.
+  clean-up-a-failed-release:
+    needs: [build, manifest]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove the unpublished draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          ID=$(gh api "repos/$REPO/releases"                  --jq ".[] | select(.tag_name==\"$TAG\" and .draft==true) | .id"                | head -n1)
+
+          if [ -z "$ID" ]; then
+            echo "No draft for $TAG — nothing to clean up."
+            exit 0
+          fi
+
+          echo "Deleting draft release $ID for $TAG."
+          gh api -X DELETE "repos/$REPO/releases/$ID"
