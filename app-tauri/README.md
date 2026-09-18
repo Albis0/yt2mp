@@ -133,6 +133,42 @@ Comma-separated — if one key is rate-limited (429) or rejected (401), the app
 rotates to the next. If `GROQ_KEYS` is missing or every key fails, AI search
 falls back to searching your raw text directly instead of breaking.
 
+## Finding videos on a page
+
+The **Find on page** tab takes a page that is not itself a video — an article,
+a lesson, a listing — and looks through it for anything downloadable. Two
+passes, because they cost very different amounts of time and the screen says
+which one is running:
+
+**Looking at the page** hands the URL to yt-dlp as-is and lets its generic
+extractor find an embedded player. One request, a few seconds. Measured, it
+answers "Unsupported URL" on most pages and returns at most one item on the
+rest, so finding nothing here is the normal outcome rather than a failure.
+
+**Going through every link** fetches the page, harvests every `href` and `src`
+out of it, and asks yt-dlp which of them it recognises — all in one process,
+via a batch file. It is only run when asked for.
+
+This is not a crawler, for one measured reason: `--use-extractors
+default,-generic` makes yt-dlp reject an unrecognised URL *by its shape alone*,
+with no network request. 300 links off a Wikipedia article were rejected in
+1.5 seconds having contacted nothing. Only links already pointing at a known
+media site cost a real request, at roughly 1.2s each.
+
+Two things the harvest has to do that are not obvious, both found by measuring
+rather than reasoning:
+
+- **HTML entities are decoded first.** `href="...?v=x&amp;t=1"` is the correct
+  way to write that link, so this is what a well-formed page looks like, not a
+  malformed one.
+- **`"videoId":"..."` is read out of embedded JSON.** A YouTube channel page
+  carries no `href` for its videos at all; they exist only in the page's JSON.
+  Without this the tab found nothing on exactly the pages people would try it
+  on first.
+
+A playlist or channel link sitting in a page's footer is capped at five
+entries. Uncapped, one such link expanded a 30-video page into 609 rows.
+
 ## Converting files you already have
 
 The **To MP3** tab is the one entry point with no link in it: pick files
@@ -144,6 +180,13 @@ There is no accepted-formats list on purpose. ffmpeg decodes what it decodes,
 and every picked file is probed before anything runs, so a file it cannot read
 says so on its own row rather than failing halfway through a queue. Files with
 no audio track are listed and refused for the same reason.
+
+Once a file converts, its row stops being the source file and becomes the MP3:
+the name, size and Download button all belong to the new file. Keeping the
+original alongside its own output would leave two rows to tell apart, and the
+source is still in the folder either way. Download saves a copy wherever you
+choose; the MP3 stays beside the original regardless, so the row keeps working
+afterwards.
 
 Conversions share the download path's registry and progress channel, so Stop
 works identically. There is no Pause: a local conversion is CPU-bound and
@@ -202,8 +245,22 @@ That is inherent to pausing a live transfer.
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-69 tests covering URL validation, playlist detection, filename sanitising,
-progress-line parsing, the format-selector chain, browser detection, and the
-MP3 converter. Two of them drive the bundled ffmpeg end to end — they build a
-fixture, convert it, and check the result is real audio — and skip themselves
-with a note when the binaries have not been fetched yet.
+91 tests covering URL validation, playlist detection, filename sanitising,
+progress-line parsing, the format-selector chain, browser detection, the MP3
+converter, and the page scanner's link harvesting. Two of them drive the
+bundled ffmpeg end to end — they build a fixture, convert it, and check the
+result is real audio — and skip themselves with a note when the binaries have
+not been fetched yet.
+
+Two further tests go out to the live internet and are `#[ignore]`d, so CI never
+fails because a site was slow or a page changed:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib -- --ignored --nocapture
+```
+
+They are worth running by hand after touching the scanner. One of them caught
+a bug that made the feature find nothing at all: `--ignore-errors` makes yt-dlp
+exit non-zero whenever *any* input failed, which in a batch harvested from a
+page is always, and the non-zero path was discarding stdout — throwing away 52
+real results from a scan that had worked.
