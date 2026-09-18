@@ -10,6 +10,7 @@ mod browsers;
 mod convert;
 mod groq;
 mod platform;
+mod scan;
 mod settings;
 mod suspend;
 mod tools;
@@ -287,6 +288,104 @@ async fn pick_media_files(app: AppHandle) -> Result<Vec<ProbedFile>, String> {
     }
 
     Ok(out)
+}
+
+/// Saves an already-converted MP3 somewhere else, via the save dialog.
+///
+/// The converter writes beside the original because that is what makes it
+/// usable on twenty files at once. This is the escape hatch for the one file
+/// someone wants somewhere specific — it copies rather than moves, so the
+/// list's own row keeps working afterwards.
+#[tauri::command]
+async fn save_a_copy(app: AppHandle, path: String, name: String) -> Result<Option<String>, String> {
+    let source = PathBuf::from(&path);
+    if !source.is_file() {
+        return Err("That file isn't where it was — it may have been moved.".into());
+    }
+
+    let start_dir = app
+        .path()
+        .audio_dir()
+        .or_else(|_| app.path().download_dir())
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let chosen = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_directory(&start_dir)
+                .set_file_name(&name)
+                .add_filter("MP3 audio", &["mp3"])
+                .blocking_save_file()
+        }
+    })
+    .await
+    .map_err(|e| format!("Save dialog failed: {e}"))?;
+
+    // Closing the dialog is a decision, not a failure: None travels back as a
+    // plain result so the UI leaves the row exactly as it was.
+    let Some(chosen) = chosen else {
+        return Ok(None);
+    };
+
+    let dest = chosen
+        .into_path()
+        .map_err(|_| "That save location can't be used.".to_string())?;
+
+    if dest == source {
+        return Ok(Some(dest.to_string_lossy().into_owned()));
+    }
+
+    tokio::fs::copy(&source, &dest)
+        .await
+        .map_err(|_| "Couldn't save it there. Try another folder.".to_string())?;
+
+    Ok(Some(dest.to_string_lossy().into_owned()))
+}
+
+/// The size of a file on disk, for showing the MP3 that replaced a source in
+/// the converter list. None rather than an error: a missing size is worth
+/// leaving blank, not worth a failure.
+#[tauri::command]
+async fn file_size(path: String) -> Option<u64> {
+    tokio::fs::metadata(&path).await.ok().map(|m| m.len())
+}
+
+/// Looks for downloadable media on a page that is not itself a video page.
+///
+/// Split into two commands rather than one, because they cost different
+/// things and the user is told which is running. `scan_page_quick` is a few
+/// seconds and always safe; `scan_page_deep` fetches the page and tests its
+/// links, and is only run when the user asks for it after the quick pass came
+/// back empty.
+#[tauri::command]
+async fn scan_page_quick(url: String) -> Result<Vec<scan::Found>, String> {
+    let clean = url.trim();
+    if clean.is_empty() {
+        return Err("Paste the address of the page you want to search.".into());
+    }
+    if platform::detect(clean).is_none() {
+        return Err("That doesn't look like a link. Paste a page address.".into());
+    }
+
+    Ok(scan::quick(clean).await)
+}
+
+/// The deep pass. Returns the merged list, so the UI replaces its rows with
+/// this rather than having to combine two results itself.
+#[tauri::command]
+async fn scan_page_deep(url: String) -> Result<Vec<scan::Found>, String> {
+    let clean = url.trim();
+    if clean.is_empty() {
+        return Err("Paste the address of the page you want to search.".into());
+    }
+    if platform::detect(clean).is_none() {
+        return Err("That doesn't look like a link. Paste a page address.".into());
+    }
+
+    let deep = scan::deep(clean).await?;
+    Ok(scan::merge(scan::quick(clean).await, deep))
 }
 
 /// One picked file: either something convertible, or a named reason it is not.
@@ -684,6 +783,10 @@ pub fn run() {
             pick_folder,
             pick_media_files,
             convert_to_mp3,
+            scan_page_quick,
+            scan_page_deep,
+            save_a_copy,
+            file_size,
             stop_download,
             pause_download,
             resume_download,

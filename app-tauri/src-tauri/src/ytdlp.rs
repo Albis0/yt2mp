@@ -384,6 +384,51 @@ pub async fn run_ytdlp(
     args: Vec<String>,
     platform: crate::platform::Platform,
 ) -> Result<String, String> {
+    run_ytdlp_within(args, platform, INFO_TIMEOUT).await
+}
+
+/// `run_ytdlp` with the deadline named by the caller.
+///
+/// INFO_TIMEOUT is sized for one lookup, which is the right budget for every
+/// other caller. The page scan is the exception: it asks about a whole page's
+/// worth of links in a single process on purpose, so the work it is allowed
+/// to do is bounded by how many links it was given, not by how long any one
+/// of them takes.
+/// `run_ytdlp_within`, but a non-zero exit is not by itself a failure.
+///
+/// Only for callers passing `--ignore-errors` over a batch of URLs. yt-dlp
+/// exits non-zero when *any* input failed, and a batch assembled from a page's
+/// links is expected to be mostly failures — that is what filtering it means.
+/// It still prints every success to stdout, so treating the exit code as fatal
+/// throws away the entire result of a scan that worked.
+///
+/// The error is still returned when nothing at all came back, so a genuinely
+/// broken run does not masquerade as an empty page.
+pub async fn run_ytdlp_partial(
+    args: Vec<String>,
+    platform: crate::platform::Platform,
+    deadline: std::time::Duration,
+) -> Result<String, String> {
+    match run_ytdlp_within(args, platform, deadline).await {
+        Ok(out) => Ok(out),
+        Err(e) => match e.strip_prefix(PARTIAL_MARKER) {
+            Some(out) => Ok(out.to_string()),
+            None => Err(e),
+        },
+    }
+}
+
+/// Prefix used to carry partial stdout back through the Err path, so
+/// `run_ytdlp_within` keeps one return type and every other caller keeps its
+/// current behaviour. A NUL cannot appear in yt-dlp's own messages, so this
+/// can never collide with a real error.
+const PARTIAL_MARKER: &str = "\u{0}partial\u{0}";
+
+pub async fn run_ytdlp_within(
+    args: Vec<String>,
+    platform: crate::platform::Platform,
+    deadline: std::time::Duration,
+) -> Result<String, String> {
     let mut cmd = base_command(ytdlp_path());
     cmd.args(js_runtime_args());
     cmd.args(platform_args(platform));
@@ -393,12 +438,20 @@ pub async fn run_ytdlp(
         format!("Could not start yt-dlp ({e}). The bundled binary may be missing.")
     })?;
 
-    let output = tokio::time::timeout(INFO_TIMEOUT, child.wait_with_output())
+    let output = tokio::time::timeout(deadline, child.wait_with_output())
         .await
         .map_err(|_| "Timed out — yt-dlp took too long to respond.".to_string())?
         .map_err(|e| format!("yt-dlp failed: {e}"))?;
 
     if !output.status.success() {
+        // A run that failed but still produced output had *some* of its inputs
+        // work. Whether that counts as a failure is the caller's decision, so
+        // the output travels with the error rather than being dropped here.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.trim().is_empty() {
+            return Err(format!("{PARTIAL_MARKER}{stdout}"));
+        }
+
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(if stderr.is_empty() {
             format!("yt-dlp exited with {}", output.status)
@@ -1089,6 +1142,27 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The bug this guards: a scan of a page found 52 videos, and every one of
+    /// them was thrown away. --ignore-errors makes yt-dlp exit non-zero if any
+    /// input failed, which in a batch harvested from a page is always, and the
+    /// non-zero path discarded stdout before anyone could read it.
+    #[test]
+    fn a_partly_successful_batch_keeps_what_worked() {
+        let smuggled = format!("{PARTIAL_MARKER}https://x/1\tTitle\n");
+        assert_eq!(
+            smuggled.strip_prefix(PARTIAL_MARKER),
+            Some("https://x/1\tTitle\n")
+        );
+    }
+
+    /// A real error must not be mistaken for partial output, or a broken run
+    /// would read to the user as "that page had nothing on it".
+    #[test]
+    fn a_genuine_error_is_not_mistaken_for_partial_output() {
+        let real = "Couldn't reach the internet. Check your connection and try again.";
+        assert_eq!(real.strip_prefix(PARTIAL_MARKER), None);
+    }
+
 
     #[test]
     fn progress_line_parses_percent() {

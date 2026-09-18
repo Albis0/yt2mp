@@ -191,6 +191,57 @@ export function convertToMp3(args: {
   });
 }
 
+/**
+ * Saves an already-converted MP3 somewhere else, through the save dialog.
+ *
+ * Copies rather than moves, so the converter row keeps working afterwards.
+ * Resolves with null when the dialog is closed — a decision, not a failure.
+ */
+export function saveACopy(path: string, name: string): Promise<string | null> {
+  return invoke<string | null>("save_a_copy", { path, name });
+}
+
+/** Size of a file on disk, or null. Used to show the finished MP3's size. */
+export function fileSize(path: string): Promise<number | null> {
+  return invoke<number | null>("file_size", { path });
+}
+
+/// One thing a page scan turned up.
+export interface Found {
+  /** The link to hand to the normal download path. */
+  url: string;
+  title: string;
+  /** Seconds, or 0 when the site did not say — common on a flat listing. */
+  duration: number;
+  uploader: string;
+  /** The site it turned out to live on, e.g. "Youtube". */
+  site: string;
+  /** How it was found. Shown on the row so the list explains itself. */
+  how: "embedded" | "linked";
+}
+
+/**
+ * The quick pass: asks the extractor to look at the page as-is, which finds an
+ * embedded player when there is an obvious one. A few seconds, one request.
+ *
+ * An empty result is the normal answer for most pages, not an error — it is
+ * the signal for offering the deep scan.
+ */
+export function scanPageQuick(url: string): Promise<Found[]> {
+  return invoke<Found[]>("scan_page_quick", { url });
+}
+
+/**
+ * The deep pass: fetches the page, pulls out every link, and asks the
+ * extractor which ones it recognises. Returns the merged list, quick results
+ * included, so the caller replaces its rows with this.
+ *
+ * Slower and only run when the user asks for it.
+ */
+export function scanPageDeep(url: string): Promise<Found[]> {
+  return invoke<Found[]>("scan_page_deep", { url });
+}
+
 export function stopDownload(id: string): Promise<void> {
   return invoke("stop_download", { id });
 }

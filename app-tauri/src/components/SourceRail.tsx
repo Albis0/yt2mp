@@ -15,7 +15,7 @@ import type { Platform } from "@/lib/api";
 /// Both belong in the same rail because from the user's point of view they are
 /// just other ways to start, and a separate control would mean competing mode
 /// switches on one screen.
-export type TabId = Platform | "ai" | "convert";
+export type TabId = Platform | "ai" | "convert" | "scan";
 
 interface TabDef {
   id: TabId;
@@ -121,6 +121,20 @@ function ConvertIcon() {
   );
 }
 
+/// A magnifier over a page: looking *inside* something that is not itself a
+/// video. The page outline is the point — every other icon in this rail stands
+/// for a thing you already have the link to.
+function ScanIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M5 2.5h8.5L19 8v3.1a5.6 5.6 0 0 0-1.8-.8V9h-4.7V4.3H6.8v15.4h4.6c.2.7.5 1.3.9 1.8H5a1.8 1.8 0 0 1-1.8-1.8V4.3A1.8 1.8 0 0 1 5 2.5zm10.6 9.7a4.2 4.2 0 0 1 3.3 6.8l2.4 2.4-1.3 1.3-2.4-2.4a4.2 4.2 0 1 1-2-8.1zm0 1.8a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z"
+      />
+    </svg>
+  );
+}
+
 /// Order matters: the sites people reach for most sit at the top. "Any link"
 /// is near the end because it is the catch-all, and AI search sits beside it
 /// since both are "I don't have a specific site in mind" entry points.
@@ -135,6 +149,7 @@ export const TABS: TabDef[] = [
   { id: "other", label: "Any link", short: "Link", icon: LinkIcon },
   { id: "ai", label: "AI search", short: "AI", icon: SparkIcon },
   { id: "convert", label: "To MP3", short: "MP3", icon: ConvertIcon },
+  { id: "scan", label: "Find on page", short: "Find", icon: ScanIcon },
 ];
 
 interface SourceRailProps {

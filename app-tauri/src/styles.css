@@ -161,6 +161,10 @@ button {
 /* A green, because it is the only tab that is not a site and has no brand to
    borrow from — and it keeps its distance from the blue "Any link" beside it. */
 .page-convert { --accent: #1c7a4b; --accent-press: #16643d; }
+/* An amber-brown for the page search: it sits next to the converter's green
+   in the rail, and it is the one tab that goes looking rather than fetching
+   something already named. */
+.page-scan { --accent: #9a5518; --accent-press: #7f4513; }
 
 :root[data-theme="dark"] .page-youtube { --accent: #ff4d67; --accent-press: #ff7186; }
 :root[data-theme="dark"] .page-tiktok { --accent: #25dbd3; --accent-press: #5ae7e1; }
@@ -170,13 +174,15 @@ button {
 :root[data-theme="dark"] .page-other { --accent: #5b8dff; --accent-press: #7ba3ff; }
 :root[data-theme="dark"] .page-ai { --accent: #e3b45c; --accent-press: #edc77e; }
 :root[data-theme="dark"] .page-convert { --accent: #3fd48b; --accent-press: #69dea6; }
+:root[data-theme="dark"] .page-scan { --accent: #f0a05a; --accent-press: #f5b57e; }
 
 /* The filled controls need dark text on the light accents, or the
    label disappears into the fill. */
 :root[data-theme="dark"] .page-tiktok,
 :root[data-theme="dark"] .page-twitter,
 :root[data-theme="dark"] .page-ai,
-:root[data-theme="dark"] .page-convert {
+:root[data-theme="dark"] .page-convert,
+:root[data-theme="dark"] .page-scan {
   --on-accent: #15161a;
 }
 
@@ -1247,6 +1253,204 @@ button {
 
 .convert-remove:hover {
   color: var(--danger);
+}
+
+/* The finished row's own button. Filled rather than outlined like the
+   other row controls: once a file has converted, taking the MP3 somewhere
+   is the only thing left to do with that row, so it should read as the
+   action and not as one option among several. */
+.convert-download-btn {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 550;
+  white-space: nowrap;
+  transition: background 0.14s ease;
+}
+
+.convert-download-btn:hover:not(:disabled) {
+  background: var(--accent-press);
+}
+
+.convert-download-btn:disabled {
+  opacity: 0.6;
+}
+
+/* ---------- Find on page ----------
+   Same frame as the converter and the history list. A third way of drawing
+   a list of rows in one window would be a third thing to keep in step, and
+   these rows answer the same shape of question: what is it, and what is
+   happening to it. */
+
+.scan {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scan-form {
+  display: flex;
+  gap: 8px;
+}
+
+.scan-lead,
+.scan-wait-sub {
+  color: var(--text-2);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* The waiting block carries the weight of this screen: the deep pass runs
+   long enough that an unexplained spinner reads as a hang. Centred and
+   given room so it is clearly the state of the page, not a footnote. */
+.scan-wait,
+.scan-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 32px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+.scan-wait-title {
+  font-size: 0.95rem;
+  font-weight: 560;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.scan-wait-sub,
+.scan-empty .scan-wait-sub {
+  max-width: 42ch;
+}
+
+.scan-empty .submit-btn {
+  margin-top: 6px;
+}
+
+.scan-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scan-count {
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-right: auto;
+}
+
+/* One switch for the whole list: the point of scanning a page is to take
+   several things off it, so audio-or-video is chosen once. */
+.scan-format {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.scan-format-btn {
+  background: none;
+  border: none;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.scan-format-btn.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 550;
+}
+
+.scan-deeper-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+
+.scan-deeper-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.scan-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.scan-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.scan-item:last-child {
+  border-bottom: none;
+}
+
+.scan-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scan-title {
+  font-size: 0.9rem;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-sub {
+  font-size: 0.78rem;
+  color: var(--text-3);
+}
+
+.scan-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 560px) {
+  .scan-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .scan-state {
+    justify-content: flex-start;
+    min-width: 0;
+  }
 }
 
 /* Narrow windows: the status column drops under the file name

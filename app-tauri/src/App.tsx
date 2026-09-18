@@ -27,6 +27,7 @@ import SourceRail, { TABS, type TabId } from "@/components/SourceRail";
 import WindowControls from "@/components/WindowControls";
 import SettingsPanel from "@/components/SettingsPanel";
 import ConvertPanel from "@/components/ConvertPanel";
+import ScanPanel from "@/components/ScanPanel";
 import FirstRun from "@/components/FirstRun";
 import UpdateBanner from "@/components/UpdateBanner";
 import { toolsStatus, type ToolsStatus } from "@/lib/api";
@@ -79,6 +80,7 @@ const TAB_LEADS: Record<TabId, string> = {
   other: "Paste any link — yt-dlp handles around 1750 sites.",
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
   convert: "Turn files you already have into MP3s, without uploading them anywhere.",
+  scan: "Give it a page that isn't a video itself and it looks through it for anything downloadable.",
 };
 
 /// Per-tab copy. The placeholder shows the shape of link that tab expects,
@@ -95,6 +97,8 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
   // The convert tab has no input field — it uses a file picker instead — so
   // this is never rendered. It exists because the record is keyed by tab.
   convert: "",
+  // Likewise: the scan tab carries its own input, with its own placeholder.
+  scan: "",
 };
 
 /// Tabs with a caveat worth stating before the user hits it. Empty string
@@ -458,7 +462,8 @@ export default function App() {
   // The converter is never "bare": its own list is the subject of the screen
   // from the first file on, and centring it would move the whole list every
   // time a file was added.
-  const bare = tab !== "convert" && !info && !playlist && history.length === 0;
+  const bare =
+    tab !== "convert" && tab !== "scan" && !info && !playlist && history.length === 0;
   const tabLabel = TABS.find((t) => t.id === tab)?.label ?? "yt2mp";
 
   return (
@@ -572,7 +577,7 @@ export default function App() {
               is not centred like the empty state, and without it the tab opens
               on a bare "Choose files" button that never says what it converts
               to. */}
-          {bare || tab === "convert" ? (
+          {bare || tab === "convert" || tab === "scan" ? (
             <div className="entry-head">
               <h1 className="entry-title">{tabLabel}</h1>
               <p className="entry-lead">{TAB_LEADS[tab]}</p>
@@ -584,6 +589,8 @@ export default function App() {
               this tab would be the most prominent dead control on screen. */}
           {tab === "convert" ? (
             <ConvertPanel onBusyChange={setConverting} />
+          ) : tab === "scan" ? (
+            <ScanPanel onBusyChange={setConverting} />
           ) : (
           <form className="download-form" onSubmit={handleSubmit}>
             <input
