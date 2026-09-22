@@ -147,9 +147,28 @@ export interface SourceInfo {
   sizeBytes: number | null;
   /** Seconds, or null when the container reports none — not an error. */
   duration: number | null;
-  /** False when there is no audio stream; the UI refuses to queue those. */
+  /** False when there is no audio stream; the UI refuses to queue those for MP3. */
   hasAudio: boolean;
+  /**
+   * True when the file has a picture in it.
+   *
+   * Not a gate, unlike `hasAudio`: an audio file asked to become an MP4 is a
+   * legitimate thing to want, so this only drives what a row says about
+   * itself.
+   */
+  hasVideo: boolean;
 }
+
+/**
+ * What a converted file should become.
+ *
+ * Deliberately narrower than DownloadFormat, which this looks like but is
+ * not: that one picks a stream to fetch from a site, this one picks an
+ * encoder to run locally. Keeping them separate means adding a download
+ * format later cannot silently offer a conversion target ffmpeg has no
+ * arguments for.
+ */
+export type ConvertTarget = "mp3" | "mp4";
 
 /// One picked file: convertible, or a named reason it is not.
 ///
@@ -164,7 +183,7 @@ export type PickedFile =
  * Opens a file picker for the converter tab.
  *
  * No extension filter is offered: the tab's promise is that whatever goes in
- * comes out as an MP3, and a filter listing a dozen extensions would both
+ * comes out converted, and a filter listing a dozen extensions would both
  * misrepresent that and hide a working file nobody thought to include.
  * Resolves with an empty array if the dialog is closed.
  */
@@ -173,26 +192,33 @@ export function pickMediaFiles(): Promise<PickedFile[]> {
 }
 
 /**
- * Converts one file already on disk to MP3, written beside the original.
+ * Converts one file already on disk, written beside the original.
+ *
+ * Resolves with the path that was actually written, which is not always the
+ * predictable one: converting an MP4 to MP4 cannot overwrite its own source,
+ * so the backend picks a free name. Callers must read the result rather than
+ * computing it.
  *
  * Reports progress on the same channel as downloads, so `onDownloadProgress`
  * works here unchanged. Rejects with "Conversion stopped" when the user stops
  * it — a deliberate action, which the UI treats as such rather than a failure.
  */
-export function convertToMp3(args: {
+export function convertFile(args: {
   id: string;
   path: string;
+  target: ConvertTarget;
   duration: number | null;
 }): Promise<string> {
-  return invoke<string>("convert_to_mp3", {
+  return invoke<string>("convert_file", {
     id: args.id,
     path: args.path,
+    target: args.target,
     duration: args.duration,
   });
 }
 
 /**
- * Saves an already-converted MP3 somewhere else, through the save dialog.
+ * Saves an already-converted file somewhere else, through the save dialog.
  *
  * Copies rather than moves, so the converter row keeps working afterwards.
  * Resolves with null when the dialog is closed — a decision, not a failure.
@@ -201,7 +227,7 @@ export function saveACopy(path: string, name: string): Promise<string | null> {
   return invoke<string | null>("save_a_copy", { path, name });
 }
 
-/** Size of a file on disk, or null. Used to show the finished MP3's size. */
+/** Size of a file on disk, or null. Used to show the converted file's size. */
 export function fileSize(path: string): Promise<number | null> {
   return invoke<number | null>("file_size", { path });
 }

@@ -290,12 +290,17 @@ async fn pick_media_files(app: AppHandle) -> Result<Vec<ProbedFile>, String> {
     Ok(out)
 }
 
-/// Saves an already-converted MP3 somewhere else, via the save dialog.
+/// Saves an already-converted file somewhere else, via the save dialog.
 ///
 /// The converter writes beside the original because that is what makes it
 /// usable on twenty files at once. This is the escape hatch for the one file
 /// someone wants somewhere specific — it copies rather than moves, so the
 /// list's own row keeps working afterwards.
+///
+/// The dialog's filter is taken from the file's own extension rather than
+/// being fixed to MP3: offering "MP3 audio" while saving an MP4 would have
+/// the dialog append `.mp3` to a video on the platforms that enforce their
+/// filter, producing a file that will not open.
 #[tauri::command]
 async fn save_a_copy(app: AppHandle, path: String, name: String) -> Result<Option<String>, String> {
     let source = PathBuf::from(&path);
@@ -309,15 +314,31 @@ async fn save_a_copy(app: AppHandle, path: String, name: String) -> Result<Optio
         .or_else(|_| app.path().download_dir())
         .unwrap_or_else(|_| PathBuf::from("."));
 
+    // Whatever the file already is. An unknown extension gets no filter at
+    // all, which is better than a wrong one.
+    let extension = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase());
+
     let chosen = tauri::async_runtime::spawn_blocking({
         let app = app.clone();
         move || {
-            app.dialog()
+            let mut dialog = app
+                .dialog()
                 .file()
                 .set_directory(&start_dir)
-                .set_file_name(&name)
-                .add_filter("MP3 audio", &["mp3"])
-                .blocking_save_file()
+                .set_file_name(&name);
+
+            if let Some(extension) = extension.as_deref() {
+                let label = match extension {
+                    "mp3" => "MP3 audio",
+                    "mp4" => "MP4 video",
+                    other => return dialog.add_filter(other, &[other]).blocking_save_file(),
+                };
+                dialog = dialog.add_filter(label, &[extension]);
+            }
+
+            dialog.blocking_save_file()
         }
     })
     .await
@@ -396,17 +417,24 @@ enum ProbedFile {
     Bad { path: String, name: String, reason: String },
 }
 
-/// Converts one already-on-disk file to MP3, beside the original.
+/// Converts one already-on-disk file to MP3 or MP4, beside the original.
 ///
 /// Shares the download path's registry and its `download:progress` channel, so
 /// the same stop button and the same progress plumbing work here — a converted
 /// row and a downloaded row behave identically from the UI's side.
+///
+/// One command for both targets rather than two: everything around the
+/// conversion — the registry entry, the progress channel, the collision guard,
+/// deleting a half-written file — is identical, and only the arguments handed
+/// to ffmpeg differ. Splitting it would duplicate all of that so the two
+/// copies could drift.
 #[tauri::command]
-async fn convert_to_mp3(
+async fn convert_file(
     app: AppHandle,
     downloads: State<'_, Downloads>,
     id: String,
     path: String,
+    target: convert::Target,
     duration: Option<f64>,
 ) -> Result<String, String> {
     let source = PathBuf::from(&path);
@@ -414,11 +442,24 @@ async fn convert_to_mp3(
         return Err("That file isn't where it was — it may have been moved.".into());
     }
 
-    // Never write over the file being read: converting "song.mp3" would
-    // otherwise truncate the source ffmpeg is still decoding.
-    let desired = convert::default_dest(&source);
+    // The UI already hides Convert on a soundless row, but the rule belongs
+    // here as well: the probe happened when the file was picked, and a file
+    // can be replaced on disk between then and now. ffmpeg would otherwise
+    // write a valid, empty MP3 and the row would call it done.
+    if target.needs_audio() {
+        let info = convert::probe(&source).await?;
+        if !info.has_audio {
+            return Err(format!("{} has no sound in it.", info.name));
+        }
+    }
+
+    // Never write over the file being read: converting "song.mp3" to MP3, or
+    // an MP4 to MP4, would otherwise truncate the source ffmpeg is still
+    // decoding. The MP4 case is the common one — re-encoding a video that
+    // will not play is most of why this target exists.
+    let desired = convert::default_dest(&source, target);
     let dest = if desired == source {
-        unique_path(&source.with_extension("").with_extension("mp3"))
+        unique_path(&source.with_extension("").with_extension(target.extension()))
     } else {
         unique_path(&desired)
     };
@@ -429,7 +470,7 @@ async fn convert_to_mp3(
     }
 
     let emit_id = id.clone();
-    let result = convert::to_mp3(&source, &dest, duration, rx, |percent, stage| {
+    let result = convert::convert(&source, &dest, target, duration, rx, |percent, stage| {
         let _ = app.emit(
             "download:progress",
             ProgressEvent {
@@ -446,7 +487,7 @@ async fn convert_to_mp3(
     match result {
         Ok(()) => Ok(dest.to_string_lossy().into_owned()),
         Err(e) => {
-            // A half-written MP3 is worse than none: it plays, badly, and
+            // A half-written file is worse than none: it plays, badly, and
             // looks like a finished file in the folder.
             let _ = std::fs::remove_file(&dest);
             Err(e)
@@ -782,7 +823,7 @@ pub fn run() {
             start_download,
             pick_folder,
             pick_media_files,
-            convert_to_mp3,
+            convert_file,
             scan_page_quick,
             scan_page_deep,
             save_a_copy,

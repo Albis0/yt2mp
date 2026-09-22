@@ -1144,6 +1144,43 @@ button {
   flex-wrap: wrap;
 }
 
+/* What the whole list becomes. Same segmented control as the page-scan
+   list's format switch, because it answers the same question and should
+   not look like a different kind of control for doing so. */
+.convert-target {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.convert-target-btn {
+  background: none;
+  border: none;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.convert-target-btn:hover:not(:disabled):not(.is-on) {
+  color: var(--text-1);
+}
+
+.convert-target-btn.is-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 550;
+}
+
+/* Dimmed rather than hidden while a conversion runs: the switch keeps its
+   place and still reads, so it is obvious which target the queue is using
+   and that it cannot be changed underneath it. */
+.convert-target-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* Secondary to "Choose files": converting is the obvious next step
    once files are listed, but picking them is what has to happen
    first, and two filled buttons side by side would say neither. */

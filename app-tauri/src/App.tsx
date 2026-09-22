@@ -79,7 +79,8 @@ const TAB_LEADS: Record<TabId, string> = {
   twitch: "Paste a VOD or clip link to save it.",
   other: "Paste any link — yt-dlp handles around 1750 sites.",
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
-  convert: "Turn files you already have into MP3s, without uploading them anywhere.",
+  convert:
+    "Turn files you already have into MP3 or MP4, without uploading them anywhere.",
   scan: "Give it a page that isn't a video itself and it looks through it for anything downloadable.",
 };
 
@@ -580,8 +581,8 @@ export default function App() {
         <div className="tab-panel" role="tabpanel">
           {/* The converter keeps its heading even once files are listed: it
               is not centred like the empty state, and without it the tab opens
-              on a bare "Choose files" button that never says what it converts
-              to. */}
+              on a bare "Choose files" button that never says what the tab is
+              for. */}
           {bare || tab === "convert" || tab === "scan" ? (
             <div className="entry-head">
               <h1 className="entry-title">{tabLabel}</h1>

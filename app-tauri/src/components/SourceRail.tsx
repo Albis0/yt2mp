@@ -148,7 +148,7 @@ export const TABS: TabDef[] = [
   { id: "twitch", label: "Twitch", short: "Twitch", icon: TwitchIcon },
   { id: "other", label: "Any link", short: "Link", icon: LinkIcon },
   { id: "ai", label: "AI search", short: "AI", icon: SparkIcon },
-  { id: "convert", label: "To MP3", short: "MP3", icon: ConvertIcon },
+  { id: "convert", label: "Convert", short: "Convert", icon: ConvertIcon },
   { id: "scan", label: "Find on page", short: "Find", icon: ScanIcon },
 ];
 

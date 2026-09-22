@@ -1,4 +1,4 @@
-//! Converting a file already on disk to MP3.
+//! Converting a file already on disk to MP3 or MP4.
 //!
 //! Everything else in this app starts from a URL: yt-dlp extracts, downloads
 //! and hands ffmpeg a stream. This path has no network in it at all — the user
@@ -10,6 +10,11 @@
 //! of accepted formats. ffmpeg decodes what it decodes; a file it cannot read
 //! fails with a message saying so, which is a better answer than an extension
 //! allow-list that rejects a working file because nobody thought of `.opus`.
+//!
+//! Two targets, one code path. MP3 throws the picture away and keeps the
+//! sound; MP4 keeps both. They differ only in the arguments handed to ffmpeg
+//! and in what a source without a video stream means — so [`Target`] carries
+//! that difference and everything else below is shared.
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -46,6 +51,102 @@ pub const CONVERT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 /// at the same quality rather than differing by which route was taken.
 const BITRATE: &str = "192k";
 
+/// Audio bitrate inside an MP4. AAC at 192k is transparent enough for the same
+/// reason 192k MP3 is, and matches what the download path muxes.
+const VIDEO_AUDIO_BITRATE: &str = "192k";
+
+/// x264's quality knob. 20 is a notch better than the library default of 23 —
+/// a re-encode is lossy no matter what, and this is the tab people reach for
+/// to make a file that plays somewhere, not to squeeze the last megabyte out.
+const CRF: &str = "20";
+
+/// What the user asked the file to become.
+///
+/// The only thing that genuinely differs between the two: which streams
+/// survive, which encoders run, and what a source without a picture means. A
+/// silent video is still a perfectly good MP4; a silent anything is a useless
+/// MP3, which is why `needs_audio` is not simply true for both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Target {
+    Mp3,
+    Mp4,
+}
+
+impl Target {
+    /// The extension the output carries.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Target::Mp3 => "mp3",
+            Target::Mp4 => "mp4",
+        }
+    }
+
+    /// Shown on a row, and used in error text. Not a MIME type and not a
+    /// codec — the words someone picking a file would use.
+    pub fn label(self) -> &'static str {
+        match self {
+            Target::Mp3 => "MP3",
+            Target::Mp4 => "MP4",
+        }
+    }
+
+    /// Whether a source with no audio stream can produce this at all.
+    ///
+    /// MP3 from a silent file would be a valid, empty, pointless file, so the
+    /// UI refuses it up front. MP4 from a silent file is just a silent video,
+    /// which is a normal thing to want — a screen recording with the mic off
+    /// converts fine and must not be refused.
+    pub fn needs_audio(self) -> bool {
+        matches!(self, Target::Mp3)
+    }
+
+    /// The encoding arguments, between the input and the output path.
+    ///
+    /// Deliberately not "copy" for MP4. Stream-copying would be instant and
+    /// would also be a lie: the reason someone converts to MP4 is that the
+    /// file they have does not play where they need it to, and copying a VP9
+    /// or AV1 stream into an MP4 container reproduces exactly that problem in
+    /// a new wrapper. H.264 and AAC are what actually play everywhere.
+    ///
+    /// `+faststart` moves the index to the front so the file starts playing
+    /// before it has fully downloaded — the difference between a file that
+    /// works on the web and one that only works locally.
+    fn ffmpeg_args(self) -> Vec<&'static str> {
+        match self {
+            Target::Mp3 => vec![
+                // -vn drops any video stream: cover art in an MP4 would
+                // otherwise be carried into the MP3 as a video track and some
+                // players choke on it.
+                "-vn",
+                "-codec:a",
+                "libmp3lame",
+                "-b:a",
+                BITRATE,
+            ],
+            Target::Mp4 => vec![
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                CRF,
+                // yuv420p is the pixel format every player understands. A
+                // source in 10-bit or 4:4:4 encodes happily without this and
+                // then refuses to play on half the devices people own.
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                VIDEO_AUDIO_BITRATE,
+                "-movflags",
+                "+faststart",
+            ],
+        }
+    }
+}
+
 /// What ffprobe could tell us about a file before converting it.
 ///
 /// Sent to the UI so a row can show what the user actually picked rather than
@@ -64,8 +165,15 @@ pub struct SourceInfo {
     /// containers genuinely have no duration, which is not an error.
     pub duration: Option<f64>,
     /// False when the file carries no audio stream. The UI refuses to queue
-    /// these rather than letting ffmpeg fail on them later.
+    /// these for MP3 rather than letting ffmpeg fail on them later.
     pub has_audio: bool,
+    /// True when there is a picture in the file.
+    ///
+    /// Not a gate, unlike `has_audio`: an MP3 asked to become an MP4 is a
+    /// legitimate thing to do (it produces a black-screen video, which is what
+    /// some upload forms want), so this only drives what the row says about
+    /// what it is offering.
+    pub has_video: bool,
 }
 
 /// Reads what ffmpeg thinks of a file.
@@ -110,8 +218,21 @@ pub async fn probe(path: &Path) -> Result<SourceInfo, String> {
         name,
         size_bytes,
         duration: parse_duration(&text),
-        has_audio: text.contains("Stream #") && text.contains("Audio:"),
-        })
+        has_audio: has_stream(&text, "Audio:"),
+        has_video: has_stream(&text, "Video:"),
+    })
+}
+
+/// True when ffmpeg's banner lists a stream of the given kind.
+///
+/// The banner prints one `Stream #0:0: Video: h264 ...` line per stream, so
+/// the kind has to be looked for on a line that is a stream line. Searching
+/// the whole text for "Video:" on its own would match ffmpeg's own diagnostic
+/// chatter and report a picture in a file that has none.
+fn has_stream(text: &str, kind: &str) -> bool {
+    text.lines()
+        .filter(|l| l.trim_start().starts_with("Stream #"))
+        .any(|l| l.contains(kind))
 }
 
 /// Pulls `Duration: 00:03:42.51` out of ffmpeg's banner.
@@ -152,10 +273,10 @@ fn parse_progress_time(line: &str) -> Option<f64> {
 /// Turns ffmpeg's stderr into something worth showing.
 ///
 /// Same rule as platform.rs: the raw text is written for a terminal, and the
-/// tool's name means nothing to someone who just wanted an MP3. Unlike the
-/// download path there is no network and no site involved, so the set of
-/// things that can go wrong is small and local.
-pub fn explain(raw: &str, name: &str) -> String {
+/// tool's name means nothing to someone who just wanted a converted file.
+/// Unlike the download path there is no network and no site involved, so the
+/// set of things that can go wrong is small and local.
+pub fn explain(raw: &str, name: &str, target: Target) -> String {
     let lower = raw.to_ascii_lowercase();
 
     if lower.contains("invalid data found") || lower.contains("could not find codec") {
@@ -168,10 +289,24 @@ pub fn explain(raw: &str, name: &str) -> String {
         return format!("Windows wouldn't let this read {name}.");
     }
     if lower.contains("no space left") {
-        return "There isn't enough free space to save the MP3.".into();
+        return format!("There isn't enough free space to save the {}.", target.label());
     }
     if lower.contains("does not contain any stream") || lower.contains("output file is empty") {
-        return format!("{name} has no sound in it.");
+        // Only an MP3 can fail for want of sound. A silent source makes a
+        // perfectly good MP4, so blaming the audio there would send the user
+        // looking for a problem that is not the one they have.
+        return match target {
+            Target::Mp3 => format!("{name} has no sound in it."),
+            Target::Mp4 => format!("Nothing in {name} could be converted."),
+        };
+    }
+
+    // x264 and AAC ship inside the bundled ffmpeg, but a system ffmpeg on
+    // PATH is frequently built without them. Said as a missing capability
+    // rather than as ffmpeg's "Unknown encoder 'libx264'", which reads like a
+    // typo the user made.
+    if lower.contains("unknown encoder") {
+        return format!("This copy of the converter can't make {}s.", target.label());
     }
 
     // Nothing matched: ffmpeg's last line is still the most informative thing
@@ -184,7 +319,7 @@ pub fn explain(raw: &str, name: &str) -> String {
         .trim();
 
     if last.is_empty() {
-        return format!("Could not convert {name}.");
+        return format!("Could not convert {name} to {}.", target.label());
     }
 
     let mut msg: String = last.chars().take(180).collect();
@@ -194,7 +329,7 @@ pub fn explain(raw: &str, name: &str) -> String {
     msg
 }
 
-/// Converts one file to MP3 at `dest`, reporting 0-100 as it goes.
+/// Converts one file to `target` at `dest`, reporting 0-100 as it goes.
 ///
 /// `total_seconds` is the source duration, used to turn ffmpeg's elapsed time
 /// into a percentage. When it is unknown the callback still fires with the
@@ -204,9 +339,10 @@ pub fn explain(raw: &str, name: &str) -> String {
 /// is CPU-bound and finishes in seconds to a couple of minutes, so suspending
 /// it would be a control nobody has time to reach — unlike a multi-gigabyte
 /// download, where walking away mid-transfer is a real scenario.
-pub async fn to_mp3<F>(
+pub async fn convert<F>(
     source: &Path,
     dest: &Path,
+    target: Target,
     total_seconds: Option<f64>,
     mut control: tokio::sync::watch::Receiver<crate::ytdlp::Control>,
     mut on_progress: F,
@@ -222,9 +358,7 @@ where
     let mut cmd = crate::ytdlp::base_command(ffmpeg());
     cmd.args(["-hide_banner", "-nostdin", "-y", "-i"])
         .arg(source)
-        // -vn drops any video stream: cover art in an MP4 would otherwise be
-        // carried into the MP3 as a video track and some players choke on it.
-        .args(["-vn", "-codec:a", "libmp3lame", "-b:a", BITRATE])
+        .args(target.ffmpeg_args())
         // Machine-readable progress on stdout, so stderr stays purely the
         // error channel and the two never have to be untangled.
         .args(["-progress", "pipe:1", "-loglevel", "error"])
@@ -237,7 +371,13 @@ where
     let stdout = child.stdout.take().ok_or("Could not read the converter's output")?;
     let mut reader = BufReader::new(stdout).lines();
 
-    on_progress(0.0, "Converting");
+    // Video re-encoding is slow enough that "Converting" alone leaves people
+    // wondering whether it is stuck, so the stage says which job is running.
+    let stage = match target {
+        Target::Mp3 => "Converting",
+        Target::Mp4 => "Encoding video",
+    };
+    on_progress(0.0, stage);
 
     let deadline = tokio::time::sleep(CONVERT_TIMEOUT);
     tokio::pin!(deadline);
@@ -271,12 +411,12 @@ where
                                 // the process actually exits, not when ffmpeg
                                 // reports the last timestamp.
                                 last_percent = ((done / total) * 100.0).clamp(0.0, 99.0);
-                                on_progress(last_percent, "Converting");
+                                on_progress(last_percent, stage);
                             }
                         } else if line.starts_with("out_time=") {
                             // No duration to divide by — keep the stage
                             // moving so the row does not look stalled.
-                            on_progress(last_percent, "Converting");
+                            on_progress(last_percent, stage);
                         }
                     }
                     Ok(None) => break,
@@ -299,21 +439,22 @@ where
             let _ = err.read_to_end(&mut buf).await;
             stderr = String::from_utf8_lossy(&buf).into_owned();
         }
-        return Err(explain(&stderr, &name));
+        return Err(explain(&stderr, &name, target));
     }
 
     on_progress(100.0, "Done");
     Ok(())
 }
 
-/// The MP3 path a source file should become: same folder, same name, `.mp3`.
+/// The path a source file should become: same folder, same name, new
+/// extension.
 ///
 /// Converting in place is what people expect from a converter — the file came
 /// from somewhere they chose, and the result belongs beside it. A save dialog
 /// per file would make converting twenty files twenty prompts, which is the
 /// same reason whole-playlist downloads ask for a folder once.
-pub fn default_dest(source: &Path) -> PathBuf {
-    source.with_extension("mp3")
+pub fn default_dest(source: &Path, target: Target) -> PathBuf {
+    source.with_extension(target.extension())
 }
 
 #[cfg(test)]
@@ -353,7 +494,10 @@ mod tests {
     #[test]
     fn the_destination_sits_beside_the_source() {
         let src = PathBuf::from("/music/Some Song.flac");
-        assert_eq!(default_dest(&src), PathBuf::from("/music/Some Song.mp3"));
+        assert_eq!(
+            default_dest(&src, Target::Mp3),
+            PathBuf::from("/music/Some Song.mp3")
+        );
     }
 
     /// A file with two dots keeps everything up to the last one, so
@@ -361,7 +505,10 @@ mod tests {
     #[test]
     fn only_the_last_extension_is_replaced() {
         let src = PathBuf::from("/a/mix.final.wav");
-        assert_eq!(default_dest(&src), PathBuf::from("/a/mix.final.mp3"));
+        assert_eq!(
+            default_dest(&src, Target::Mp3),
+            PathBuf::from("/a/mix.final.mp3")
+        );
     }
 
     /// Same rule as the download path's errors: no tool names, no raw ffmpeg
@@ -375,7 +522,7 @@ mod tests {
             "av_interleaved_write_frame(): No space left on device",
         ];
         for raw in cases {
-            let msg = explain(raw, "song.wav");
+            let msg = explain(raw, "song.wav", Target::Mp3);
             let lower = msg.to_ascii_lowercase();
             for word in ["ffmpeg", "libmp3lame", "codec:a", "av_interleaved"] {
                 assert!(!lower.contains(word), "message leaks {word:?}: {msg}");
@@ -385,7 +532,7 @@ mod tests {
 
     #[test]
     fn a_missing_file_says_so_by_name() {
-        let msg = explain("song.wav: No such file or directory", "song.wav");
+        let msg = explain("song.wav: No such file or directory", "song.wav", Target::Mp3);
         assert!(msg.contains("song.wav"), "{msg}");
         assert!(!msg.contains("No such file"), "leaks the raw wording: {msg}");
     }
@@ -394,7 +541,7 @@ mod tests {
     /// a vague "something went wrong", which would be less useful.
     #[test]
     fn an_unknown_error_keeps_ffmpegs_last_line() {
-        let msg = explain("Something very specific went wrong", "a.wav");
+        let msg = explain("Something very specific went wrong", "a.wav", Target::Mp4);
         assert!(msg.starts_with("Something very specific went wrong"), "{msg}");
     }
 
@@ -441,18 +588,28 @@ mod tests {
         ok.then(|| PathBuf::from("ffmpeg"))
     }
 
-    /// True when the resolved ffmpeg can actually encode MP3.
+    /// True when the resolved ffmpeg carries the named encoder.
     ///
-    /// A distro ffmpeg is routinely built without libmp3lame. A converter that
-    /// cannot produce an MP3 is exactly what these tests exist to catch, but on
-    /// a machine whose ffmpeg simply lacks the encoder that is a fact about the
-    /// machine rather than a broken tab — so it skips instead of failing.
-    fn has_mp3_encoder(ffmpeg: &Path) -> bool {
+    /// A distro ffmpeg is routinely built without libmp3lame, and even more
+    /// often without libx264. A converter that cannot produce its output is
+    /// exactly what these tests exist to catch, but on a machine whose ffmpeg
+    /// simply lacks the encoder that is a fact about the machine rather than a
+    /// broken tab — so it skips instead of failing.
+    fn has_encoder(ffmpeg: &Path, encoder: &str) -> bool {
         std::process::Command::new(ffmpeg)
             .args(["-hide_banner", "-encoders"])
             .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).contains("libmp3lame"))
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains(encoder))
             .unwrap_or(false)
+    }
+
+    /// Every encoder a target needs. Checked together, because an ffmpeg with
+    /// x264 but no AAC would get halfway through an MP4 and fail on the audio.
+    fn can_encode(ffmpeg: &Path, target: Target) -> bool {
+        match target {
+            Target::Mp3 => has_encoder(ffmpeg, "libmp3lame"),
+            Target::Mp4 => has_encoder(ffmpeg, "libx264") && has_encoder(ffmpeg, "aac"),
+        }
     }
 
     mod with_real_ffmpeg {
@@ -486,7 +643,7 @@ mod tests {
                 eprintln!("skipping: no ffmpeg on this machine");
                 return;
             };
-            if !has_mp3_encoder(&ff) {
+            if !can_encode(&ff, Target::Mp3) {
                 eprintln!("skipping: this ffmpeg has no libmp3lame");
                 return;
             }
@@ -496,7 +653,7 @@ mod tests {
             // A failure here is a real failure, not a reason to skip. The
             // earlier version returned quietly, which is how an ffmpeg without
             // the fixture's video encoder read as "nothing to test" instead of
-            // "this machine cannot build the fixture" — the test went green
+            // "this machine cannot build the fixture" - the test went green
             // having done nothing.
             let source = make_fixture(&dir)
                 .await
@@ -504,22 +661,22 @@ mod tests {
 
             let info = probe(&source).await.expect("the fixture probes");
             assert!(info.has_audio, "the fixture has a tone in it");
+            assert!(info.has_video, "the fixture has a picture in it");
             let duration = info.duration.expect("mp4 reports a duration");
-            assert!(
-                (duration - 5.0).abs() < 0.2,
-                "expected ~5s, got {duration}"
-            );
+            assert!((duration - 5.0).abs() < 0.2, "expected ~5s, got {duration}");
             assert!(info.size_bytes.unwrap_or(0) > 0);
 
-            let dest = default_dest(&source);
+            let dest = default_dest(&source, Target::Mp3);
             let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
 
-            // Progress must actually arrive and must end at 100 — a bar that
+            // Progress must actually arrive and must end at 100 - a bar that
             // stays at zero is the failure this catches.
             let mut seen: Vec<f64> = Vec::new();
-            to_mp3(&source, &dest, info.duration, rx, |p, _| seen.push(p))
-                .await
-                .expect("the conversion succeeds");
+            convert(&source, &dest, Target::Mp3, info.duration, rx, |p, _| {
+                seen.push(p)
+            })
+            .await
+            .expect("the conversion succeeds");
 
             assert!(dest.exists(), "an mp3 was written");
             assert!(
@@ -531,6 +688,103 @@ mod tests {
             // The output has to be readable audio, not just a file that exists.
             let out = probe(&dest).await.expect("the mp3 probes");
             assert!(out.has_audio, "the mp3 carries audio");
+            // -vn has to have actually dropped the picture. Without it the
+            // fixture's video rides along into the MP3 as a stream that some
+            // players refuse outright.
+            assert!(!out.has_video, "the mp3 carries no picture");
+
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// The video path, end to end. The unit tests above can prove which
+        /// arguments are chosen but not that ffmpeg accepts them or that what
+        /// comes out plays - and every interesting way this breaks (no x264,
+        /// an argument order ffmpeg rejects, an MP4 with no picture in it)
+        /// looks fine until a real encode runs.
+        #[tokio::test]
+        async fn a_real_file_converts_to_playable_video() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !can_encode(&ff, Target::Mp4) {
+                eprintln!("skipping: this ffmpeg cannot encode H.264 + AAC");
+                return;
+            }
+
+            let dir = std::env::temp_dir().join("yt2mp-convert-video");
+            let _ = std::fs::create_dir_all(&dir);
+            let source = make_fixture(&dir)
+                .await
+                .expect("ffmpeg is present, so it must be able to build the fixture");
+
+            let info = probe(&source).await.expect("the fixture probes");
+
+            // The fixture is already .mp4, so this is the self-collision case
+            // - exactly what the caller's unique_path() exists for. Writing to
+            // the source path would truncate the file ffmpeg is reading.
+            let dest = dir.join("out.mp4");
+            let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+
+            let mut seen: Vec<f64> = Vec::new();
+            convert(&source, &dest, Target::Mp4, info.duration, rx, |p, _| {
+                seen.push(p)
+            })
+            .await
+            .expect("the conversion succeeds");
+
+            assert!(dest.exists(), "an mp4 was written");
+            assert_eq!(seen.last().copied(), Some(100.0), "ends at 100: {seen:?}");
+
+            // Both streams have to survive. An MP4 that lost its picture is
+            // the silent failure this tab would otherwise ship: the file
+            // exists, opens, and is wrong.
+            let out = probe(&dest).await.expect("the mp4 probes");
+            assert!(out.has_video, "the mp4 carries a picture");
+            assert!(out.has_audio, "the mp4 carries sound");
+
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// A source with no picture still has to produce an MP4, because that
+        /// is a thing people do - an audio file that an upload form will only
+        /// take as video. A silent source must not be refused or crash.
+        #[tokio::test]
+        async fn a_silent_source_is_still_allowed_to_become_video() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !can_encode(&ff, Target::Mp4) {
+                eprintln!("skipping: this ffmpeg cannot encode H.264 + AAC");
+                return;
+            }
+
+            let dir = std::env::temp_dir().join("yt2mp-convert-silent");
+            let _ = std::fs::create_dir_all(&dir);
+
+            // A picture with no sound, which is what a screen recording made
+            // with the microphone off looks like.
+            let source = dir.join("mute.mkv");
+            let mut cmd = crate::ytdlp::base_command(ffmpeg());
+            cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(["-f", "lavfi", "-i", "color=c=red:s=320x240:d=3"])
+                .args(["-c:v", "mpeg4"])
+                .arg(&source);
+            cmd.output().await.expect("the fixture builds");
+
+            let info = probe(&source).await.expect("the fixture probes");
+            assert!(!info.has_audio, "this fixture is deliberately silent");
+            assert!(info.has_video);
+
+            let dest = default_dest(&source, Target::Mp4);
+            let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+            convert(&source, &dest, Target::Mp4, info.duration, rx, |_, _| {})
+                .await
+                .expect("a silent source still converts to video");
+
+            let out = probe(&dest).await.expect("the mp4 probes");
+            assert!(out.has_video, "the picture survived");
 
             let _ = std::fs::remove_dir_all(&dir);
         }
@@ -544,7 +798,7 @@ mod tests {
                 eprintln!("skipping: no ffmpeg on this machine");
                 return;
             };
-            if !has_mp3_encoder(&ff) {
+            if !can_encode(&ff, Target::Mp3) {
                 eprintln!("skipping: this ffmpeg has no libmp3lame");
                 return;
             }
@@ -586,7 +840,7 @@ mod naming {
 
     #[test]
     fn the_extension_is_replaced_not_appended() {
-        let got = default_dest(&in_a_folder("My Song.flac"));
+        let got = default_dest(&in_a_folder("My Song.flac"), Target::Mp3);
         assert_eq!(got.file_name().unwrap(), "My Song.mp3");
     }
 
@@ -594,13 +848,13 @@ mod naming {
     /// would rename the user's file out from under them.
     #[test]
     fn only_the_final_segment_is_treated_as_an_extension() {
-        let got = default_dest(&in_a_folder("my.clip.v2.mkv"));
+        let got = default_dest(&in_a_folder("my.clip.v2.mkv"), Target::Mp3);
         assert_eq!(got.file_name().unwrap(), "my.clip.v2.mp3");
     }
 
     #[test]
     fn a_file_with_no_extension_gains_one() {
-        let got = default_dest(&in_a_folder("recording"));
+        let got = default_dest(&in_a_folder("recording"), Target::Mp3);
         assert_eq!(got.file_name().unwrap(), "recording.mp3");
     }
 
@@ -609,14 +863,45 @@ mod naming {
     #[test]
     fn converting_an_mp3_collides_with_its_own_source() {
         let source = in_a_folder("already.mp3");
-        assert_eq!(default_dest(&source), source);
+        assert_eq!(default_dest(&source, Target::Mp3), source);
     }
 
-    /// The folder must survive, or the MP3 would land somewhere other than
+    /// The same collision exists on the video side, and is the one people
+    /// will actually hit: an MP4 is by far the most common thing to drop in,
+    /// and "make this MP4 an MP4" is what re-encoding a file that will not
+    /// play looks like from the user's side.
+    #[test]
+    fn converting_an_mp4_to_mp4_collides_with_its_own_source() {
+        let source = in_a_folder("clip.mp4");
+        assert_eq!(default_dest(&source, Target::Mp4), source);
+    }
+
+    /// The folder must survive, or the output would land somewhere other than
     /// beside its source.
     #[test]
     fn the_output_stays_in_the_sources_folder() {
-        let got = default_dest(&in_a_folder("song.wav"));
+        let got = default_dest(&in_a_folder("song.wav"), Target::Mp3);
         assert_eq!(got.parent(), Some(Path::new("music")));
+    }
+
+    /// Each target claims its own extension, so the same source converted
+    /// twice produces two files rather than one overwriting the other.
+    #[test]
+    fn the_two_targets_never_write_to_the_same_path() {
+        let source = in_a_folder("clip.mkv");
+        let audio = default_dest(&source, Target::Mp3);
+        let video = default_dest(&source, Target::Mp4);
+        assert_ne!(audio, video);
+        assert_eq!(audio.file_name().unwrap(), "clip.mp3");
+        assert_eq!(video.file_name().unwrap(), "clip.mp4");
+    }
+
+    /// A silent file is a dead end for MP3 and a normal input for MP4. Getting
+    /// this backwards would either refuse valid screen recordings or hand
+    /// someone an empty MP3 and call it done.
+    #[test]
+    fn only_the_audio_target_requires_sound() {
+        assert!(Target::Mp3.needs_audio());
+        assert!(!Target::Mp4.needs_audio());
     }
 }
