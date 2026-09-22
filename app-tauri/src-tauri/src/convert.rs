@@ -67,6 +67,13 @@ const CRF: &str = "20";
 /// little changes between frames, and every player accepts it.
 const BLANK_PICTURE: &str = "color=c=black:s=640x360:r=2";
 
+/// How long a generated picture runs when nothing can say how long the sound
+/// is. Only reached for a file that reports no duration and whose second
+/// probe also fails, which in practice means a stream rather than a file.
+/// Generous enough not to truncate anything ordinary, finite enough that the
+/// conversion always ends.
+const UNKNOWN_LENGTH_CAP: f64 = 60.0 * 60.0;
+
 /// What the user asked the file to become.
 ///
 /// The only thing that genuinely differs between the two: which streams
@@ -395,23 +402,31 @@ where
     cmd.args(["-hide_banner", "-nostdin", "-y"]);
 
     if generated_picture {
-        cmd.args(["-f", "lavfi"]);
-
-        // Bound the generated picture at its source when the length is known.
+        // How long the generated picture must run.
         //
-        // -shortest alone is not enough, and that is measured rather than
-        // assumed: the bundled Windows ffmpeg (9.0.1) ends the encode with
-        // it, while the bundled Linux one (8.1) ignores it against an endless
-        // lavfi input and ran a three-second song out to thirty seconds. The
-        // same code, the same arguments, two different files.
+        // -shortest is not enough on its own, and that is measured rather
+        // than assumed: the bundled Windows ffmpeg (9.0.1) ends the encode
+        // with it, while the bundled Linux one (8.1) ignores it against an
+        // endless lavfi input and ran a three-second song out to thirty
+        // seconds. Same code, same arguments, two different files — and the
+        // fallback has to hold on both, so it cannot be -shortest.
         //
         // -t makes the generated stream finite before -shortest is ever
-        // consulted, so the result no longer depends on which ffmpeg is
-        // running. -shortest stays below as a second line of defence for the
-        // case this cannot cover.
-        if let Some(seconds) = total_seconds.filter(|s| *s > 0.0) {
-            cmd.args(["-t", &format!("{seconds:.3}")]);
-        }
+        // consulted. The caller normally supplies the length from the probe
+        // behind the row; when it has none, ask the file directly rather than
+        // generating something endless and hoping ffmpeg stops it.
+        let seconds = match total_seconds.filter(|s| *s > 0.0) {
+            Some(known) => Some(known),
+            None => probe(source).await.ok().and_then(|i| i.duration),
+        };
+
+        // A file whose length genuinely cannot be determined is the one case
+        // with nothing to bound against. It gets a fixed cap instead of an
+        // endless stream: a wrong-length file is a bad outcome, but a
+        // conversion that never ends is a worse one.
+        let seconds = seconds.unwrap_or(UNKNOWN_LENGTH_CAP);
+
+        cmd.args(["-f", "lavfi", "-t", &format!("{seconds:.3}")]);
 
         // The generated picture comes first so it is input 0 and the real
         // file is input 1.
@@ -981,17 +996,20 @@ mod tests {
             let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
 
             // None, deliberately: this is what the caller passes when the
-            // container reports no duration.
+            // row behind it has no duration. The conversion has to recover
+            // one rather than generating an endless picture — on the Linux
+            // ffmpeg, -shortest does not stop that, and this test failing at
+            // 31 seconds is how that was found.
             convert(&source, &dest, Target::Mp4, info.has_video, None, rx, |_, _| {})
                 .await
-                .expect("it converts without knowing the length");
+                .expect("it converts without being told the length");
 
             let out = probe(&dest).await.expect("the mp4 probes");
             assert!(out.has_video, "a picture was still generated");
             let length = out.duration.expect("an mp4 reports a duration");
             assert!(
-                length < 10.0,
-                "expected a file bounded by its audio, got {length}s"
+                (length - 3.0).abs() < 1.0,
+                "expected the audio's own ~3s, got {length}s"
             );
 
             let _ = std::fs::remove_dir_all(&dir);
