@@ -155,8 +155,11 @@ impl Target {
                     "+faststart",
                 ];
                 if generated_picture {
-                    // The generated picture is an endless stream; the sound
-                    // is what says when the file is over.
+                    // Second line of defence. The generated picture is
+                    // normally already bounded with -t by the caller; this
+                    // covers a source whose length nothing could determine,
+                    // where the sound is the only thing that says when the
+                    // file is over.
                     args.push("-shortest");
                 }
                 args
@@ -392,9 +395,27 @@ where
     cmd.args(["-hide_banner", "-nostdin", "-y"]);
 
     if generated_picture {
+        cmd.args(["-f", "lavfi"]);
+
+        // Bound the generated picture at its source when the length is known.
+        //
+        // -shortest alone is not enough, and that is measured rather than
+        // assumed: the bundled Windows ffmpeg (9.0.1) ends the encode with
+        // it, while the bundled Linux one (8.1) ignores it against an endless
+        // lavfi input and ran a three-second song out to thirty seconds. The
+        // same code, the same arguments, two different files.
+        //
+        // -t makes the generated stream finite before -shortest is ever
+        // consulted, so the result no longer depends on which ffmpeg is
+        // running. -shortest stays below as a second line of defence for the
+        // case this cannot cover.
+        if let Some(seconds) = total_seconds.filter(|s| *s > 0.0) {
+            cmd.args(["-t", &format!("{seconds:.3}")]);
+        }
+
         // The generated picture comes first so it is input 0 and the real
-        // file is input 1; -shortest then ends the encode when the sound does.
-        cmd.args(["-f", "lavfi", "-i", BLANK_PICTURE]);
+        // file is input 1.
+        cmd.args(["-i", BLANK_PICTURE]);
     }
 
     cmd.arg("-i")
@@ -908,13 +929,69 @@ mod tests {
             );
             assert!(out.has_audio, "the sound survived");
 
-            // -shortest has to have ended it. The generated picture runs
-            // forever, so a file much longer than its sound means the encode
-            // was bounded by the timeout rather than by the audio.
+            // The generated picture has to have been stopped. It runs
+            // forever, so a file longer than its sound means nothing bounded
+            // it and the encode ran until something else gave up.
+            //
+            // This is the assertion that caught the Linux failure: the
+            // bundled ffmpeg there ignored -shortest against an endless lavfi
+            // input and turned three seconds of audio into thirty seconds of
+            // video. Windows produced the right file from the same code.
             let length = out.duration.expect("an mp4 reports a duration");
             assert!(
                 (length - 3.0).abs() < 1.0,
                 "expected ~3s, got {length} - the generated picture did not stop"
+            );
+
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// The same conversion with the length unknown.
+        ///
+        /// `-t` cannot be used when nothing knows how long the source is, so
+        /// this is the path that still rests on `-shortest`. It has to
+        /// terminate and it has to produce a picture; if a future ffmpeg
+        /// stops honouring `-shortest` here too, this is where it shows up
+        /// rather than in a user's thirty-second file.
+        #[tokio::test]
+        async fn an_unknown_length_still_produces_a_bounded_video() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !can_encode(&ff, Target::Mp4) || !can_encode(&ff, Target::Mp3) {
+                eprintln!("skipping: this ffmpeg is missing an encoder");
+                return;
+            }
+
+            let dir = std::env::temp_dir().join("yt2mp-convert-unknown-length");
+            let _ = std::fs::create_dir_all(&dir);
+
+            let source = dir.join("song.mp3");
+            let mut cmd = crate::ytdlp::base_command(ffmpeg());
+            cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=3"])
+                .args(["-c:a", "libmp3lame"])
+                .arg(&source);
+            cmd.output().await.expect("the fixture builds");
+
+            let info = probe(&source).await.expect("the fixture probes");
+
+            let dest = dir.join("unknown.mp4");
+            let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+
+            // None, deliberately: this is what the caller passes when the
+            // container reports no duration.
+            convert(&source, &dest, Target::Mp4, info.has_video, None, rx, |_, _| {})
+                .await
+                .expect("it converts without knowing the length");
+
+            let out = probe(&dest).await.expect("the mp4 probes");
+            assert!(out.has_video, "a picture was still generated");
+            let length = out.duration.expect("an mp4 reports a duration");
+            assert!(
+                length < 10.0,
+                "expected a file bounded by its audio, got {length}s"
             );
 
             let _ = std::fs::remove_dir_all(&dir);
