@@ -499,7 +499,7 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
                               ? "No sound — the video will be silent"
                               : null,
                             target === "mp4" && !row.hasVideo
-                              ? "No picture — the video will be a blank screen"
+                              ? "No picture — you'll get a black screen with the sound"
                               : null,
                           ]
                             .filter(Boolean)
