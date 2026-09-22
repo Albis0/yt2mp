@@ -60,6 +60,13 @@ const VIDEO_AUDIO_BITRATE: &str = "192k";
 /// to make a file that plays somewhere, not to squeeze the last megabyte out.
 const CRF: &str = "20";
 
+/// The picture generated for a source that has none.
+///
+/// Small and static, because it carries no information — it exists so the
+/// file is a video. 640x360 at 2fps costs almost nothing after x264 sees how
+/// little changes between frames, and every player accepts it.
+const BLANK_PICTURE: &str = "color=c=black:s=640x360:r=2";
+
 /// What the user asked the file to become.
 ///
 /// The only thing that genuinely differs between the two: which streams
@@ -112,7 +119,10 @@ impl Target {
     /// `+faststart` moves the index to the front so the file starts playing
     /// before it has fully downloaded — the difference between a file that
     /// works on the web and one that only works locally.
-    fn ffmpeg_args(self) -> Vec<&'static str> {
+    ///
+    /// `-shortest` only appears when a picture had to be generated: the
+    /// generated one runs forever, so without it the encode never ends.
+    fn ffmpeg_args(self, generated_picture: bool) -> Vec<&'static str> {
         match self {
             Target::Mp3 => vec![
                 // -vn drops any video stream: cover art in an MP4 would
@@ -124,25 +134,33 @@ impl Target {
                 "-b:a",
                 BITRATE,
             ],
-            Target::Mp4 => vec![
-                "-c:v",
-                "libx264",
-                "-preset",
-                "medium",
-                "-crf",
-                CRF,
-                // yuv420p is the pixel format every player understands. A
-                // source in 10-bit or 4:4:4 encodes happily without this and
-                // then refuses to play on half the devices people own.
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                VIDEO_AUDIO_BITRATE,
-                "-movflags",
-                "+faststart",
-            ],
+            Target::Mp4 => {
+                let mut args = vec![
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "medium",
+                    "-crf",
+                    CRF,
+                    // yuv420p is the pixel format every player understands. A
+                    // source in 10-bit or 4:4:4 encodes happily without this
+                    // and then refuses to play on half the devices people own.
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    VIDEO_AUDIO_BITRATE,
+                    "-movflags",
+                    "+faststart",
+                ];
+                if generated_picture {
+                    // The generated picture is an endless stream; the sound
+                    // is what says when the file is over.
+                    args.push("-shortest");
+                }
+                args
+            }
         }
     }
 }
@@ -339,10 +357,15 @@ pub fn explain(raw: &str, name: &str, target: Target) -> String {
 /// is CPU-bound and finishes in seconds to a couple of minutes, so suspending
 /// it would be a control nobody has time to reach — unlike a multi-gigabyte
 /// download, where walking away mid-transfer is a real scenario.
+///
+/// `source_has_video` decides whether a picture has to be generated for an
+/// MP4. Passing it in rather than probing here keeps this function free of
+/// its own ffmpeg call — the caller has already probed the file.
 pub async fn convert<F>(
     source: &Path,
     dest: &Path,
     target: Target,
+    source_has_video: bool,
     total_seconds: Option<f64>,
     mut control: tokio::sync::watch::Receiver<crate::ytdlp::Control>,
     mut on_progress: F,
@@ -355,10 +378,28 @@ where
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| source.to_string_lossy().into_owned());
 
+    // An MP4 asked for from a file with no picture has to be *given* one.
+    //
+    // Without this ffmpeg quietly drops -c:v — there is no video to apply it
+    // to — and writes an MP4 holding nothing but an audio track. That file
+    // opens, plays, and is rejected by every upload form that wants a video,
+    // which is the exact reason someone converts an audio file to MP4 in the
+    // first place. Measured, not assumed: the first version of this shipped
+    // that file and called it done.
+    let generated_picture = target == Target::Mp4 && !source_has_video;
+
     let mut cmd = crate::ytdlp::base_command(ffmpeg());
-    cmd.args(["-hide_banner", "-nostdin", "-y", "-i"])
+    cmd.args(["-hide_banner", "-nostdin", "-y"]);
+
+    if generated_picture {
+        // The generated picture comes first so it is input 0 and the real
+        // file is input 1; -shortest then ends the encode when the sound does.
+        cmd.args(["-f", "lavfi", "-i", BLANK_PICTURE]);
+    }
+
+    cmd.arg("-i")
         .arg(source)
-        .args(target.ffmpeg_args())
+        .args(target.ffmpeg_args(generated_picture))
         // Machine-readable progress on stdout, so stderr stays purely the
         // error channel and the two never have to be untangled.
         .args(["-progress", "pipe:1", "-loglevel", "error"])
@@ -672,9 +713,15 @@ mod tests {
             // Progress must actually arrive and must end at 100 - a bar that
             // stays at zero is the failure this catches.
             let mut seen: Vec<f64> = Vec::new();
-            convert(&source, &dest, Target::Mp3, info.duration, rx, |p, _| {
-                seen.push(p)
-            })
+            convert(
+                &source,
+                &dest,
+                Target::Mp3,
+                info.has_video,
+                info.duration,
+                rx,
+                |p, _| seen.push(p),
+            )
             .await
             .expect("the conversion succeeds");
 
@@ -727,9 +774,15 @@ mod tests {
             let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
 
             let mut seen: Vec<f64> = Vec::new();
-            convert(&source, &dest, Target::Mp4, info.duration, rx, |p, _| {
-                seen.push(p)
-            })
+            convert(
+                &source,
+                &dest,
+                Target::Mp4,
+                info.has_video,
+                info.duration,
+                rx,
+                |p, _| seen.push(p),
+            )
             .await
             .expect("the conversion succeeds");
 
@@ -779,12 +832,90 @@ mod tests {
 
             let dest = default_dest(&source, Target::Mp4);
             let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
-            convert(&source, &dest, Target::Mp4, info.duration, rx, |_, _| {})
-                .await
-                .expect("a silent source still converts to video");
+            convert(
+                &source,
+                &dest,
+                Target::Mp4,
+                info.has_video,
+                info.duration,
+                rx,
+                |_, _| {},
+            )
+            .await
+            .expect("a silent source still converts to video");
 
             let out = probe(&dest).await.expect("the mp4 probes");
             assert!(out.has_video, "the picture survived");
+
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// An audio file asked to become an MP4 must come out with a picture
+        /// in it.
+        ///
+        /// This is the case the first version of this feature got wrong. With
+        /// no video among its inputs ffmpeg silently ignores -c:v and writes
+        /// an MP4 holding only an audio track: it opens, it plays, and every
+        /// upload form that wants a video rejects it — which is the entire
+        /// reason someone converts an audio file to MP4. Exit code 0, a file
+        /// on disk, a row saying "Done", and the wrong result.
+        ///
+        /// Nothing short of probing the output catches it.
+        #[tokio::test]
+        async fn an_audio_file_becomes_a_video_with_a_picture_in_it() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !can_encode(&ff, Target::Mp4) || !can_encode(&ff, Target::Mp3) {
+                eprintln!("skipping: this ffmpeg is missing an encoder");
+                return;
+            }
+
+            let dir = std::env::temp_dir().join("yt2mp-convert-audio-to-video");
+            let _ = std::fs::create_dir_all(&dir);
+
+            let source = dir.join("song.mp3");
+            let mut cmd = crate::ytdlp::base_command(ffmpeg());
+            cmd.args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=3"])
+                .args(["-c:a", "libmp3lame"])
+                .arg(&source);
+            cmd.output().await.expect("the fixture builds");
+
+            let info = probe(&source).await.expect("the fixture probes");
+            assert!(info.has_audio);
+            assert!(!info.has_video, "an mp3 has no picture");
+
+            let dest = default_dest(&source, Target::Mp4);
+            let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+            convert(
+                &source,
+                &dest,
+                Target::Mp4,
+                info.has_video,
+                info.duration,
+                rx,
+                |_, _| {},
+            )
+            .await
+            .expect("an audio file converts to video");
+
+            let out = probe(&dest).await.expect("the mp4 probes");
+            assert!(
+                out.has_video,
+                "a picture was generated - without one this is an audio file                  wearing an mp4 extension"
+            );
+            assert!(out.has_audio, "the sound survived");
+
+            // -shortest has to have ended it. The generated picture runs
+            // forever, so a file much longer than its sound means the encode
+            // was bounded by the timeout rather than by the audio.
+            let length = out.duration.expect("an mp4 reports a duration");
+            assert!(
+                (length - 3.0).abs() < 1.0,
+                "expected ~3s, got {length} - the generated picture did not stop"
+            );
 
             let _ = std::fs::remove_dir_all(&dir);
         }

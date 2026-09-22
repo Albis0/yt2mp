@@ -442,15 +442,18 @@ async fn convert_file(
         return Err("That file isn't where it was — it may have been moved.".into());
     }
 
-    // The UI already hides Convert on a soundless row, but the rule belongs
-    // here as well: the probe happened when the file was picked, and a file
-    // can be replaced on disk between then and now. ffmpeg would otherwise
-    // write a valid, empty MP3 and the row would call it done.
-    if target.needs_audio() {
-        let info = convert::probe(&source).await?;
-        if !info.has_audio {
-            return Err(format!("{} has no sound in it.", info.name));
-        }
+    // Read the file as it is right now, not as it was when the user picked
+    // it: the probe behind the row may be minutes old and the file can be
+    // replaced on disk in between.
+    //
+    // Two things depend on the answer. An MP3 from a soundless file is a
+    // valid, empty, useless file, so it is refused here as well as in the UI.
+    // An MP4 from a pictureless file needs a picture generated for it, or
+    // ffmpeg writes an MP4 containing only audio.
+    let info = convert::probe(&source).await?;
+
+    if target.needs_audio() && !info.has_audio {
+        return Err(format!("{} has no sound in it.", info.name));
     }
 
     // Never write over the file being read: converting "song.mp3" to MP3, or
@@ -470,16 +473,24 @@ async fn convert_file(
     }
 
     let emit_id = id.clone();
-    let result = convert::convert(&source, &dest, target, duration, rx, |percent, stage| {
-        let _ = app.emit(
-            "download:progress",
-            ProgressEvent {
-                id: emit_id.clone(),
-                percent,
-                stage: stage.to_string(),
-            },
-        );
-    })
+    let result = convert::convert(
+        &source,
+        &dest,
+        target,
+        info.has_video,
+        duration,
+        rx,
+        |percent, stage| {
+            let _ = app.emit(
+                "download:progress",
+                ProgressEvent {
+                    id: emit_id.clone(),
+                    percent,
+                    stage: stage.to_string(),
+                },
+            );
+        },
+    )
     .await;
 
     downloads.inner.lock().unwrap().remove(&id);
