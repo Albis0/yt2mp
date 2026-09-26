@@ -28,6 +28,7 @@ import ConvertPanel from "@/components/ConvertPanel";
 import ScanPanel from "@/components/ScanPanel";
 import FirstRun from "@/components/FirstRun";
 import UpdateBanner from "@/components/UpdateBanner";
+import AppLogo from "@/components/AppLogo";
 import { toolsStatus, type ToolsStatus } from "@/lib/api";
 import { look, type Available } from "@/lib/updater";
 import {
@@ -455,7 +456,10 @@ export default function App() {
           {/* Empty space drags the window. It has to come before the buttons
               so a click on one is never swallowed by the drag handler. */}
           <div className="chrome-drag" data-tauri-drag-region>
-            <span className="chrome-title">yt2mp</span>
+            <span className="chrome-title">
+              <AppLogo size={18} />
+              yt2mp
+            </span>
           </div>
         <button
           type="button"

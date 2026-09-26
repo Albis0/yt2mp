@@ -17,6 +17,10 @@ import {
 } from "@/lib/api";
 import { look, install, openReleasePage, type Available } from "@/lib/updater";
 import type { ThemePref } from "@/lib/theme";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { GitHubLogo } from "@/components/BrandLogos";
+
+const REPO = "Albis0/yt2mp";
 
 const THEME_OPTIONS: { id: ThemePref; label: string }[] = [
   { id: "system", label: "System" },
@@ -445,6 +449,24 @@ export default function SettingsPanel({
                       {downloadDir ? "Change…" : "Choose…"}
                     </button>
                   </div>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Source code</span>
+                    <span className="prefs-field-hint">
+                      yt2mp is open source. Releases and the changelog live here too.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn repo-link"
+                    onClick={() => openUrl(`https://github.com/${REPO}`)}
+                    title={`github.com/${REPO}`}
+                  >
+                    <GitHubLogo />
+                    {REPO}
+                  </button>
                 </div>
 
                 <div className="prefs-field">
