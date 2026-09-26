@@ -7,6 +7,7 @@
 
 mod binaries;
 mod browsers;
+mod cache_node;
 mod convert;
 mod groq;
 mod platform;
@@ -100,6 +101,12 @@ fn safe_file_name(title: &str) -> String {
     let cleaned: String = cleaned.chars().take(120).collect();
     let cleaned = cleaned.trim_end_matches(['.', ' ']).to_string();
 
+    // Windows keeps these names for devices, with any extension: a video
+    // titled "CON" or "nul" cannot be saved as CON.mp3 at all.
+    if is_reserved_on_windows(&cleaned) {
+        return format!("{cleaned}_");
+    }
+
     if !cleaned.is_empty() {
         return cleaned;
     }
@@ -111,6 +118,14 @@ fn safe_file_name(title: &str) -> String {
             .map(|d| d.as_secs())
             .unwrap_or(0)
     )
+}
+
+fn is_reserved_on_windows(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.len() == 4
+            && upper.as_bytes()[3].is_ascii_digit())
 }
 
 #[derive(Serialize, Clone)]
@@ -611,9 +626,10 @@ async fn start_download(
     match result {
         Ok(()) => Ok(dest.to_string_lossy().into_owned()),
         Err(e) => {
-            // Clean up a partial file rather than leaving a corrupt download
-            // behind. Covers both a stop and a real failure.
-            let _ = std::fs::remove_file(&dest);
+            // Nothing to clean up here: the download worked under its own
+            // name and removed its leftovers, and `dest` is never touched
+            // unless it finished. Deleting it here once took the user's
+            // previous file with it when they had chosen to replace one.
             // "Download stopped" is a deliberate user action the UI matches
             // on by exact text — it must not be rewritten into a site
             // explanation.
@@ -895,6 +911,15 @@ mod tests {
         assert_eq!(unique_path(&first), dir.join("Intro (3).mp3"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn device_names_windows_reserves_are_made_saveable() {
+        assert_eq!(safe_file_name("CON"), "CON_");
+        assert_eq!(safe_file_name("nul"), "nul_");
+        assert_eq!(safe_file_name("com1"), "com1_");
+        assert_eq!(safe_file_name("Console"), "Console");
+        assert_eq!(safe_file_name("COMA"), "COMA");
     }
 
     #[test]

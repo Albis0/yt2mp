@@ -802,23 +802,6 @@ pub enum Control {
     Stop,
 }
 
-/// Downloads straight to the user's chosen path.
-///
-/// This is the big structural win over the Electron build. There, an MP4 was
-/// written to a temp file by yt-dlp, streamed over localhost HTTP to the main
-/// process, and written to disk a second time — every byte hit the disk twice
-/// and crossed an HTTP boundary in between. Here yt-dlp writes to the final
-/// destination directly and the only thing crossing a boundary is a progress
-/// number.
-///
-/// `on_progress` is called with yt-dlp's own parsed percentages. Two streams
-/// download in sequence (video, then audio) before merging, so video is scaled
-/// into 0-80% and audio into 80-95% — that way the bar does not visually
-/// restart from zero partway through. The merge step reports no progress at
-/// all, so it holds at 95 until completion.
-///
-/// `control` carries pause/resume/stop from the UI. Pause suspends the yt-dlp
-/// process rather than buffering its output (see src/suspend.rs).
 /// Audio format selectors to try, in order, when the previous one was refused.
 ///
 /// YouTube gates individual formats rather than whole videos, and *which* ones
@@ -859,7 +842,88 @@ fn is_format_refusal(err: &str) -> bool {
         || e.contains("requested format is not available")
 }
 
+/// Downloads to the user's chosen path.
+///
+/// This is the big structural win over the Electron build. There, an MP4 was
+/// written to a temp file by yt-dlp, streamed over localhost HTTP to the main
+/// process, and written to disk a second time — every byte hit the disk twice
+/// and crossed an HTTP boundary in between. Here yt-dlp writes to the final
+/// destination directly and the only thing crossing a boundary is a progress
+/// number.
+///
+/// `on_progress` is called with yt-dlp's own parsed percentages. Two streams
+/// download in sequence (video, then audio) before merging, so video is scaled
+/// into 0-80% and audio into 80-95% — that way the bar does not visually
+/// restart from zero partway through. The merge step reports no progress at
+/// all, so it holds at 95 until completion.
+///
+/// `control` carries pause/resume/stop from the UI. Pause suspends the yt-dlp
+/// process rather than buffering its output (see src/suspend.rs).
+///
+/// yt-dlp works under a private name in the same folder and the result is
+/// moved onto `dest` only once it is complete. Working under the chosen name
+/// lost people's files two ways: a failed or stopped download deleted `dest`,
+/// which is the user's *old* file when they had agreed to replace one; and
+/// yt-dlp names its intermediates after the output, so saving "Song.mp3"
+/// next to an existing "Song.m4a" made yt-dlp take that file as its own
+/// finished download, convert it, and delete it. A name nobody else uses has
+/// neither problem, and every leftover it produces can be found and removed.
 pub async fn download_to_path<F>(
+    url: &str,
+    format: &str,
+    quality: Option<u32>,
+    dest: &PathBuf,
+    platform: crate::platform::Platform,
+    control: tokio::sync::watch::Receiver<Control>,
+    on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(f64, &str) + Send,
+{
+    let ext = if format == "mp3" { "mp3" } else { "mp4" };
+    let tag = work_tag();
+    let work = dest.with_file_name(format!("{tag}.{ext}"));
+
+    let result = download_ladder(url, format, quality, &work, platform, control, on_progress).await;
+
+    let result = result.and_then(|()| {
+        std::fs::rename(&work, dest)
+            .map_err(|e| format!("Could not save to the chosen location: {e}"))
+    });
+    remove_leftovers(dest, &tag);
+    result
+}
+
+/// The private name a download works under. Unique per download, and
+/// recognisable, so a leftover from a crash is obviously this app's.
+fn work_tag() -> String {
+    format!("yt2mp-partial-{}", uuid::Uuid::new_v4().simple())
+}
+
+/// Removes every file in `dest`'s folder that belongs to this download's
+/// working name: the output itself if it never got moved, and yt-dlp's
+/// intermediates (`.f137.mp4`, `.m4a`, `.temp.mp4`, …).
+fn remove_leftovers(dest: &std::path::Path, tag: &str) {
+    let Some(dir) = dest.parent() else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy().starts_with(tag) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Clears whatever a failed attempt left under the working name, so the next
+/// attempt cannot pick up a partial file of the same name and "resume" it.
+fn clear_attempt(work: &std::path::Path) {
+    if let Some(stem) = work.file_stem() {
+        remove_leftovers(work, &stem.to_string_lossy());
+    }
+}
+
+/// The retry ladder behind [`download_to_path`], writing to `dest` directly.
+/// `dest` is always a working name from [`work_tag`], never the user's file.
+async fn download_ladder<F>(
     url: &str,
     format: &str,
     quality: Option<u32>,
@@ -877,10 +941,21 @@ where
         video_format_fallbacks(quality)
     };
 
+    // Set when the media has to come from a fallback server (see
+    // src/cache_node.rs). Holds the extracted info with its URLs moved, which
+    // yt-dlp then downloads from instead of the link.
+    let mut rerouted: Option<Rerouted> = None;
+    if platform == crate::platform::Platform::YouTube && crate::cache_node::is_broken() {
+        rerouted = Rerouted::prepare(url, platform).await.ok();
+    }
+
     let mut last_err = String::new();
-    for (attempt, selector) in selectors.iter().enumerate() {
+    let mut attempt = 0;
+    while attempt < selectors.len() {
+        let selector = &selectors[attempt];
         let result = download_once(
             url,
+            rerouted.as_ref().map(|r| r.path.as_path()),
             format,
             selector,
             dest,
@@ -897,17 +972,34 @@ where
                 if e == "Download stopped" {
                     return Err(e);
                 }
+                // The server YouTube picked would not complete a handshake.
+                // Retry the same stream from the next server in its list,
+                // once; if the URLs could not be moved there is nothing a
+                // retry would change.
+                if rerouted.is_none()
+                    && platform == crate::platform::Platform::YouTube
+                    && crate::cache_node::is_tls_failure(&e)
+                {
+                    clear_attempt(dest);
+                    on_progress(0.0, "Trying another server");
+                    if let Ok(r) = Rerouted::prepare(url, platform).await {
+                        crate::cache_node::mark_broken();
+                        rerouted = Some(r);
+                        continue;
+                    }
+                }
                 if !is_format_refusal(&e) {
                     return Err(crate::platform::explain_error(&e, platform));
                 }
                 // Nothing usable was produced; clear it before trying the next
                 // stream so a half-written file can never be mistaken for the
                 // finished download.
-                let _ = std::fs::remove_file(dest);
+                clear_attempt(dest);
                 last_err = e;
                 if attempt + 1 < selectors.len() {
                     on_progress(0.0, "Retrying with another stream");
                 }
+                attempt += 1;
             }
         }
     }
@@ -915,6 +1007,41 @@ where
     // Every stream this site offered was refused. Only now is it worth
     // translating: up to here the raw text was what decided each retry.
     Err(crate::platform::explain_error(&last_err, platform))
+}
+
+/// Extracted info for one video with its media URLs moved off a broken
+/// cache server, written where `--load-info-json` can read it. The file is
+/// removed when this is dropped, on success and failure alike.
+struct Rerouted {
+    path: PathBuf,
+}
+
+impl Rerouted {
+    async fn prepare(url: &str, platform: crate::platform::Platform) -> Result<Self, String> {
+        let raw = run_ytdlp(
+            vec!["-J".into(), "--no-playlist".into(), url.to_string()],
+            platform,
+        )
+        .await?;
+        let mut info: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| format!("Could not read video info: {e}"))?;
+        if crate::cache_node::reroute_info(&mut info) == 0 {
+            return Err("No fallback server to move to.".into());
+        }
+        let path = std::env::temp_dir().join(format!(
+            "yt2mp-{}.info.json",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(&path, info.to_string())
+            .map_err(|e| format!("Could not write video info: {e}"))?;
+        Ok(Self { path })
+    }
+}
+
+impl Drop for Rerouted {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 /// Video selectors to try in turn. Same reasoning as `AUDIO_FALLBACKS`: the
@@ -935,6 +1062,7 @@ fn video_format_fallbacks(quality: Option<u32>) -> Vec<String> {
 #[allow(clippy::too_many_arguments)]
 async fn download_once<F>(
     url: &str,
+    info_json: Option<&std::path::Path>,
     format: &str,
     selector: &str,
     dest: &PathBuf,
@@ -987,8 +1115,12 @@ where
         "--no-part",
         "-o",
         &format!("{}.%(ext)s", stem.to_string_lossy()),
-        url,
     ]);
+    match info_json {
+        // Already extracted, with its URLs moved (see `Rerouted`).
+        Some(path) => cmd.arg("--load-info-json").arg(path),
+        None => cmd.arg(url),
+    };
 
     let mut child = cmd
         .spawn()
@@ -1081,7 +1213,16 @@ where
                             on_progress(95.0, "Merging");
                             continue;
                         }
-                        if let Some(percent) = parse_progress_percent(&line) {
+                        // The MP3 re-encode reports no percentage of its own.
+                        // Without a stage the bar sat at 80% for the whole
+                        // encode, which on a long mix is minutes of looking
+                        // stuck.
+                        if line.starts_with("[ExtractAudio]") {
+                            last_percent_overall = 90.0;
+                            on_progress(90.0, "Converting");
+                            continue;
+                        }
+                        if let Some(percent) = parse_progress_percent(line) {
                             last_percent_in_stream = percent;
                             let overall = if streams_seen == 0 {
                                 percent / 100.0 * 80.0
@@ -1150,6 +1291,85 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A real YouTube download, start to finish, through the same ladder the
+    /// app uses. On a connection whose nearest cache server is broken this is
+    /// the check that the fallback server actually delivers the file — the
+    /// failure it guards shipped as "invalid session id (_ssl.c:1007)".
+    ///
+    /// ```bash
+    /// cargo test --lib -- --ignored --nocapture youtube_download
+    /// ```
+    #[tokio::test]
+    #[ignore = "hits the network"]
+    async fn youtube_download_delivers_a_file() {
+        assert!(
+            crate::binaries::use_bundled_for_tests(),
+            "no bundled yt-dlp in resources/ — run fetch:binaries"
+        );
+        let dir = std::env::temp_dir().join("yt2mp-live-youtube");
+        let _ = std::fs::create_dir_all(&dir);
+        let url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+        // A file the user already has beside the download, named the way
+        // yt-dlp names its intermediate. It must come through untouched.
+        let neighbour = dir.join("live.m4a");
+        std::fs::write(&neighbour, b"the user's own file").unwrap();
+
+        for (format, quality) in [("mp3", None), ("mp4", Some(360))] {
+            let dest = dir.join(format!("live.{format}"));
+            // An old copy the user chose to replace in the save dialog.
+            std::fs::write(&dest, b"old").unwrap();
+            let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
+            let mut stages: Vec<String> = Vec::new();
+            let result = download_to_path(
+                url,
+                format,
+                quality,
+                &dest,
+                crate::platform::Platform::YouTube,
+                rx,
+                |_, stage| {
+                    if stages.last().map(String::as_str) != Some(stage) {
+                        stages.push(stage.to_string());
+                    }
+                },
+            )
+            .await;
+            println!("{format}: {result:?} stages={stages:?} rerouted={}", crate::cache_node::is_broken());
+            result.unwrap_or_else(|e| panic!("{format} download failed: {e}"));
+            let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
+            assert!(size > 100_000, "{format} is only {size} bytes");
+        }
+
+        assert_eq!(std::fs::read(&neighbour).unwrap(), b"the user's own file");
+        let stray: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.starts_with("yt2mp-partial-"))
+            .collect();
+        assert!(stray.is_empty(), "leftovers: {stray:?}");
+
+        // A download that fails must leave the file it would have replaced.
+        let kept = dir.join("kept.mp3");
+        std::fs::write(&kept, b"keep me").unwrap();
+        let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
+        let failed = download_to_path(
+            "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+            "mp3",
+            None,
+            &kept,
+            crate::platform::Platform::YouTube,
+            rx,
+            |_, _| {},
+        )
+        .await;
+        assert!(failed.is_err(), "a video that does not exist cannot download");
+        assert_eq!(std::fs::read(&kept).unwrap(), b"keep me");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
     /// The bug this guards: a scan of a page found 52 videos, and every one of
     /// them was thrown away. --ignore-errors makes yt-dlp exit non-zero if any
     /// input failed, which in a batch harvested from a page is always, and the

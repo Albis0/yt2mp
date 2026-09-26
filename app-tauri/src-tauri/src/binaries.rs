@@ -123,6 +123,21 @@ fn cached(slot: &RwLock<Option<PathBuf>>, fallback: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(fallback))
 }
 
+/// Points the caches at the copies in `resources/`, for live tests that run a
+/// real download without a Tauri app to call `init`.
+#[cfg(test)]
+pub fn use_bundled_for_tests() -> bool {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
+    let ytdlp = dir.join(binary_name("yt-dlp"));
+    if !ytdlp.is_file() {
+        return false;
+    }
+    *YTDLP.write().unwrap() = Some(ytdlp);
+    *FFMPEG.write().unwrap() = Some(dir.join(binary_name("ffmpeg")));
+    *QJS.write().unwrap() = Some(dir.join(binary_name("qjs")));
+    true
+}
+
 pub fn ytdlp_path() -> PathBuf {
     cached(&YTDLP, "yt-dlp")
 }

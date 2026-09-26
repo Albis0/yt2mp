@@ -151,6 +151,21 @@ pub fn is_collection(url: &str, platform: Platform) -> bool {
 pub fn explain_error(raw: &str, platform: Platform) -> String {
     let lower = raw.to_ascii_lowercase();
 
+    // A handshake that failed even after moving to a fallback server (see
+    // src/cache_node.rs). The raw text — "invalid session id (_ssl.c:1007)" —
+    // means nothing to anyone, and the cause is the network in between.
+    // Checked before the offline branch below, which would otherwise claim
+    // curl's "Failed to perform … TLS connect error" and blame the connection
+    // as a whole when everything but one server works.
+    if crate::cache_node::is_tls_failure(raw) {
+        return format!(
+            "Your connection wouldn't open a secure link to {}'s video \
+             servers. Something on the network is interfering — try again, or \
+             try another network or a VPN.",
+            platform.label()
+        );
+    }
+
     // No connection. Checked first: with the network down every other branch
     // is a wrong guess, and the raw text is the worst offender in the whole
     // set — yt-dlp hands back curl's own wording, so the user was shown

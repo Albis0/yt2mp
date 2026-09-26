@@ -302,7 +302,7 @@ fn newest_firefox_profile(profiles_root: &PathBuf) -> Option<PathBuf> {
         let Ok(modified) = meta.modified() else {
             continue;
         };
-        if best.as_ref().is_none_or(|(t, _)| modified > *t) {
+        if best.as_ref().map_or(true, |(t, _)| modified > *t) {
             best = Some((modified, dir));
         }
     }
