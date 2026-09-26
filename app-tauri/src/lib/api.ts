@@ -174,21 +174,35 @@ export type FileKind = "video" | "audio" | "image";
  * arguments for.
  */
 export type ConvertTarget =
-  | "mp4"
-  | "mkv"
-  | "webm"
-  | "mov"
-  | "avi"
-  | "gif"
-  | "mp3"
-  | "m4a"
-  | "wav"
-  | "flac"
-  | "ogg"
-  | "opus"
-  | "png"
-  | "jpg"
-  | "webp";
+  // Video
+  | "mp4" | "mkv" | "webm" | "mov" | "avi" | "flv" | "wmv" | "ts" | "mpg" | "3gp" | "ogv"
+  // Moving pictures without sound
+  | "gif" | "apng" | "webpanim"
+  // Audio
+  | "mp3" | "m4a" | "aac" | "wav" | "flac" | "alac" | "ogg" | "opus" | "wma" | "aiff" | "ac3" | "mp2" | "amr"
+  // Image
+  | "png" | "jpg" | "webp" | "avif" | "bmp" | "tiff" | "ico";
+
+export type VideoCodec =
+  | "h264" | "h265" | "av1" | "vp9" | "vp8" | "prores" | "mpeg4" | "wmv2" | "mpeg2" | "theora";
+
+/** Everything besides the format; mirrors `convert::Options` in Rust. Every
+ *  field is optional and the defaults change nothing. */
+export interface ConvertOptions {
+  videoCodec?: VideoCodec | null;
+  quality?: "auto" | "high" | "medium" | "small";
+  height?: number | null;
+  fps?: number | null;
+  rotate?: 90 | 180 | 270 | null;
+  start?: number | null;
+  end?: number | null;
+  mute?: boolean;
+  audioBitrate?: number | null;
+  channels?: 1 | 2 | null;
+  sampleRate?: number | null;
+  normalize?: boolean;
+  imageSize?: number | null;
+}
 
 /// One picked file: convertible, or a named reason it is not.
 ///
@@ -209,11 +223,6 @@ export type PickedFile =
  */
 export function pickMediaFiles(): Promise<PickedFile[]> {
   return invoke<PickedFile[]>("pick_media_files");
-}
-
-/** Opens a file picker for one file and probes it. Null when closed. */
-export function pickMediaFile(): Promise<PickedFile | null> {
-  return invoke<PickedFile | null>("pick_media_file");
 }
 
 /**
@@ -251,12 +260,14 @@ export function convertFile(args: {
   id: string;
   path: string;
   target: ConvertTarget;
+  options: ConvertOptions;
   duration: number | null;
 }): Promise<string> {
   return invoke<string>("convert_file", {
     id: args.id,
     path: args.path,
     target: args.target,
+    options: args.options,
     duration: args.duration,
   });
 }

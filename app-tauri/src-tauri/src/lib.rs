@@ -137,6 +137,17 @@ async fn spotify_info(url: &str) -> Result<InfoResult, String> {
 /// Turns a video title into a filename that is safe on Windows/macOS/Linux.
 /// Falls back to a timestamped name so two downloads never silently overwrite
 /// each other.
+/// Every file this app saves starts with "yt2mp-", the way an image saved
+/// from ChatGPT starts with "ChatGPT Image": in a full Downloads folder it
+/// says where the file came from.
+pub fn branded(name: &str) -> String {
+    if name.starts_with("yt2mp-") {
+        name.to_string()
+    } else {
+        format!("yt2mp-{name}")
+    }
+}
+
 fn safe_file_name(title: &str) -> String {
     let cleaned: String = title
         .chars()
@@ -316,10 +327,9 @@ async fn download_folder(app: AppHandle) -> Result<Option<String>, String> {
 
 /// Opens a file picker for the converter tab and reports what was chosen.
 ///
-/// No extension filter is offered on purpose: the tab's promise is that
-/// whatever you put in comes out as an MP3, and a filter listing twelve
-/// extensions would both misrepresent that and hide a working file whose
-/// extension nobody thought to include. ffmpeg decides what it can read, and
+/// No extension filter is offered on purpose: the tab takes whatever ffmpeg
+/// can read, and a filter listing a few dozen extensions would hide a working
+/// file whose extension nobody thought to include. ffmpeg decides what it can read, and
 /// [`convert::probe`] reports the verdict per file before anything runs.
 ///
 /// Files that cannot be read are returned as errors rather than dropped, so
@@ -516,29 +526,6 @@ enum ProbedFile {
     Bad { path: String, name: String, reason: String },
 }
 
-/// Opens a file picker for the converter and probes the one file chosen.
-/// None when the dialog is closed.
-#[tauri::command]
-async fn pick_media_file(app: AppHandle) -> Result<Option<ProbedFile>, String> {
-    let start_dir = app
-        .path()
-        .download_dir()
-        .or_else(|_| app.path().home_dir())
-        .unwrap_or_else(|_| PathBuf::from("."));
-
-    let picked = tauri::async_runtime::spawn_blocking({
-        let app = app.clone();
-        move || app.dialog().file().set_directory(&start_dir).blocking_pick_file()
-    })
-    .await
-    .map_err(|e| format!("File dialog failed: {e}"))?;
-
-    let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
-        return Ok(None);
-    };
-    Ok(probe_all(vec![path]).await.pop())
-}
-
 /// Where converted files wait until they are downloaded: a folder of the
 /// app's own, one subfolder per conversion so two files with the same name
 /// never meet. Emptied at every start, so nothing piles up there.
@@ -565,8 +552,10 @@ async fn convert_file(
     id: String,
     path: String,
     target: convert::Target,
+    options: Option<convert::Options>,
     duration: Option<f64>,
 ) -> Result<String, String> {
+    let options = options.unwrap_or_default();
     let source = PathBuf::from(&path);
     if !source.is_file() {
         return Err("That file was moved or deleted.".into());
@@ -597,11 +586,7 @@ async fn convert_file(
         .ok_or("There's no folder to convert into.")?
         .join(&id);
     std::fs::create_dir_all(&folder).map_err(|_| "Couldn't make room for the converted file.".to_string())?;
-    let file_name = convert::default_dest(&source, target)
-        .file_name()
-        .map(|n| n.to_os_string())
-        .unwrap_or_else(|| format!("converted.{}", target.extension()).into());
-    let dest = folder.join(file_name);
+    let dest = folder.join(convert::output_name(&source, target));
 
     let (tx, rx) = tokio::sync::watch::channel(Control::Run);
     {
@@ -613,7 +598,7 @@ async fn convert_file(
         &source,
         &dest,
         target,
-        info.has_video,
+        &options,
         duration,
         rx,
         |percent, stage, transfer| {
@@ -712,7 +697,7 @@ async fn start_download(
     }
 
     let ext = if format == "mp3" { "mp3" } else { "mp4" };
-    let default_name = format!("{}.{}", safe_file_name(&title), ext);
+    let default_name = format!("{}.{}", branded(&safe_file_name(&title)), ext);
 
     // `into_dir` is the whole-playlist path: the folder was chosen once, up
     // front, so each track saves without a dialog. Asking per track would mean
@@ -1062,7 +1047,6 @@ pub fn run() {
             start_download,
             download_folder,
             pick_media_files,
-            pick_media_file,
             probe_files,
             convert_file,
             scan_page_quick,

@@ -207,11 +207,10 @@ fn new_window<R: Runtime>(
     if !allowed(&url) {
         return NewWindowResponse::Deny;
     }
+    // A popup that fails to open becomes a tab: better than nothing.
     if features.size().is_some() {
-        match popup(app, from, &url, features) {
-            Ok(window) => return NewWindowResponse::Create { window },
-            // Better a tab than nothing.
-            Err(_) => {}
+        if let Ok(window) = popup(app, from, &url, features) {
+            return NewWindowResponse::Create { window };
         }
     }
     to_app(

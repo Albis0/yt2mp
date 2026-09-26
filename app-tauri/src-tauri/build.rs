@@ -8,7 +8,6 @@ const COMMANDS: &[&str] = &[
     "start_download",
     "download_folder",
     "pick_media_files",
-    "pick_media_file",
     "probe_files",
     "convert_file",
     "scan_page_quick",
