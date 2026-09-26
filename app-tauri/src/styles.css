@@ -410,16 +410,6 @@ button {
   height: 15px;
 }
 
-/* Only the plain glyphs follow the label colour; the logos carry their own. */
-.rail-icon-glyph {
-  color: inherit;
-}
-
-.rail-icon-glyph svg {
-  width: 16px;
-  height: 16px;
-}
-
 .rail-name {
   max-width: 100%;
   overflow: hidden;
@@ -1470,82 +1460,146 @@ button {
 .convert {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  margin-top: 6px;
 }
 
-.convert-actions {
+.convert-step {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.convert-step-label {
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* The two outputs as two choices you can read, not a two-letter toggle:
+   each says what you get. */
+.convert-targets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
-/* What the whole list becomes. Same segmented control as the page-scan
-   list's format switch, because it answers the same question and should
-   not look like a different kind of control for doing so. */
-.convert-target {
-  display: inline-flex;
+.convert-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.12s ease;
 }
 
-.convert-target-btn {
-  background: none;
-  border: none;
-  padding: 7px 14px;
-  font-size: 0.8rem;
-  color: var(--text-2);
-  transition: background 0.14s ease, color 0.14s ease;
+.convert-option:hover:not(:disabled):not(.is-on) {
+  border-color: var(--border-strong);
 }
 
-.convert-target-btn:hover:not(:disabled):not(.is-on) {
-  color: var(--text);
+.convert-option:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
-.convert-target-btn.is-on {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 550;
+.convert-option.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-/* Dimmed rather than hidden while a conversion runs: the switch keeps its
-   place and still reads, so it is obvious which target the queue is using
-   and that it cannot be changed underneath it. */
-.convert-target-btn:disabled {
-  opacity: 0.55;
+.convert-option:disabled {
+  opacity: 0.6;
   cursor: default;
 }
 
-/* Secondary to "Choose files": converting is the obvious next step
-   once files are listed, but picking them is what has to happen
-   first, and two filled buttons side by side would say neither. */
-.convert-all-btn {
-  padding: 9px 15px;
-  border-radius: var(--radius);
-  border: 1px solid var(--accent);
-  background: none;
+.convert-option-name {
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.convert-option.is-on .convert-option-name {
   color: var(--accent);
-  font-size: 0.87rem;
-  font-weight: 550;
-  transition: background 0.14s ease, color 0.14s ease;
 }
 
-.convert-all-btn:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.convert-all-btn:disabled {
-  opacity: 0.55;
-}
-
-.convert-empty {
-  padding: 0;
+.convert-option-hint {
   color: var(--text-3);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  max-width: 52ch;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+/* The drop target. Dashed, because that is the one convention everyone
+   reads as "put files here"; it fills with the tab colour while
+   something is being dragged over the window. */
+.convert-drop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 20px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.convert-drop.is-compact {
+  padding: 10px 12px 10px 16px;
+}
+
+.convert-drop.is-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.convert-drop-glyph {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.convert-drop.is-over .convert-drop-glyph {
+  color: var(--accent);
+}
+
+.convert-drop-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.convert-drop-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.convert-drop.is-compact .convert-drop-title {
+  color: var(--text-2);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.convert-drop-hint {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.convert-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .convert-targets {
+    grid-template-columns: 1fr;
+  }
 }
 
 .convert-list {

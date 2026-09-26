@@ -187,6 +187,11 @@ export function pickMediaFiles(): Promise<PickedFile[]> {
   return invoke<PickedFile[]>("pick_media_files");
 }
 
+/** Probes files dropped onto the window; folders and the like are skipped. */
+export function probeFiles(paths: string[]): Promise<PickedFile[]> {
+  return invoke<PickedFile[]>("probe_files", { paths });
+}
+
 /**
  * Converts one file already on disk, written beside the original.
  *

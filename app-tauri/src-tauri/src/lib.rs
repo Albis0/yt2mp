@@ -299,9 +299,31 @@ async fn pick_media_files(app: AppHandle) -> Result<Vec<ProbedFile>, String> {
         return Ok(Vec::new());
     };
 
+    let paths = picked.into_iter().filter_map(|p| p.into_path().ok()).collect();
+    Ok(probe_all(paths).await)
+}
+
+/// Files dropped onto the converter, probed the same way as picked ones.
+///
+/// The drop hands the webview paths, not files, and they can be anything —
+/// a folder, a shortcut, a document. Only regular files are looked at; the
+/// rest are dropped silently, since "you dropped a folder" is not something
+/// to report file by file.
+#[tauri::command]
+async fn probe_files(paths: Vec<String>) -> Vec<ProbedFile> {
+    let files = paths
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.is_file())
+        .collect();
+    probe_all(files).await
+}
+
+/// Probes each file, keeping the unreadable ones as named refusals so the UI
+/// can say which file it turned down and why.
+async fn probe_all(paths: Vec<PathBuf>) -> Vec<ProbedFile> {
     let mut out = Vec::new();
-    for entry in picked {
-        let Ok(path) = entry.into_path() else { continue };
+    for path in paths {
         out.push(match convert::probe(&path).await {
             Ok(info) => ProbedFile::Ok { info },
             Err(reason) => ProbedFile::Bad {
@@ -314,8 +336,7 @@ async fn pick_media_files(app: AppHandle) -> Result<Vec<ProbedFile>, String> {
             },
         });
     }
-
-    Ok(out)
+    out
 }
 
 /// Saves an already-converted file somewhere else, via the save dialog.
@@ -904,6 +925,7 @@ pub fn run() {
             start_download,
             download_folder,
             pick_media_files,
+            probe_files,
             convert_file,
             scan_page_quick,
             scan_page_deep,

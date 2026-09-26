@@ -6,12 +6,15 @@ import {
   formatDuration,
   onDownloadProgress,
   pickMediaFiles,
+  probeFiles,
   revealFile,
   saveACopy,
   stopDownload,
   type ConvertTarget,
+  type PickedFile,
   type SourceInfo,
 } from "@/lib/api";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { StopGlyph } from "@/components/DownloadRow";
 
 /// The converter: files already on the user's disk, no network involved.
@@ -31,9 +34,11 @@ import { StopGlyph } from "@/components/DownloadRow";
 /// meant to make, and the same reasoning the page-scan list follows.
 
 /// What a row is currently set to become.
+/// The two outputs, described by what you get rather than by codec: the
+/// question someone on this screen has is "which one do I want".
 const TARGETS: { id: ConvertTarget; label: string; hint: string }[] = [
-  { id: "mp3", label: "MP3", hint: "Just the sound" },
-  { id: "mp4", label: "MP4", hint: "Video that plays anywhere" },
+  { id: "mp3", label: "MP3", hint: "Audio only — the sound from any audio or video file" },
+  { id: "mp4", label: "MP4", hint: "Video that plays anywhere — audio files get a still picture" },
 ];
 
 /// One file in the list, with whatever has happened to it so far.
@@ -243,14 +248,10 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
     );
   }
 
-  async function addFiles() {
-    setPickError(null);
-    setPicking(true);
-    try {
-      const picked = await pickMediaFiles();
-      if (picked.length === 0) return;
-
-      setRows((list) => {
+  /// Adds probed files to the list, skipping ones already in it.
+  function addPicked(picked: PickedFile[]) {
+    if (picked.length === 0) return;
+    setRows((list) => {
         const seen = new Set(list.map((r) => r.path));
         const added: Row[] = [];
         for (const file of picked) {
@@ -268,12 +269,58 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
         }
         return [...list, ...added];
       });
+  }
+
+  async function addFiles() {
+    setPickError(null);
+    setPicking(true);
+    try {
+      addPicked(await pickMediaFiles());
     } catch (err) {
       setPickError(typeof err === "string" ? err : "Could not open the file picker.");
     } finally {
       setPicking(false);
     }
   }
+
+  // Files dropped anywhere on the window while this tab is open. The window
+  // hands over paths, not file contents, so they are probed in Rust exactly
+  // like picked ones.
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let gone = false;
+    getCurrentWebview()
+      .onDragDropEvent(async (event) => {
+        const e = event.payload;
+        if (e.type === "enter" || e.type === "over") {
+          setDragging(true);
+        } else if (e.type === "leave") {
+          setDragging(false);
+        } else if (e.type === "drop") {
+          setDragging(false);
+          if (e.paths.length === 0) return;
+          setPickError(null);
+          setPicking(true);
+          try {
+            addPicked(await probeFiles(e.paths));
+          } catch (err) {
+            setPickError(typeof err === "string" ? err : "Could not read those files.");
+          } finally {
+            setPicking(false);
+          }
+        }
+      })
+      .then((fn) => {
+        if (gone) fn();
+        else stop = fn;
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   /// Converts one row. Resolves when it is finished either way, so the
   /// convert-all loop can await it and keep the queue sequential — running
@@ -384,75 +431,69 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
 
   return (
     <section className="convert">
-      <div className="convert-actions">
-        <button
-          type="button"
-          className="submit-btn"
-          onClick={addFiles}
-          disabled={picking}
-        >
-          {picking ? (
-            <>
-              <span className="submit-spinner" aria-hidden="true" />
-              Reading files…
-            </>
-          ) : (
-            "Choose files"
-          )}
-        </button>
-
-        {/* The target switch. Disabled mid-queue rather than hidden, so it
-            stays where the eye expects it and its state still reads. */}
-        <div
-          className="convert-target"
-          role="group"
-          aria-label="Convert files to"
-        >
+      {/* 1. What the files become. Chosen first, because it decides what
+          the list below can do — an MP3 needs sound in the file. Disabled
+          mid-queue rather than hidden, so it still says which one is in
+          use. */}
+      <div className="convert-step">
+        <span className="convert-step-label">Convert to</span>
+        <div className="convert-targets" role="radiogroup" aria-label="Convert files to">
           {TARGETS.map((t) => (
             <button
               key={t.id}
               type="button"
-              className={`convert-target-btn${target === t.id ? " is-on" : ""}`}
+              role="radio"
+              aria-checked={target === t.id}
+              className={`convert-option${target === t.id ? " is-on" : ""}`}
               onClick={() => changeTarget(t.id)}
               disabled={busy}
-              title={t.hint}
-              aria-pressed={target === t.id}
             >
-              {t.label}
+              <span className="convert-option-name">{t.label}</span>
+              <span className="convert-option-hint">{t.hint}</span>
             </button>
           ))}
         </div>
+      </div>
 
-        {pending.length > 0 ? (
-          <button
-            type="button"
-            className="convert-all-btn"
-            onClick={convertAll}
-            disabled={busy}
-          >
-            {busy
-              ? "Converting…"
-              : `Convert ${pending.length} file${pending.length > 1 ? "s" : ""}`}
-          </button>
-        ) : null}
-
-        {converted > 0 && !busy ? (
-          <button type="button" className="history-clear" onClick={clearFinished}>
-            Clear finished
-          </button>
-        ) : null}
+      {/* 2. The files. The whole box takes a drop, and says so; the button
+          is for anyone who would rather browse. Once files are listed it
+          shrinks to one line, since its explaining is done. */}
+      <div
+        className={`convert-drop${dragging ? " is-over" : ""}${rows.length > 0 ? " is-compact" : ""}`}
+      >
+        <DropGlyph />
+        <div className="convert-drop-text">
+          <span className="convert-drop-title">
+            {dragging
+              ? "Drop to add them"
+              : rows.length > 0
+                ? "Drop more files here"
+                : "Drop audio or video files here"}
+          </span>
+          {rows.length === 0 ? (
+            <span className="convert-drop-hint">
+              Any format ffmpeg can read. Converted files are saved next to the
+              originals, and nothing is uploaded — it all runs on this computer.
+            </span>
+          ) : null}
+        </div>
+        <button type="button" className="btn" onClick={addFiles} disabled={picking}>
+          {picking ? (
+            <>
+              <span className="submit-spinner" aria-hidden="true" />
+              Reading…
+            </>
+          ) : rows.length > 0 ? (
+            "Add files"
+          ) : (
+            "Choose files"
+          )}
+        </button>
       </div>
 
       {pickError ? <p className="error-text">{pickError}</p> : null}
 
-      {rows.length === 0 ? (
-        <p className="convert-empty">
-          Pick any audio or video file, choose MP3 or MP4, and press Convert.
-          The file in the list turns into the converted one, ready to download
-          wherever you want it. Nothing is uploaded — the conversion runs on
-          this computer.
-        </p>
-      ) : (
+      {rows.length === 0 ? null : (
         <ul className="convert-list">
           {rows.map((row) => {
             const why = refusal(row, target);
@@ -612,6 +653,47 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
           })}
         </ul>
       )}
+
+      {/* 3. Go. Sits under the list it acts on, and names both how many
+          files and what they become, so the button is its own summary. */}
+      {rows.length > 0 ? (
+        <div className="convert-footer">
+          {converted > 0 && !busy ? (
+            <button type="button" className="history-clear" onClick={clearFinished}>
+              Clear finished
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            className="submit-btn"
+            onClick={convertAll}
+            disabled={busy || pending.length === 0}
+          >
+            {busy
+              ? "Converting…"
+              : pending.length > 0
+                ? `Convert ${pending.length} file${pending.length > 1 ? "s" : ""} to ${target.toUpperCase()}`
+                : "All converted"}
+          </button>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function DropGlyph() {
+  return (
+    <svg className="convert-drop-glyph" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path
+        d="M12 3.5v11M7.5 10 12 14.5 16.5 10M4.5 15.5v2.2c0 1.3 1 2.3 2.3 2.3h10.4c1.3 0 2.3-1 2.3-2.3v-2.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
