@@ -39,18 +39,6 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
 
-[target.'cfg(windows)'.dependencies]
-# Pause/resume suspends the yt-dlp process at the OS level, which on Windows
-# means walking its threads (tlhelp32) and calling Suspend/ResumeThread
-# (processthreadsapi) — there is no signal equivalent. See src/suspend.rs.
-winapi = { version = "0.3", features = [
-    "winbase",
-    "processthreadsapi",
-    "tlhelp32",
-    "handleapi",
-    "winnt",
-] }
-
 [profile.release]
 # Size matters here: the whole point of leaving Electron was the download
 # size. LTO + one codegen unit + stripped symbols cut the binary roughly in

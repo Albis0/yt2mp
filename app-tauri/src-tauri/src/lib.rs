@@ -13,7 +13,6 @@ mod groq;
 mod platform;
 mod scan;
 mod settings;
-mod suspend;
 mod tools;
 mod ytdlp;
 
@@ -133,6 +132,10 @@ struct ProgressEvent {
     id: String,
     percent: f64,
     stage: String,
+    /// Bytes and pace, while a download is actually moving data. Absent for
+    /// conversions and for stages that move none (starting, merging).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transfer: Option<ytdlp::Transfer>,
 }
 
 /// Preferred window size, in logical pixels, on a screen large enough for it.
@@ -512,6 +515,7 @@ async fn convert_file(
                     id: emit_id.clone(),
                     percent,
                     stage: stage.to_string(),
+                    transfer: None,
                 },
             );
         },
@@ -599,13 +603,14 @@ async fn start_download(
         &dest,
         detected,
         rx,
-        |percent, stage| {
+        |percent, stage, transfer| {
             let _ = app.emit(
                 "download:progress",
                 ProgressEvent {
                     id: emit_id.clone(),
                     percent,
                     stage: stage.to_string(),
+                    transfer,
                 },
             );
         },
@@ -715,19 +720,6 @@ fn signal(downloads: &State<'_, Downloads>, id: &str, control: Control) {
 #[tauri::command]
 fn stop_download(downloads: State<'_, Downloads>, id: String) {
     signal(&downloads, &id, Control::Stop);
-}
-
-/// Suspends the download's yt-dlp process, holding the transfer open without
-/// buffering anything in memory. Only offered on large downloads — see
-/// PAUSE_THRESHOLD_BYTES.
-#[tauri::command]
-fn pause_download(downloads: State<'_, Downloads>, id: String) {
-    signal(&downloads, &id, Control::Pause);
-}
-
-#[tauri::command]
-fn resume_download(downloads: State<'_, Downloads>, id: String) {
-    signal(&downloads, &id, Control::Run);
 }
 
 /// Opens the finished file's containing folder in the system file manager.
@@ -918,8 +910,6 @@ pub fn run() {
             save_a_copy,
             file_size,
             stop_download,
-            pause_download,
-            resume_download,
             reveal_file,
             get_settings,
             save_settings,

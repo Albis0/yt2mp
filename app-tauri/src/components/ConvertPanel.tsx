@@ -12,6 +12,7 @@ import {
   type ConvertTarget,
   type SourceInfo,
 } from "@/lib/api";
+import { StopGlyph } from "@/components/DownloadRow";
 
 /// The converter: files already on the user's disk, no network involved.
 ///
@@ -533,23 +534,28 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
                     </>
                   ) : row.running ? (
                     <>
-                      <div className="dl-track">
+                      {/* The same bar and cancel control as a download row,
+                          so a conversion reads as the same kind of work. */}
+                      <div className="convert-progress">
                         <div
-                          className="dl-fill"
-                          style={{ width: `${row.percent}%` }}
-                        />
+                          className={`dlrow-track${row.percent > 0 ? "" : " is-waiting"}`}
+                        >
+                          <div className="dlrow-fill" style={{ width: `${row.percent}%` }} />
+                        </div>
+                        <span className="dlrow-meta">
+                          {row.percent > 0
+                            ? `${Math.floor(row.percent)}% · ${row.stage}`
+                            : `${row.stage}…`}
+                        </span>
                       </div>
-                      <span className="dl-status">
-                        {row.percent > 0
-                          ? `${Math.floor(row.percent)}%`
-                          : row.stage}
-                      </span>
                       <button
                         type="button"
-                        className="dl-ctrl-btn dl-ctrl-btn-stop"
+                        className="dlrow-icon dlrow-cancel"
                         onClick={() => stopRow(row)}
+                        aria-label={`Cancel ${row.name}`}
+                        title="Cancel"
                       >
-                        Stop
+                        <StopGlyph />
                       </button>
                     </>
                   ) : row.error ? (
@@ -559,19 +565,21 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
                         type="button"
                         className="dl-ctrl-btn"
                         onClick={() => convertRow(row, target)}
+                        disabled={busy}
                       >
                         Try again
                       </button>
                     </>
                   ) : row.stopped ? (
                     <>
-                      <span className="dl-status">Stopped</span>
+                      <span className="dl-status">Cancelled</span>
                       <button
                         type="button"
                         className="dl-ctrl-btn"
                         onClick={() => convertRow(row, target)}
+                        disabled={busy}
                       >
-                        Restart
+                        Try again
                       </button>
                     </>
                   ) : why ? null : (

@@ -8,7 +8,9 @@ import {
   stopDownload,
   type DownloadFormat,
   type Found,
+  type DownloadProgress,
 } from "@/lib/api";
+import DownloadRow, { type RowState } from "@/components/DownloadRow";
 
 /// Finding downloadable things on a page that is not itself a video page.
 ///
@@ -45,10 +47,11 @@ type Phase =
 interface Item {
   found: Found;
   id: string | null;
-  percent: number;
-  stage: string;
+  progress: DownloadProgress;
   running: boolean;
   done: boolean;
+  /** Stopped by the user; the row offers a fresh start. */
+  stopped: boolean;
   savedPath: string | null;
   error: string | null;
 }
@@ -57,13 +60,21 @@ function itemOf(found: Found): Item {
   return {
     found,
     id: null,
-    percent: 0,
-    stage: "",
+    progress: { percent: 0, stage: "" },
     running: false,
     done: false,
+    stopped: false,
     savedPath: null,
     error: null,
   };
+}
+
+function rowState(item: Item): RowState {
+  if (item.running) return { at: "running", progress: item.progress };
+  if (item.done) return { at: "done", filePath: item.savedPath };
+  if (item.error) return { at: "failed", error: item.error };
+  if (item.stopped) return { at: "cancelled" };
+  return { at: "idle" };
 }
 
 /// Where a result came from, in words the person reading it can act on.
@@ -160,13 +171,13 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
     patch(item.found.url, {
       id,
       running: true,
-      percent: 0,
-      stage: "Starting",
+      progress: { percent: 0, stage: "Starting" },
+      stopped: false,
       error: null,
     });
 
     const unsubscribe = onDownloadProgress(id, (p) =>
-      patch(item.found.url, { percent: p.percent, stage: p.stage })
+      patch(item.found.url, { progress: p })
     );
 
     try {
@@ -179,15 +190,15 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
       patch(item.found.url, {
         running: false,
         done: true,
-        percent: 100,
         savedPath,
       });
     } catch (err) {
       const message = typeof err === "string" ? err : "That download failed.";
       patch(item.found.url, {
         running: false,
-        // Cancelling the save dialog or stopping a transfer are decisions, not
-        // failures, and neither deserves red text.
+        // Cancelling the folder dialog or stopping a transfer are decisions,
+        // not failures, and neither deserves red text.
+        stopped: message === "Download stopped",
         error:
           message === "Save cancelled" || message === "Download stopped"
             ? null
@@ -331,71 +342,25 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
             ) : null}
           </div>
 
-          <ul className="scan-list">
+          <div className="dllist scan-list">
             {items.map((item) => (
-              <li className="scan-item" key={item.found.url}>
-                <div className="scan-meta">
-                  <span className="scan-title" title={item.found.url}>
-                    {item.found.title}
-                  </span>
-                  <span className="scan-sub">
-                    {[
-                      originLabel(item.found),
-                      item.found.site || null,
-                      item.found.duration > 0
-                        ? formatDuration(item.found.duration)
-                        : null,
-                      item.found.uploader || null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-
-                <div className="scan-state">
-                  {item.done ? (
-                    <span className="dl-status">Saved</span>
-                  ) : item.running ? (
-                    <>
-                      <div className="dl-track">
-                        <div
-                          className="dl-fill"
-                          style={{ width: `${item.percent}%` }}
-                        />
-                      </div>
-                      <span className="dl-status">
-                        {item.percent > 0
-                          ? `${Math.floor(item.percent)}%`
-                          : item.stage}
-                      </span>
-                      <button
-                        type="button"
-                        className="dl-ctrl-btn dl-ctrl-btn-stop"
-                        onClick={() => item.id && stopDownload(item.id)}
-                      >
-                        Stop
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {item.error ? (
-                        <span className="dl-status dl-status-error">
-                          {item.error}
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="dl-ctrl-btn"
-                        onClick={() => grab(item)}
-                      >
-                        {item.error ? "Try again" : "Download"}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </li>
+              <DownloadRow
+                key={item.found.url}
+                label={item.found.title}
+                tags={item.found.site ? [item.found.site] : []}
+                sub={[
+                  originLabel(item.found),
+                  item.found.duration > 0 ? formatDuration(item.found.duration) : null,
+                  item.found.uploader || null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                state={rowState(item)}
+                onStart={() => grab(item)}
+                onCancel={() => item.id && stopDownload(item.id)}
+              />
             ))}
-          </ul>
+          </div>
         </>
       ) : null}
     </section>

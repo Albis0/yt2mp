@@ -798,8 +798,64 @@ fn parse_progress_percent(line: &str) -> Option<f64> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Control {
     Run,
-    Pause,
     Stop,
+}
+
+/// Bytes and pace of a download in flight, for the line under its bar.
+///
+/// `downloaded` counts every stream so far (video, then audio), so it only
+/// ever grows and can be set against the size the result card promised.
+/// Speed and time left are yt-dlp's own for the stream being fetched now.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize)]
+pub struct Transfer {
+    pub downloaded: u64,
+    /// Bytes per second.
+    pub speed: Option<f64>,
+    /// Seconds left on the current stream.
+    pub eta: Option<u64>,
+}
+
+/// Machine-readable progress, one line per update. yt-dlp's own progress
+/// line is written for people ("34.5% of ~ 29.01MiB at 2.1MiB/s ETA 00:12",
+/// with units and a tilde that come and go); this asks for the numbers.
+const PROGRESS_TEMPLATE: &str = "download:[yt2mp] %(progress.downloaded_bytes)s \
+     %(progress.total_bytes)s %(progress.total_bytes_estimate)s \
+     %(progress.speed)s %(progress.eta)s";
+
+/// One `PROGRESS_TEMPLATE` line: downloaded, total (exact, else estimated),
+/// speed and time left. Unknown values arrive as "NA".
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct StreamProgress {
+    downloaded: u64,
+    total: Option<u64>,
+    speed: Option<f64>,
+    eta: Option<u64>,
+}
+
+impl StreamProgress {
+    fn percent(&self) -> Option<f64> {
+        self.total
+            .filter(|t| *t > 0)
+            .map(|t| (self.downloaded as f64 / t as f64 * 100.0).min(100.0))
+    }
+}
+
+fn parse_template_line(line: &str) -> Option<StreamProgress> {
+    let mut fields = line.strip_prefix("[yt2mp] ")?.split_whitespace();
+    let mut next_num = || -> Option<f64> {
+        fields.next().and_then(|f| f.parse::<f64>().ok()).filter(|v| v.is_finite() && *v >= 0.0)
+    };
+    let downloaded = next_num()? as u64;
+    let exact = next_num();
+    let estimate = next_num();
+    let speed = next_num();
+    let eta = next_num();
+    Some(StreamProgress {
+        downloaded,
+        total: exact.or(estimate).map(|t| t as u64),
+        speed,
+        eta: eta.map(|e| e as u64),
+    })
 }
 
 /// Audio format selectors to try, in order, when the previous one was refused.
@@ -857,8 +913,9 @@ fn is_format_refusal(err: &str) -> bool {
 /// restart from zero partway through. The merge step reports no progress at
 /// all, so it holds at 95 until completion.
 ///
-/// `control` carries pause/resume/stop from the UI. Pause suspends the yt-dlp
-/// process rather than buffering its output (see src/suspend.rs).
+/// `control` carries stop from the UI. There is no pause: it was removed in
+/// favour of one clear control, since a stopped download restarts from the
+/// same row with a single click.
 ///
 /// yt-dlp works under a private name in the same folder and the result is
 /// moved onto `dest` only once it is complete. Working under the chosen name
@@ -878,7 +935,7 @@ pub async fn download_to_path<F>(
     on_progress: F,
 ) -> Result<(), String>
 where
-    F: FnMut(f64, &str) + Send,
+    F: FnMut(f64, &str, Option<Transfer>) + Send,
 {
     let ext = if format == "mp3" { "mp3" } else { "mp4" };
     let tag = work_tag();
@@ -933,7 +990,7 @@ async fn download_ladder<F>(
     mut on_progress: F,
 ) -> Result<(), String>
 where
-    F: FnMut(f64, &str) + Send,
+    F: FnMut(f64, &str, Option<Transfer>) + Send,
 {
     let selectors: Vec<String> = if format == "mp3" {
         AUDIO_FALLBACKS.iter().map(|s| s.to_string()).collect()
@@ -981,7 +1038,7 @@ where
                     && crate::cache_node::is_tls_failure(&e)
                 {
                     clear_attempt(dest);
-                    on_progress(0.0, "Trying another server");
+                    on_progress(0.0, "Trying another server", None);
                     if let Ok(r) = Rerouted::prepare(url, platform).await {
                         crate::cache_node::mark_broken();
                         rerouted = Some(r);
@@ -997,7 +1054,7 @@ where
                 clear_attempt(dest);
                 last_err = e;
                 if attempt + 1 < selectors.len() {
-                    on_progress(0.0, "Retrying with another stream");
+                    on_progress(0.0, "Retrying with another stream", None);
                 }
                 attempt += 1;
             }
@@ -1071,7 +1128,7 @@ async fn download_once<F>(
     on_progress: &mut F,
 ) -> Result<(), String>
 where
-    F: FnMut(f64, &str) + Send,
+    F: FnMut(f64, &str, Option<Transfer>) + Send,
 {
     let mut cmd = base_command(ytdlp_path());
     cmd.args(js_runtime_args());
@@ -1113,6 +1170,8 @@ where
     cmd.args([
         "--newline",
         "--no-part",
+        "--progress-template",
+        PROGRESS_TEMPLATE,
         "-o",
         &format!("{}.%(ext)s", stem.to_string_lossy()),
     ]);
@@ -1139,12 +1198,11 @@ where
     // merely print is far better than a failed download.
     let mut reader = BufReader::new(stdout).split(b'\n');
 
-    let pid = child.id().ok_or("Could not track the download process")?;
-
     let mut streams_seen = 0u32;
     let mut last_percent_in_stream = 0.0f64;
-    let mut last_percent_overall = 0.0f64;
-    let mut paused = false;
+    // Bytes of the streams already finished, and of the one in flight.
+    let mut finished_bytes = 0u64;
+    let mut stream_bytes = 0u64;
 
     let deadline = tokio::time::sleep(DOWNLOAD_TIMEOUT);
     tokio::pin!(deadline);
@@ -1163,34 +1221,12 @@ where
                 // holding it across the .await below would make this future
                 // non-Send, which Tauri's command handler rejects.
                 let requested = *control.borrow();
-                match requested {
-                    Control::Stop => {
-                        // A suspended process ignores kill on Windows until it
-                        // is resumed, so always lift the suspension first.
-                        if paused {
-                            let _ = crate::suspend::resume_process(pid);
-                        }
-                        let _ = child.kill().await;
-                        return Err("Download stopped".into());
-                    }
-                    Control::Pause if !paused => {
-                        crate::suspend::suspend_process(pid)?;
-                        paused = true;
-                        on_progress(last_percent_overall, "Paused");
-                    }
-                    Control::Run if paused => {
-                        crate::suspend::resume_process(pid)?;
-                        paused = false;
-                        on_progress(last_percent_overall, "Downloading");
-                    }
-                    _ => {}
+                if requested == Control::Stop {
+                    let _ = child.kill().await;
+                    return Err("Download stopped".into());
                 }
             }
-            // A paused download makes no progress by definition, so the
-            // timeout must not run while suspended — otherwise leaving one
-            // paused would eventually kill it with a misleading "took too
-            // long" error.
-            _ = &mut deadline, if !paused => {
+            _ = &mut deadline => {
                 let _ = child.kill().await;
                 return Err("Timed out — download took too long.".into());
             }
@@ -1204,13 +1240,19 @@ where
                         let line = line.trim_end_matches('\r');
                         // A new "Destination:" after real progress means
                         // yt-dlp moved on to the next stream (video → audio).
-                        if line.contains("Destination:") && last_percent_in_stream > 0.0 {
+                        // Bytes count too: a stream with no known total
+                        // never reports a percent, and would otherwise be
+                        // missed and its bytes counted twice.
+                        if line.contains("Destination:")
+                            && (last_percent_in_stream > 0.0 || stream_bytes > 0)
+                        {
                             streams_seen += 1;
                             last_percent_in_stream = 0.0;
+                            finished_bytes += stream_bytes;
+                            stream_bytes = 0;
                         }
                         if line.contains("Merging formats") {
-                            last_percent_overall = 95.0;
-                            on_progress(95.0, "Merging");
+                            on_progress(95.0, "Merging", None);
                             continue;
                         }
                         // The MP3 re-encode reports no percentage of its own.
@@ -1218,21 +1260,32 @@ where
                         // encode, which on a long mix is minutes of looking
                         // stuck.
                         if line.starts_with("[ExtractAudio]") {
-                            last_percent_overall = 90.0;
-                            on_progress(90.0, "Converting");
+                            on_progress(90.0, "Converting", None);
                             continue;
                         }
-                        if let Some(percent) = parse_progress_percent(line) {
+                        // The template line when yt-dlp honours it, its own
+                        // human-readable line otherwise; both give a percent.
+                        let (percent, transfer) = match parse_template_line(line) {
+                            Some(p) => {
+                                stream_bytes = p.downloaded;
+                                let transfer = Transfer {
+                                    downloaded: finished_bytes + p.downloaded,
+                                    speed: p.speed,
+                                    eta: p.eta,
+                                };
+                                (p.percent(), Some(transfer))
+                            }
+                            None => (parse_progress_percent(line), None),
+                        };
+                        if let Some(percent) = percent {
                             last_percent_in_stream = percent;
                             let overall = if streams_seen == 0 {
                                 percent / 100.0 * 80.0
                             } else {
                                 80.0 + percent / 100.0 * 15.0
                             };
-                            let overall = overall.min(95.0);
-                            last_percent_overall = overall;
                             let stage = if streams_seen == 0 { "Downloading" } else { "Audio" };
-                            on_progress(overall, stage);
+                            on_progress(overall.min(95.0), stage, transfer);
                         }
                     }
                     Ok(None) => break,
@@ -1284,7 +1337,7 @@ where
         return Err("Download finished but the file is missing.".into());
     }
 
-    on_progress(100.0, "Saved");
+    on_progress(100.0, "Saved", None);
     Ok(())
 }
 
@@ -1322,6 +1375,7 @@ mod tests {
             std::fs::write(&dest, b"old").unwrap();
             let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
             let mut stages: Vec<String> = Vec::new();
+            let mut transfers: Vec<Transfer> = Vec::new();
             let result = download_to_path(
                 url,
                 format,
@@ -1329,7 +1383,8 @@ mod tests {
                 &dest,
                 crate::platform::Platform::YouTube,
                 rx,
-                |_, stage| {
+                |_, stage, transfer| {
+                    transfers.extend(transfer);
                     if stages.last().map(String::as_str) != Some(stage) {
                         stages.push(stage.to_string());
                     }
@@ -1338,6 +1393,12 @@ mod tests {
             .await;
             println!("{format}: {result:?} stages={stages:?} rerouted={}", crate::cache_node::is_broken());
             result.unwrap_or_else(|e| panic!("{format} download failed: {e}"));
+            // The line under the bar needs bytes that only ever grow.
+            assert!(!transfers.is_empty(), "{format}: no byte counts arrived");
+            assert!(
+                transfers.windows(2).all(|w| w[1].downloaded >= w[0].downloaded),
+                "{format}: downloaded went backwards"
+            );
             let size = std::fs::metadata(&dest).map(|m| m.len()).unwrap_or(0);
             assert!(size > 100_000, "{format} is only {size} bytes");
         }
@@ -1362,7 +1423,7 @@ mod tests {
             &kept,
             crate::platform::Platform::YouTube,
             rx,
-            |_, _| {},
+            |_, _, _| {},
         )
         .await;
         assert!(failed.is_err(), "a video that does not exist cannot download");
@@ -1391,6 +1452,44 @@ mod tests {
         assert_eq!(real.strip_prefix(PARTIAL_MARKER), None);
     }
 
+
+    #[test]
+    fn the_progress_template_is_read_back() {
+        let p = parse_template_line("[yt2mp] 5685561 11371122 NA 3189489.53721838 2").unwrap();
+        assert_eq!(p.downloaded, 5_685_561);
+        assert_eq!(p.total, Some(11_371_122));
+        assert_eq!(p.eta, Some(2));
+        assert!((p.percent().unwrap() - 50.0).abs() < 0.01);
+        assert!((p.speed.unwrap() - 3_189_489.5).abs() < 1.0);
+    }
+
+    /// Fragmented streams only know an estimate, and the first line of any
+    /// stream knows neither speed nor time left.
+    #[test]
+    fn unknown_template_fields_are_none_not_zero() {
+        let p = parse_template_line("[yt2mp] 1024 NA 4096 NA NA").unwrap();
+        assert_eq!(p.total, Some(4096), "falls back to the estimate");
+        assert_eq!(p.speed, None);
+        assert_eq!(p.eta, None);
+
+        let p = parse_template_line("[yt2mp] 1024 NA NA NA NA").unwrap();
+        assert_eq!(p.percent(), None, "no total, no percent - not 0% and not 100%");
+    }
+
+    #[test]
+    fn other_lines_are_not_template_lines() {
+        assert_eq!(parse_template_line("[download] Destination: x.mp4"), None);
+        assert_eq!(parse_template_line("[yt2mp] NA NA NA NA NA"), None);
+    }
+
+    /// The template has to reach yt-dlp as one argument with single spaces;
+    /// the source wraps it across lines.
+    #[test]
+    fn the_template_is_one_line_of_five_fields() {
+        assert!(!PROGRESS_TEMPLATE.contains('\n'));
+        assert!(!PROGRESS_TEMPLATE.contains("  "));
+        assert_eq!(PROGRESS_TEMPLATE.matches("%(progress.").count(), 5);
+    }
 
     #[test]
     fn progress_line_parses_percent() {

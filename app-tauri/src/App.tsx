@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import {
   fetchInfo,
   onDownloadProgress,
-  pauseDownload,
-  resumeDownload,
   startDownload,
   stopDownload,
   type DownloadFormat,
@@ -53,9 +51,6 @@ export interface ActiveDownload {
   filePath: string | null;
   error: string | null;
   stopped: boolean;
-  paused: boolean;
-  /** Drives whether pause/resume is offered at all — see supportsPause. */
-  estimatedBytes: number | null;
 }
 
 // AI mode chains a Groq call (with key rotation) and then a yt-dlp search —
@@ -341,15 +336,6 @@ export default function App() {
         ? `https://www.youtube.com/watch?v=${info.id}`
         : url.trim());
 
-    // The size estimate for this specific button: the matching quality's
-    // merged size for MP4, or the audio stream's size for MP3.
-    const estimatedBytes =
-      format === "mp3"
-        ? info.audioEstimatedBytes
-        : (info.qualities.find((q) => q.height === quality)?.estimatedBytes ??
-          info.qualities[0]?.estimatedBytes ??
-          null);
-
     setDownloads((d) => ({
       ...d,
       [key]: {
@@ -362,27 +348,11 @@ export default function App() {
         filePath: null,
         error: null,
         stopped: false,
-        paused: false,
-        estimatedBytes,
       },
     }));
 
-    // Rust reports "Paused"/"Downloading" as the stage when a suspend or
-    // resume actually took effect, so the button state follows the process
-    // rather than optimistically flipping on click.
     const unsubscribe = onDownloadProgress(id, (progress) =>
-      setDownloads((d) =>
-        d[key]
-          ? {
-              ...d,
-              [key]: {
-                ...d[key],
-                progress,
-                paused: progress.stage === "Paused",
-              },
-            }
-          : d
-      )
+      setDownloads((d) => (d[key] ? { ...d, [key]: { ...d[key], progress } } : d))
     );
 
     try {
@@ -424,26 +394,6 @@ export default function App() {
     const dl = downloads[key];
     if (!dl) return;
     stopDownload(dl.id);
-  }
-
-  function handlePause(key: string) {
-    const dl = downloads[key];
-    if (!dl) return;
-    pauseDownload(dl.id);
-  }
-
-  function handleResume(key: string) {
-    const dl = downloads[key];
-    if (!dl) return;
-    resumeDownload(dl.id);
-  }
-
-  // Stopped downloads can't resume from a byte offset (yt-dlp/ffmpeg
-  // re-transcode from scratch every run) — restart starts a fresh download.
-  function handleRestart(key: string) {
-    const dl = downloads[key];
-    if (!dl) return;
-    beginDownload(dl.format, dl.quality);
   }
 
   function replayHistory(item: HistoryItem) {
@@ -667,9 +617,6 @@ export default function App() {
             downloads={downloads}
             onDownload={beginDownload}
             onStop={handleStop}
-            onRestart={handleRestart}
-            onPause={handlePause}
-            onResume={handleResume}
           />
         ) : null}
 

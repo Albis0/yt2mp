@@ -12,6 +12,7 @@ import {
   type PlaylistInfo,
   type VideoInfo,
 } from "@/lib/api";
+import DownloadRow, { type RowState } from "@/components/DownloadRow";
 
 /** Progress of a "download the whole thing" run. */
 interface BulkState {
@@ -33,6 +34,8 @@ interface TrackDownload {
   progress: DownloadProgress;
   done: boolean;
   error: string | null;
+  /** Where it was saved, once it was. */
+  filePath: string | null;
 }
 
 interface TrackState {
@@ -155,13 +158,14 @@ export default function PlaylistView({
                 progress,
                 done: false,
                 error: null,
+                filePath: null,
               },
             },
           }))
         );
 
         try {
-          await startDownload({
+          const filePath = await startDownload({
             id: downloadId,
             url: entry.url,
             format,
@@ -184,6 +188,7 @@ export default function PlaylistView({
                 progress: { percent: 100, stage: "Saved" },
                 done: true,
                 error: null,
+                filePath,
               },
             },
           }));
@@ -225,6 +230,7 @@ export default function PlaylistView({
               progress: { percent: 0, stage: "" },
               done: false,
               error: reason,
+              filePath: null,
             },
           },
         }));
@@ -304,6 +310,7 @@ export default function PlaylistView({
           progress: { percent: 0, stage: "Starting" },
           done: false,
           error: null,
+          filePath: null,
         },
       },
     }));
@@ -317,7 +324,7 @@ export default function PlaylistView({
     );
 
     try {
-      await startDownload({
+      const filePath = await startDownload({
         id: downloadId,
         url,
         format,
@@ -325,7 +332,7 @@ export default function PlaylistView({
       });
       setTracks((t) => ({
         ...t,
-        [id]: { ...t[id], download: { ...t[id].download!, done: true } },
+        [id]: { ...t[id], download: { ...t[id].download!, done: true, filePath } },
       }));
       onDownloaded(
         id,
@@ -351,18 +358,15 @@ export default function PlaylistView({
     }
   }
 
-  function statusText(dl: TrackDownload): string {
-    if (dl.error) {
-      return dl.error === "Save cancelled"
-        ? "Cancelled"
-        : dl.error === "Download stopped"
-          ? "Stopped"
-          : `Failed — ${dl.error}`;
-    }
-    if (dl.done) return "Saved";
-    return dl.progress.percent > 0
-      ? `${Math.floor(dl.progress.percent)}%`
-      : dl.progress.stage;
+  /// A track's row for one format. Only the format that was last started
+  /// carries a state; the other stays a plain option.
+  function rowState(dl: TrackDownload | null, format: DownloadFormat): RowState {
+    if (!dl || dl.format !== format) return { at: "idle" };
+    if (dl.error === "Download stopped") return { at: "cancelled" };
+    if (dl.error === "Save cancelled") return { at: "idle" };
+    if (dl.error) return { at: "failed", error: dl.error };
+    if (dl.done) return { at: "done", filePath: dl.filePath };
+    return { at: "running", progress: dl.progress };
   }
 
   const running = !!bulk && !bulk.finished;
@@ -480,39 +484,18 @@ export default function PlaylistView({
                       {track.error}
                     </p>
                   ) : track?.info ? (
-                    <div className="playlist-formats">
-                      <button
-                        type="button"
-                        className="format-btn format-btn-audio"
-                        onClick={() => download(entry.id, entry.url, "mp3")}
-                        disabled={busy || running}
-                      >
-                        <span className="format-label">MP3</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="format-btn"
-                        onClick={() => download(entry.id, entry.url, "mp4")}
-                        disabled={busy || running}
-                      >
-                        <span className="format-label">MP4</span>
-                      </button>
-                      {track.download ? (
-                        <>
-                          <span className="dl-status">
-                            {statusText(track.download)}
-                          </span>
-                          {busy ? (
-                            <button
-                              type="button"
-                              className="dl-ctrl-btn dl-ctrl-btn-stop"
-                              onClick={() => stopDownload(track.download!.id)}
-                            >
-                              Stop
-                            </button>
-                          ) : null}
-                        </>
-                      ) : null}
+                    <div className="dllist playlist-formats">
+                      {(["mp3", "mp4"] as const).map((f) => (
+                        <DownloadRow
+                          key={f}
+                          label={f === "mp3" ? "MP3" : "MP4"}
+                          tags={f === "mp3" ? ["192 kbps"] : ["Best"]}
+                          state={rowState(track.download, f)}
+                          onStart={() => download(entry.id, entry.url, f)}
+                          onCancel={() => track.download && stopDownload(track.download.id)}
+                          locked={(busy && track.download?.format !== f) || running}
+                        />
+                      ))}
                     </div>
                   ) : null}
                 </div>

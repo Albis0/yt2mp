@@ -49,23 +49,6 @@ export interface VideoInfo {
   webpageUrl: string;
 }
 
-/**
- * Pause/resume only appears above this size. Suspending a transfer is worth
- * the extra controls on a multi-gigabyte 4K download, where walking away
- * mid-transfer is a real scenario; on a three-minute MP3 that finishes in
- * seconds the buttons are noise. Below the threshold the UI offers Stop only.
- */
-export const PAUSE_THRESHOLD_BYTES = 1024 ** 3; // 1 GB
-
-/**
- * Whether a download of this size should offer pause/resume. Unknown sizes
- * (null) count as small — better to omit a control than to show one that
- * turns out to be pointless on a short download.
- */
-export function supportsPause(estimatedBytes: number | null): boolean {
-  return estimatedBytes !== null && estimatedBytes >= PAUSE_THRESHOLD_BYTES;
-}
-
 export interface PlaylistEntry {
   id: string;
   title: string;
@@ -84,9 +67,21 @@ export type InfoResult =
   | { kind: "video"; video: VideoInfo }
   | { kind: "playlist"; playlist: PlaylistInfo };
 
+/** Bytes and pace while a download is moving data. */
+export interface Transfer {
+  /** Every stream so far, video and audio together. */
+  downloaded: number;
+  /** Bytes per second, when yt-dlp knows it. */
+  speed: number | null;
+  /** Seconds left on the stream being fetched, when known. */
+  eta: number | null;
+}
+
 export interface DownloadProgress {
   percent: number;
   stage: string;
+  /** Absent for stages that move no data: starting, merging, converting. */
+  transfer?: Transfer;
 }
 
 export type Mode = "link" | "ai";
@@ -271,19 +266,6 @@ export function scanPageDeep(url: string): Promise<Found[]> {
 
 export function stopDownload(id: string): Promise<void> {
   return invoke("stop_download", { id });
-}
-
-/**
- * Suspends the download's yt-dlp process. The transfer stays open and its
- * partial output stays on disk, so resuming continues rather than restarting.
- * Only offered on downloads above PAUSE_THRESHOLD_BYTES.
- */
-export function pauseDownload(id: string): Promise<void> {
-  return invoke("pause_download", { id });
-}
-
-export function resumeDownload(id: string): Promise<void> {
-  return invoke("resume_download", { id });
 }
 
 /** Opens the containing folder in the system file manager. */
@@ -489,6 +471,7 @@ interface ProgressEvent {
   id: string;
   percent: number;
   stage: string;
+  transfer?: Transfer;
 }
 
 /**
@@ -508,7 +491,11 @@ export function onDownloadProgress(
 
   listen<ProgressEvent>("download:progress", (event) => {
     if (event.payload.id !== id) return;
-    callback({ percent: event.payload.percent, stage: event.payload.stage });
+    callback({
+      percent: event.payload.percent,
+      stage: event.payload.stage,
+      transfer: event.payload.transfer,
+    });
   }).then((fn) => {
     if (cancelled) {
       fn();
@@ -533,6 +520,20 @@ export function formatBytes(bytes: number): string {
     i++;
   }
   return `${v.toFixed(1)} ${units[i]}`;
+}
+
+/** "4.2 MB/s" */
+export function formatSpeed(bytesPerSecond: number): string {
+  return `${formatBytes(Math.round(bytesPerSecond))}/s`;
+}
+
+/** Time left, the way a person would say it: "13s left", "4 min left". */
+export function formatEta(seconds: number): string {
+  if (seconds < 60) return `${Math.max(1, Math.round(seconds))}s left`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min left`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m > 0 ? `${h} h ${m} min left` : `${h} h left`;
 }
 
 export function formatDuration(seconds: number): string {

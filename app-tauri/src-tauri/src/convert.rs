@@ -363,10 +363,8 @@ pub fn explain(raw: &str, name: &str, target: Target) -> String {
 /// into a percentage. When it is unknown the callback still fires with the
 /// stage, so the row shows work happening rather than a bar frozen at zero.
 ///
-/// `control` carries stop from the UI. There is no pause: a local conversion
-/// is CPU-bound and finishes in seconds to a couple of minutes, so suspending
-/// it would be a control nobody has time to reach — unlike a multi-gigabyte
-/// download, where walking away mid-transfer is a real scenario.
+/// `control` carries stop from the UI, the same single control a download
+/// has.
 ///
 /// `source_has_video` decides whether a picture has to be generated for an
 /// MP4. Passing it in rather than probing here keeps this function free of

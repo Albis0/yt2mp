@@ -1,4 +1,11 @@
 import type { Platform } from "@/lib/api";
+import {
+  InstagramLogo,
+  TikTokLogo,
+  TwitchLogo,
+  XLogo,
+  YouTubeLogo,
+} from "@/components/BrandLogos";
 
 /// The source picker, as a vertical rail down the left edge.
 ///
@@ -24,65 +31,13 @@ interface TabDef {
   /// rail at a readable size, and a truncated word is worse than a short
   /// one that was chosen on purpose.
   short: string;
-  /// Brand mark, drawn as inline SVG so the rail needs no network and no
-  /// icon font. Each is a recognisable silhouette rather than a faithful
-  /// logo — at this size the details of a real logo turn to mud anyway.
+  /// The site's own logo in its own colours (see BrandLogos.tsx). Entries
+  /// that are not a site — any link, AI, convert, find — have no brand, so
+  /// they get a plain glyph in the label's colour instead.
   icon: () => React.ReactElement;
-}
-
-function YouTubeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z"
-      />
-    </svg>
-  );
-}
-
-function TikTokIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M16.6 5.8a4.8 4.8 0 0 1-1-2.8h-3.3v13.2a2.9 2.9 0 1 1-2-2.8v-3.3a6.2 6.2 0 1 0 5.3 6.1V9.4a8 8 0 0 0 4.7 1.5V7.6a4.8 4.8 0 0 1-3.7-1.8z"
-      />
-    </svg>
-  );
-}
-
-function InstagramIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4 1.3-.1 1.7-.1 4.8-.1zm0 3.1a6.7 6.7 0 1 0 0 13.4 6.7 6.7 0 0 0 0-13.4zm0 11a4.3 4.3 0 1 1 0-8.6 4.3 4.3 0 0 1 0 8.6zm6.9-11.3a1.6 1.6 0 1 1-3.1 0 1.6 1.6 0 0 1 3.1 0z"
-      />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M18.2 2.3h3.4l-7.4 8.5 8.7 11.5h-6.8l-5.3-7-6.1 7H1.3l7.9-9.1L.9 2.3h7l4.8 6.4 5.5-6.4zm-1.2 18h1.9L7.1 4.2H5.1L17 20.3z"
-      />
-    </svg>
-  );
-}
-
-function TwitchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M4.3 1.7 1.7 6v14.6h5V24h2.8l2.9-3.4h4.3l5.4-5.4V1.7H4.3zm15.9 12.2-3.1 3.1h-4.9l-2.7 2.7v-2.7H5.3V3.6h14.9v10.3zm-4.1-6.7v5.4h-2V7.2h2zm-5.4 0v5.4h-2V7.2h2z"
-      />
-    </svg>
-  );
+  /// True for those plain glyphs, which follow the text colour; a logo
+  /// never does.
+  glyph?: boolean;
 }
 
 function SparkIcon() {
@@ -141,15 +96,15 @@ function ScanIcon() {
 /// "Convert" is last: it is the only entry that takes no link at all, so it
 /// belongs after everything that does rather than interrupting that run.
 export const TABS: TabDef[] = [
-  { id: "youtube", label: "YouTube", short: "YouTube", icon: YouTubeIcon },
-  { id: "tiktok", label: "TikTok", short: "TikTok", icon: TikTokIcon },
-  { id: "instagram", label: "Instagram", short: "Insta", icon: InstagramIcon },
-  { id: "twitter", label: "X", short: "X", icon: XIcon },
-  { id: "twitch", label: "Twitch", short: "Twitch", icon: TwitchIcon },
-  { id: "other", label: "Any link", short: "Link", icon: LinkIcon },
-  { id: "ai", label: "AI search", short: "AI", icon: SparkIcon },
-  { id: "convert", label: "Convert", short: "Convert", icon: ConvertIcon },
-  { id: "scan", label: "Find on page", short: "Find", icon: ScanIcon },
+  { id: "youtube", label: "YouTube", short: "YouTube", icon: YouTubeLogo },
+  { id: "tiktok", label: "TikTok", short: "TikTok", icon: TikTokLogo },
+  { id: "instagram", label: "Instagram", short: "Insta", icon: InstagramLogo },
+  { id: "twitter", label: "X", short: "X", icon: XLogo },
+  { id: "twitch", label: "Twitch", short: "Twitch", icon: TwitchLogo },
+  { id: "other", label: "Any link", short: "Link", icon: LinkIcon, glyph: true },
+  { id: "ai", label: "AI search", short: "AI", icon: SparkIcon, glyph: true },
+  { id: "convert", label: "Convert", short: "Convert", icon: ConvertIcon, glyph: true },
+  { id: "scan", label: "Find on page", short: "Find", icon: ScanIcon, glyph: true },
 ];
 
 interface SourceRailProps {
@@ -186,7 +141,7 @@ export default function SourceRail({ active, onSelect, degraded }: SourceRailPro
             className={`rail-item rail-${tab.id}${isActive ? " rail-item-active" : ""}`}
             onClick={() => onSelect(tab.id)}
           >
-            <span className="rail-icon">
+            <span className={`rail-icon${tab.glyph ? " rail-icon-glyph" : ""}`}>
               <Icon />
               {warning ? (
                 <span className="rail-warn" aria-hidden="true">
