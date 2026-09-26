@@ -31,8 +31,8 @@
 
   /* One accent for the whole app. It marks focus and the single
      primary action, and nothing else. */
-  --accent: #2f6fed;
-  --accent-press: #2559c8;
+  --accent: #2563eb;
+  --accent-press: #1d4ed8;
   --on-accent: #ffffff;
 
   /* Status. Deliberately desaturated — these appear next to text,
@@ -77,19 +77,21 @@
 }
 
 /* ---------- Dark ----------
-   Not pure black: a slightly warm charcoal, so thumbnails sit on
-   it without the halo a #000 ground gives them. */
+   The cream theme at night: a charcoal that leans brown rather than
+   blue-grey, and the logo's cream as the ink instead of white. A
+   neutral dark next to a warm light made them read as two apps, and
+   the cream-on-black mark sat on it like a sticker. */
 :root[data-theme="dark"] {
-  --bg: #131316;
-  --chrome: #0e0e11;
-  --surface: #1a1a1e;
-  --surface-2: #212127;
-  --surface-3: #292930;
-  --border: #2c2c33;
-  --border-strong: #3d3d46;
-  --text: #f2f2f3;
-  --text-2: #a9abb2;
-  --text-3: #7c7f87;
+  --bg: #1a1714;
+  --chrome: #141210;
+  --surface: #24201c;
+  --surface-2: #2c2621;
+  --surface-3: #352e28;
+  --border: #332d27;
+  --border-strong: #463e36;
+  --text: #f1eadb;
+  --text-2: #a89f90;
+  --text-3: #8a8174;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
 
   --logo-ink: #ffffff;
@@ -99,8 +101,11 @@
   --mark-edge: #2e2a33;
   --mark-ink: #f1eadb;
 
-  --accent: #5b8dff;
-  --accent-press: #7ba3ff;
+  --accent: #60a5fa;
+  --accent-press: #93c5fd;
+  /* Every dark-theme accent is a light tint, so filled controls take
+     dark ink. White on them measured under 3:1 on the pinks. */
+  --on-accent: #1a1714;
   --danger: #ff6b70;
   --warn: #e0a94a;
   --warn-bg: #2a2213;
@@ -177,35 +182,28 @@ button {
 .page-instagram { --accent: #c62d78; --accent-press: #a72463; }
 .page-twitter { --accent: #38424e; --accent-press: #232c36; }
 .page-twitch { --accent: #7b3fe4; --accent-press: #6832c4; }
-.page-other { --accent: #2f6fed; --accent-press: #2559c8; }
-.page-ai { --accent: #97650f; --accent-press: #7d530b; }
+.page-other { --accent: #2563eb; --accent-press: #1d4ed8; }
+/* Fuchsia: no site in the rail uses it, and it stays clear of
+   Twitch's violet two rows up. */
+.page-ai { --accent: #c026d3; --accent-press: #a21caf; }
 /* A green, because it is the only tab that is not a site and has no brand to
-   borrow from — and it keeps its distance from the blue "Any link" beside it. */
-.page-convert { --accent: #1c7a4b; --accent-press: #16643d; }
-/* An amber-brown for the page search: it sits next to the converter's green
-   in the rail, and it is the one tab that goes looking rather than fetching
-   something already named. */
-.page-scan { --accent: #9a5518; --accent-press: #7f4513; }
+   borrow from — and it keeps its distance from the blue "Any link" beside it.
+   A step deeper than its rail tile (#16a34a) so white text on it holds up. */
+.page-convert { --accent: #15803d; --accent-press: #166534; }
+/* Petrol blue for the page search: leaves orange to the logo's arrow, and is
+   far enough in lightness from the converter's green to tell apart. Deeper
+   than its tile (#0891b2) for the same reason as the green. */
+.page-scan { --accent: #0e7490; --accent-press: #155e75; }
 
 :root[data-theme="dark"] .page-youtube { --accent: #ff4d67; --accent-press: #ff7186; }
 :root[data-theme="dark"] .page-tiktok { --accent: #25dbd3; --accent-press: #5ae7e1; }
 :root[data-theme="dark"] .page-instagram { --accent: #ff5fa2; --accent-press: #ff85b8; }
 :root[data-theme="dark"] .page-twitter { --accent: #9fb0c4; --accent-press: #bccadb; }
 :root[data-theme="dark"] .page-twitch { --accent: #a87bff; --accent-press: #bd9bff; }
-:root[data-theme="dark"] .page-other { --accent: #5b8dff; --accent-press: #7ba3ff; }
-:root[data-theme="dark"] .page-ai { --accent: #e3b45c; --accent-press: #edc77e; }
-:root[data-theme="dark"] .page-convert { --accent: #3fd48b; --accent-press: #69dea6; }
-:root[data-theme="dark"] .page-scan { --accent: #f0a05a; --accent-press: #f5b57e; }
-
-/* The filled controls need dark text on the light accents, or the
-   label disappears into the fill. */
-:root[data-theme="dark"] .page-tiktok,
-:root[data-theme="dark"] .page-twitter,
-:root[data-theme="dark"] .page-ai,
-:root[data-theme="dark"] .page-convert,
-:root[data-theme="dark"] .page-scan {
-  --on-accent: #15161a;
-}
+:root[data-theme="dark"] .page-other { --accent: #60a5fa; --accent-press: #93c5fd; }
+:root[data-theme="dark"] .page-ai { --accent: #e879f9; --accent-press: #f0abfc; }
+:root[data-theme="dark"] .page-convert { --accent: #4ade80; --accent-press: #86efac; }
+:root[data-theme="dark"] .page-scan { --accent: #22d3ee; --accent-press: #67e8f9; }
 
 /* ---------- Window ---------- */
 
@@ -2335,8 +2333,8 @@ button {
      open behind them. Without this the dialog turned pink on Instagram and
      purple on Twitch — the accent tint is meaningful on the main screen
      (it says which site you are downloading from) and meaningless here. */
-  --accent: #2f6fed;
-  --accent-press: #2559c8;
+  --accent: #2563eb;
+  --accent-press: #1d4ed8;
   --on-accent: #ffffff;
   /* Fixed, not min/max: every page settles at the same size, so switching
      tabs does not resize the dialog under the pointer. Tall enough for the
@@ -2365,8 +2363,9 @@ button {
    per-tab accent gets, for the same reason: a colour that reads as "blue" on
    white goes muddy on charcoal. */
 :root[data-theme="dark"] .prefs {
-  --accent: #5b8dff;
-  --accent-press: #7ba3ff;
+  --accent: #60a5fa;
+  --accent-press: #93c5fd;
+  --on-accent: #1a1714;
 }
 
 .prefs-nav {

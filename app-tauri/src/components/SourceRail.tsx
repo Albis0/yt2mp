@@ -61,7 +61,7 @@ function Tile({ color, children }: { color: string; children: React.ReactNode })
 
 function LinkIcon() {
   return (
-    <Tile color="#2F6FED">
+    <Tile color="#2563EB">
       <path d="M10 14a4.6 4.6 0 0 0 6.5 0l3.2-3.2a4.6 4.6 0 0 0-6.5-6.5l-1.3 1.3" />
       <path d="M14 10a4.6 4.6 0 0 0-6.5 0l-3.2 3.2a4.6 4.6 0 0 0 6.5 6.5l1.3-1.3" />
     </Tile>
@@ -70,7 +70,7 @@ function LinkIcon() {
 
 function SparkIcon() {
   return (
-    <Tile color="#C8871A">
+    <Tile color="#C026D3">
       <path
         fill="#fff"
         stroke="none"
@@ -85,7 +85,7 @@ function SparkIcon() {
 /// download mark.
 function ConvertIcon() {
   return (
-    <Tile color="#1F9D5C">
+    <Tile color="#16A34A">
       <path d="M3.5 8h15.5M15 4l4 4-4 4" />
       <path d="M20.5 16H5M9 12l-4 4 4 4" />
     </Tile>
@@ -95,7 +95,7 @@ function ConvertIcon() {
 /// A magnifier: looking inside a page for what it holds.
 function ScanIcon() {
   return (
-    <Tile color="#D0691F">
+    <Tile color="#0891B2">
       <circle cx="10.5" cy="10.5" r="6.5" />
       <path d="M15.5 15.5 21 21" />
     </Tile>
