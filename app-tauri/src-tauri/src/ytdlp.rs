@@ -402,6 +402,14 @@ pub async fn run_ytdlp(
 /// worth of links in a single process on purpose, so the work it is allowed
 /// to do is bounded by how many links it was given, not by how long any one
 /// of them takes.
+pub async fn run_ytdlp_within(
+    args: Vec<String>,
+    platform: crate::platform::Platform,
+    deadline: std::time::Duration,
+) -> Result<String, String> {
+    run_to_end(args, platform, deadline).await?.into_result(platform, false)
+}
+
 /// `run_ytdlp_within`, but a non-zero exit is not by itself a failure.
 ///
 /// Only for callers passing `--ignore-errors` over a batch of URLs. yt-dlp
@@ -417,26 +425,47 @@ pub async fn run_ytdlp_partial(
     platform: crate::platform::Platform,
     deadline: std::time::Duration,
 ) -> Result<String, String> {
-    match run_ytdlp_within(args, platform, deadline).await {
-        Ok(out) => Ok(out),
-        Err(e) => match e.strip_prefix(PARTIAL_MARKER) {
-            Some(out) => Ok(out.to_string()),
-            None => Err(e),
-        },
+    run_to_end(args, platform, deadline).await?.into_result(platform, true)
+}
+
+/// What a finished yt-dlp run left behind, before anyone has decided whether
+/// it counts as a success.
+///
+/// This used to be decided inside the runner, with a failed run's stdout
+/// smuggled out through the error string behind a marker for the one caller
+/// that wanted it. Every other caller then showed that string as-is: `-J` on
+/// an Instagram photo post prints `null` and exits 1, and the user read
+/// "partial null." instead of why the post failed.
+struct Finished {
+    ok: bool,
+    status: String,
+    stdout: String,
+    stderr: String,
+}
+
+impl Finished {
+    fn into_result(
+        self,
+        platform: crate::platform::Platform,
+        keep_partial: bool,
+    ) -> Result<String, String> {
+        if self.ok || (keep_partial && !self.stdout.trim().is_empty()) {
+            return Ok(self.stdout);
+        }
+        let stderr = self.stderr.trim();
+        Err(if stderr.is_empty() {
+            format!("yt-dlp exited with {}", self.status)
+        } else {
+            crate::platform::explain_error(stderr, platform)
+        })
     }
 }
 
-/// Prefix used to carry partial stdout back through the Err path, so
-/// `run_ytdlp_within` keeps one return type and every other caller keeps its
-/// current behaviour. A NUL cannot appear in yt-dlp's own messages, so this
-/// can never collide with a real error.
-const PARTIAL_MARKER: &str = "\u{0}partial\u{0}";
-
-pub async fn run_ytdlp_within(
+async fn run_to_end(
     args: Vec<String>,
     platform: crate::platform::Platform,
     deadline: std::time::Duration,
-) -> Result<String, String> {
+) -> Result<Finished, String> {
     let mut cmd = base_command(ytdlp_path());
     cmd.args(js_runtime_args());
     cmd.args(platform_args(platform));
@@ -451,24 +480,12 @@ pub async fn run_ytdlp_within(
         .map_err(|_| "Timed out. yt-dlp took too long to respond.".to_string())?
         .map_err(|e| format!("yt-dlp failed: {e}"))?;
 
-    if !output.status.success() {
-        // A run that failed but still produced output had *some* of its inputs
-        // work. Whether that counts as a failure is the caller's decision, so
-        // the output travels with the error rather than being dropped here.
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if !stdout.trim().is_empty() {
-            return Err(format!("{PARTIAL_MARKER}{stdout}"));
-        }
-
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
-            format!("yt-dlp exited with {}", output.status)
-        } else {
-            crate::platform::explain_error(&stderr, platform)
-        });
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(Finished {
+        ok: output.status.success(),
+        status: output.status.to_string(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
 }
 
 /// Collects the distinct video heights yt-dlp reported, highest first, so the
@@ -1353,6 +1370,32 @@ mod tests {
     /// ```bash
     /// cargo test --lib -- --ignored --nocapture youtube_download
     /// ```
+    /// Instagram end to end, no login: a public video post looks up, and a
+    /// photo post says it is photos rather than "partial null.".
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture instagram_lookups
+    /// ```
+    #[tokio::test]
+    #[ignore = "hits the network"]
+    async fn instagram_lookups_work_and_explain_themselves() {
+        assert!(crate::binaries::use_bundled_for_tests());
+        let ig = crate::platform::Platform::Instagram;
+
+        let video = get_video_info("https://www.instagram.com/p/BQ0eAlwhDrw/", ig).await;
+        let video = video.expect("a public video post looks up");
+        assert!(!video.qualities.is_empty() || !video.available_heights.is_empty());
+
+        let photo = get_video_info(
+            "https://www.instagram.com/p/DdkM7sTAE9R/?utm_source=ig_web_copy_link",
+            ig,
+        )
+        .await;
+        let err = photo.expect_err("a photo post has nothing to download");
+        eprintln!("photo post: {err}");
+        assert!(err.contains("photos"), "{err}");
+    }
+
     #[tokio::test]
     #[ignore = "hits the network"]
     async fn youtube_download_delivers_a_file() {
@@ -1431,16 +1474,25 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+    fn failed_run(stdout: &str, stderr: &str) -> Finished {
+        Finished {
+            ok: false,
+            status: "exit code: 1".into(),
+            stdout: stdout.into(),
+            stderr: stderr.into(),
+        }
+    }
+
     /// The bug this guards: a scan of a page found 52 videos, and every one of
     /// them was thrown away. --ignore-errors makes yt-dlp exit non-zero if any
     /// input failed, which in a batch harvested from a page is always, and the
     /// non-zero path discarded stdout before anyone could read it.
     #[test]
     fn a_partly_successful_batch_keeps_what_worked() {
-        let smuggled = format!("{PARTIAL_MARKER}https://x/1\tTitle\n");
+        let run = failed_run("https://x/1\tTitle\n", "ERROR: [generic] x: Unsupported URL");
         assert_eq!(
-            smuggled.strip_prefix(PARTIAL_MARKER),
-            Some("https://x/1\tTitle\n")
+            run.into_result(crate::platform::Platform::Other, true),
+            Ok("https://x/1\tTitle\n".to_string())
         );
     }
 
@@ -1448,10 +1500,29 @@ mod tests {
     /// would read to the user as "that page had nothing on it".
     #[test]
     fn a_genuine_error_is_not_mistaken_for_partial_output() {
-        let real = "Couldn't reach the internet. Check your connection and try again.";
-        assert_eq!(real.strip_prefix(PARTIAL_MARKER), None);
+        let run = failed_run("  \n", "ERROR: Could not resolve host: example.com");
+        let err = run
+            .into_result(crate::platform::Platform::Other, true)
+            .unwrap_err();
+        assert!(err.contains("internet"), "{err}");
     }
 
+    /// `-J` on an Instagram photo post prints `null` and exits 1. That stdout
+    /// used to ride out in the error behind a marker, and the user was shown
+    /// "partial null." instead of the reason.
+    #[test]
+    fn a_failed_lookup_reports_the_reason_not_its_stdout() {
+        let run = failed_run(
+            "null\n",
+            "ERROR: [Instagram] DdkM7sTAE9R: There is no video in this post",
+        );
+        let err = run
+            .into_result(crate::platform::Platform::Instagram, false)
+            .unwrap_err();
+        assert!(!err.contains("null"), "{err}");
+        assert!(!err.contains('\0'), "{err:?}");
+        assert!(err.contains("photos"), "{err}");
+    }
 
     #[test]
     fn the_progress_template_is_read_back() {

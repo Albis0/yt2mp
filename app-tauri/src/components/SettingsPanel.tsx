@@ -15,7 +15,9 @@ import {
   updateYtdlp,
   checkYtdlp,
 } from "@/lib/api";
-import { look, install, openReleasePage, type Available } from "@/lib/updater";
+import { look, type Available } from "@/lib/updater";
+import { installUpdate as runInstall } from "@/lib/updateFlow";
+import { reason, toast } from "@/lib/toast";
 import type { ThemePref } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { GitHubLogo } from "@/components/BrandLogos";
@@ -129,19 +131,16 @@ export default function SettingsPanel({
   const [version, setVersion] = useState<string | null>(null);
   const [ytdlp, setYtdlp] = useState<string | null>(null);
   const [ytdlpBusy, setYtdlpBusy] = useState(false);
-  const [ytdlpNote, setYtdlpNote] = useState<string | null>(null);
   /// Set only once a check has actually found a newer yt-dlp. Until then the
   /// button offers to look, exactly like the app's own update check — it does
   /// not re-download 17 MB to discover nothing changed.
   const [ytdlpNewer, setYtdlpNewer] = useState<string | null>(null);
 
   const [update, setUpdate] = useState<Available | null>(null);
-  const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
 
   const [downloadDir, setDownloadDir] = useState<string | null>(null);
-  const [dirNote, setDirNote] = useState<string | null>(null);
 
   useEffect(() => {
     appVersion().then(setVersion).catch(() => {});
@@ -156,7 +155,6 @@ export default function SettingsPanel({
   /// whether it had been necessary.
   async function runYtdlpCheck() {
     setYtdlpBusy(true);
-    setYtdlpNote(null);
     setYtdlpNewer(null);
     try {
       const found = await checkYtdlp();
@@ -164,14 +162,16 @@ export default function SettingsPanel({
       if (found.updateAvailable && found.latest) {
         setYtdlpNewer(found.latest);
       } else if (found.latest) {
-        setYtdlpNote("Already on the newest version.");
+        toast({ tone: "ok", title: "yt-dlp is up to date" });
       } else {
-        setYtdlpNote("Could not read the newest version number.");
+        toast({ tone: "error", title: "Couldn't read the newest yt-dlp version" });
       }
     } catch (err) {
-      setYtdlpNote(
-        typeof err === "string" ? err : "Couldn't check. Are you online?"
-      );
+      toast({
+        tone: "error",
+        title: "Couldn't check for yt-dlp updates",
+        body: reason(err, "Are you online?"),
+      });
     } finally {
       setYtdlpBusy(false);
     }
@@ -182,59 +182,44 @@ export default function SettingsPanel({
   /// this button existed the only way to get it was a whole new yt2mp build.
   async function runYtdlpUpdate() {
     setYtdlpBusy(true);
-    setYtdlpNote(null);
     const before = ytdlp;
     try {
       const s = await updateYtdlp();
       setYtdlp(s.ytdlpVersion);
       setYtdlpNewer(null);
-      setYtdlpNote(
+      toast(
         s.ytdlpVersion && s.ytdlpVersion !== before
-          ? `Updated to ${s.ytdlpVersion}.`
-          : "Already on the newest version."
+          ? { tone: "ok", title: "yt-dlp updated", body: `Now on ${s.ytdlpVersion}.` }
+          : { tone: "ok", title: "yt-dlp is up to date" }
       );
     } catch (err) {
-      setYtdlpNote(
-        typeof err === "string" ? err : "The update didn't go through. Try again."
-      );
+      toast({
+        tone: "error",
+        title: "yt-dlp didn't update",
+        body: reason(err, "Try again in a moment."),
+      });
     } finally {
       setYtdlpBusy(false);
     }
   }
 
-  /** The banner's install, with the same feedback. Called bare, a failure
-   *  here was an unhandled rejection: the button did nothing, said nothing,
-   *  and could be pressed again to start a second download on top. */
+  /** Same flow as the toast's Update button: progress and any failure show
+   *  up as a toast, so this only has to keep the button from being pressed
+   *  twice. */
   async function installUpdate(found: Available) {
-    if (!found.canInstall) {
-      openReleasePage();
-      return;
-    }
     setInstalling(true);
-    setUpdateNote("Downloading the update. yt2mp will restart on its own.");
-    try {
-      await install(found, (percent) =>
-        setUpdateNote(
-          percent === null
-            ? "Downloading the update. yt2mp will restart on its own."
-            : `Downloading the update… ${Math.floor(percent)}%. yt2mp will restart when it's done.`
-        )
-      );
-    } catch (err) {
-      setUpdateNote(typeof err === "string" ? err : "The update could not install.");
-      setInstalling(false);
-    }
+    const ok = await runInstall(found, () => busy);
+    if (!ok) setInstalling(false);
   }
 
   async function checkForUpdate() {
     setUpdateBusy(true);
-    setUpdateNote(null);
     try {
       const found = await look();
       setUpdate(found);
-      if (!found) setUpdateNote("yt2mp is up to date.");
+      if (!found) toast({ tone: "ok", title: "yt2mp is up to date" });
     } catch {
-      setUpdateNote("Could not check for updates. Are you online?");
+      toast({ tone: "error", title: "Couldn't check for updates", body: "Are you online?" });
     } finally {
       setUpdateBusy(false);
     }
@@ -350,22 +335,23 @@ export default function SettingsPanel({
   }
 
   async function changeDownloadDir() {
-    setDirNote(null);
     try {
       const stored = await chooseDownloadDir();
-      if (stored) setDownloadDir(stored.downloadDir);
+      if (!stored) return;
+      setDownloadDir(stored.downloadDir);
+      toast({ tone: "ok", title: "Download folder changed", body: stored.downloadDir ?? undefined });
     } catch (err) {
-      setDirNote(typeof err === "string" ? err : "Could not save that folder.");
+      toast({ tone: "error", title: "Couldn't use that folder", body: reason(err, "Pick another one.") });
     }
   }
 
   async function askNextTime() {
-    setDirNote(null);
     try {
       const stored = await forgetDownloadDir();
       setDownloadDir(stored.downloadDir);
+      toast({ tone: "info", title: "Your next download asks where to save" });
     } catch (err) {
-      setDirNote(typeof err === "string" ? err : "Could not save that.");
+      toast({ tone: "error", title: "Couldn't save that", body: reason(err, "Try again.") });
     }
   }
 
@@ -434,9 +420,7 @@ export default function SettingsPanel({
                   <div className="prefs-field-text">
                     <span className="prefs-field-name">Download folder</span>
                     <span className="prefs-field-hint prefs-path" title={downloadDir ?? undefined}>
-                      {dirNote ??
-                        downloadDir ??
-                        "Not chosen yet. Your next download asks where to save."}
+                      {downloadDir ?? "Not chosen yet. Your next download asks where to save."}
                     </span>
                   </div>
                   <div className="prefs-field-control">
@@ -489,7 +473,7 @@ export default function SettingsPanel({
                   <div className="prefs-field-text">
                     <span className="prefs-field-name">yt2mp</span>
                     <span className="prefs-field-hint">
-                      {updateNote ?? "The app itself."}
+                      The app itself.
                     </span>
                   </div>
                   <div className="prefs-field-control">
@@ -533,8 +517,7 @@ export default function SettingsPanel({
                         explaining instead. */}
                     <span className="prefs-field-name">yt-dlp</span>
                     <span className="prefs-field-hint">
-                      {ytdlpNote ??
-                        "The part that fetches videos. Update it if a site stops working."}
+                      The part that fetches videos. Update it if a site stops working.
                     </span>
                   </div>
                   <div className="prefs-field-control">

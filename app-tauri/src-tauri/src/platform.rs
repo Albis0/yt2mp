@@ -149,7 +149,21 @@ pub fn is_collection(url: &str, platform: Platform) -> bool {
 /// unknown failures — a vague generic message is worse than a specific
 /// technical one.
 pub fn explain_error(raw: &str, platform: Platform) -> String {
-    let lower = raw.to_ascii_lowercase();
+    // yt-dlp warns on its way to an error, and a warning can name a different
+    // problem from the one it stopped on. Instagram runs warn "API is not
+    // granting access", fall back, and then fail because the post needs a
+    // login, which read as "Instagram is blocking downloads" for a post that
+    // simply isn't public. The error line is the verdict; use it when there
+    // is one.
+    let errors: Vec<&str> = raw
+        .lines()
+        .filter(|l| l.trim_start().starts_with("ERROR"))
+        .collect();
+    let lower = if errors.is_empty() {
+        raw.to_ascii_lowercase()
+    } else {
+        errors.join("\n").to_ascii_lowercase()
+    };
 
     // A handshake that failed even after moving to a fallback server (see
     // src/cache_node.rs). The raw text — "invalid session id (_ssl.c:1007)" —
@@ -241,6 +255,12 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
         return "That post doesn't exist any more, or the link is wrong.".into();
     }
 
+    // A photo or photo-carousel post. yt-dlp only saves video, and there is
+    // nothing to convert to MP3 either.
+    if lower.contains("there is no video in this post") {
+        return "That post only has photos, there's no video to save.".into();
+    }
+
     if lower.contains("no video could be found") || lower.contains("no media found") {
         return "That post has no video.".into();
     }
@@ -322,6 +342,24 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A post that needs a login warns about the API first. The warning must
+    /// not turn a private post into "Instagram is blocking downloads".
+    #[test]
+    fn a_warning_does_not_outvote_the_error() {
+        let raw = "WARNING: [Instagram] C0yqXhNxGSf: Instagram API is not granting access\n\
+                   ERROR: [Instagram] C0yqXhNxGSf: Instagram sent an empty media response.";
+        let msg = explain_error(raw, Platform::Instagram);
+        assert!(msg.contains("logged in"), "{msg}");
+        assert!(!msg.contains("blocking"), "{msg}");
+    }
+
+    #[test]
+    fn a_photo_post_says_so() {
+        let raw = "ERROR: [Instagram] DdkM7sTAE9R: There is no video in this post";
+        let msg = explain_error(raw, Platform::Instagram);
+        assert!(msg.contains("photos"), "{msg}");
+    }
 
     /// Instagram's refusal arrives labelled 400, not 429 — yt-dlp reports what
     /// its extractor saw, not the status underneath. Matching only on "429"

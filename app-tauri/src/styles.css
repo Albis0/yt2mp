@@ -657,29 +657,276 @@ button {
 
 /* ---------- Notices ---------- */
 
-.tab-notice {
-  padding: 9px 12px;
+/* ---------- Notes ----------
+   A line about the form above it: a caveat before the attempt (info,
+   warn) or what went wrong with it (error). Tinted by tone, never
+   filled with it — the text stays the body colour so it reads as a
+   sentence, and only the icon carries the tone. */
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px 11px 13px;
+  border: 1px solid var(--note-edge, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--note-ground, var(--surface));
+  animation: note-in 0.18s ease-out;
+}
+
+.note-info {
+  --note-tone: var(--text-3);
+}
+
+.note-warn {
+  --note-tone: var(--warn);
+  --note-ground: color-mix(in srgb, var(--warn) 7%, var(--surface));
+  --note-edge: color-mix(in srgb, var(--warn) 28%, var(--border));
+}
+
+.note-error {
+  --note-tone: var(--danger);
+  --note-ground: color-mix(in srgb, var(--danger) 6%, var(--surface));
+  --note-edge: color-mix(in srgb, var(--danger) 26%, var(--border));
+}
+
+.note-icon {
+  display: grid;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--note-tone);
+}
+
+.note-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
+}
+
+.note-title {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.note-body {
+  color: var(--text-2);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.note-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin: -2px -3px 0 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.note-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+/* ---------- Toasts ----------
+   Bottom right, above everything including the settings dialog, since
+   most of what raises one happens inside it. Newest at the bottom, next
+   to where the eye already is. */
+
+.toaster {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 10px 12px 13px;
+  overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  pointer-events: auto;
+  animation: toast-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+
+:root[data-theme="dark"] .toast {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.toast-out {
+  animation: toast-out 0.16s ease-in forwards;
+}
+
+.toast-info { --toast-tone: var(--text-2); }
+.toast-ok { --toast-tone: var(--ok); }
+.toast-warn { --toast-tone: var(--warn); }
+.toast-error { --toast-tone: var(--danger); }
+
+.toast-icon {
+  display: grid;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--toast-tone);
+}
+
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 1px;
+}
+
+.toast-title {
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.toast-body {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.toast-btn {
+  padding: 5px 11px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 0.83rem;
-  line-height: 1.55;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: background 0.12s ease, transform 0.08s ease;
 }
 
-.tab-notice-warn {
-  background: var(--warn-bg);
-  border-color: color-mix(in srgb, var(--warn) 35%, transparent);
-  color: var(--warn);
+.toast-btn:hover {
+  background: var(--surface-3);
 }
 
-.error-text {
-  padding: 10px 13px;
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  color: var(--danger);
-  font-size: 0.88rem;
+.toast-btn:active {
+  transform: scale(0.97);
+}
+
+.toast-btn-primary {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.toast-btn-primary:hover {
+  background: color-mix(in srgb, var(--text) 85%, var(--bg));
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: -2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.toast-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.toast-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--text-2);
+  transform-origin: left;
+  transition: transform 0.2s linear;
+}
+
+.toast-bar-wait {
+  width: 30%;
+  animation: toast-wait 1.1s ease-in-out infinite;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes toast-wait {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note,
+  .toast,
+  .toast-out,
+  .toast-bar-wait {
+    animation: none;
+  }
 }
 
 /* ---------- Result ---------- */
@@ -2446,72 +2693,6 @@ button {
 .prefs .theme-opt {
   padding: 5px 12px;
   font-size: 0.79rem;
-}
-
-/* ---------- Update strip ----------
-   Sits under the tabs, above the content. A modal would be the wrong shape:
-   an available update is worth mentioning, not worth blocking someone who
-   opened the app to grab one video. */
-
-.updatebar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 9px 16px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
-}
-
-.updatebar-text {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.updatebar-note {
-  color: var(--text-3);
-  font-size: 0.8rem;
-}
-
-.updatebar-error {
-  color: var(--danger);
-  font-size: 0.8rem;
-}
-
-.updatebar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.updatebar-primary {
-  padding: 6px 14px;
-  border: none;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: background 0.14s ease;
-}
-
-.updatebar-primary:hover {
-  background: var(--accent-press);
-}
-
-.updatebar-ghost {
-  padding: 6px 10px;
-  border: none;
-  background: none;
-  color: var(--text-3);
-  font-size: 0.82rem;
-  transition: color 0.14s ease;
-}
-
-.updatebar-ghost:hover {
-  color: var(--text);
 }
 
 /* ---------- First run ----------

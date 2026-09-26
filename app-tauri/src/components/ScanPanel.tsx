@@ -11,6 +11,7 @@ import {
   type DownloadProgress,
 } from "@/lib/api";
 import DownloadRow, { type RowState } from "@/components/DownloadRow";
+import ErrorNote from "@/components/ErrorNote";
 
 /// Finding downloadable things on a page that is not itself a video page.
 ///
@@ -264,7 +265,7 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
         </div>
       ) : null}
 
-      {phase.at === "error" ? <p className="error-text">{phase.message}</p> : null}
+      {phase.at === "error" ? <ErrorNote message={phase.message} /> : null}
 
       {phase.at === "empty" ? (
         <div className="scan-empty">

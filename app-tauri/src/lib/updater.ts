@@ -1,7 +1,7 @@
 /// Checking for, and installing, a new version of yt2mp.
 ///
 /// The app never installs anything without being told to. A check that finds
-/// something shows a strip under the tabs; nothing happens until the user
+/// something shows a toast in the corner; nothing happens until the user
 /// presses Update. Declining is remembered so the same version is not offered
 /// on every launch.
 

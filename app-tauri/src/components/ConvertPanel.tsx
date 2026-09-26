@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { StopGlyph } from "@/components/DownloadRow";
+import ErrorNote from "@/components/ErrorNote";
 
 /// The converter: files already on the user's disk, no network involved.
 ///
@@ -490,7 +491,7 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
         </button>
       </div>
 
-      {pickError ? <p className="error-text">{pickError}</p> : null}
+      {pickError ? <ErrorNote message={pickError} onDismiss={() => setPickError(null)} /> : null}
 
       {rows.length === 0 ? null : (
         <ul className="convert-list">

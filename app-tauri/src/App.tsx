@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchInfo,
   onDownloadProgress,
@@ -27,10 +27,13 @@ import SettingsPanel from "@/components/SettingsPanel";
 import ConvertPanel from "@/components/ConvertPanel";
 import ScanPanel from "@/components/ScanPanel";
 import FirstRun from "@/components/FirstRun";
-import UpdateBanner from "@/components/UpdateBanner";
 import AppLogo from "@/components/AppLogo";
+import Toaster, { ToneIcon } from "@/components/Toaster";
+import ErrorNote from "@/components/ErrorNote";
 import { toolsStatus, type ToolsStatus } from "@/lib/api";
-import { look, type Available } from "@/lib/updater";
+import { look } from "@/lib/updater";
+import { offerUpdate } from "@/lib/updateFlow";
+import { toast } from "@/lib/toast";
 import {
   apply as applyTheme,
   loadPref,
@@ -108,8 +111,6 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
 const TAB_NOTICES: Partial<Record<TabId, string>> = {
   tiktok:
     "TikTok links not working? Check for updates in Settings.",
-  instagram:
-    "Instagram is blocking downloads right now, even when you're signed in.",
   ai: "AI search only looks on YouTube.",
 };
 
@@ -122,12 +123,9 @@ const DEGRADED_TABS: Partial<Record<TabId, string>> = {
   // challenge. So the tab is not broken, it is out of date, and the notice
   // says where the update button is. A warning dot that stays up after the
   // thing works is how people learn to ignore warning dots.
-  // Measured: with a session Instagram accepts, every path still fails —
-  // a post with HTTP 400, a profile with "unable to extract data" — while
-  // instagram.com loads fine in a browser. Marking the tab is more honest
-  // than letting someone paste a link and hit a wall, and it stops the
-  // failure reading as "my login is set up wrong".
-  instagram: "Blocked by Instagram right now",
+  // Instagram is no longer marked either. Re-measured 2026-09-26 with no
+  // login: public posts and reels download again, and the ones that fail
+  // are private or photo-only, which the error on the attempt now says.
 };
 
 /// Which tab a pasted URL belongs to, so pasting an Instagram link while the
@@ -172,7 +170,6 @@ export default function App() {
   // null while the first check is in flight — the window stays empty for that
   // moment rather than flashing the main UI and then covering it.
   const [tools, setTools] = useState<ToolsStatus | null>(null);
-  const [update, setUpdate] = useState<Available | null>(null);
   // A conversion runs in Rust the same way a download does, so it has to block
   // the same things: switching tabs away from its Stop button, and installing
   // an update that would kill the process.
@@ -208,7 +205,11 @@ export default function App() {
   // launched it to grab one video will be done before this ever fires.
   useEffect(() => {
     const timer = setTimeout(() => {
-      look().then(setUpdate).catch(() => {});
+      look()
+        .then((found) => {
+          if (found) offerUpdate(found, () => busyRef.current);
+        })
+        .catch(() => {});
     }, 4000);
     return () => clearTimeout(timer);
   }, []);
@@ -264,7 +265,7 @@ export default function App() {
     // running download's Stop button goes with it: the transfer carries on
     // in the background with nothing on screen to stop it.
     if (downloadInProgress) {
-      setError("Finish or stop the download in progress before fetching another link.");
+      waitForDownload("fetching another link");
       return;
     }
     loadInfo(url, mode);
@@ -281,6 +282,21 @@ export default function App() {
     playlistBusy ||
     Object.values(downloads).some((d) => !d.done && !d.error && !d.stopped);
 
+  // The update toast outlives this render, so it asks through a ref.
+  const busyRef = useRef(downloadInProgress);
+  busyRef.current = downloadInProgress;
+
+  /// Said as a toast, not in the error slot: nothing failed, and the error
+  /// slot would push the running download's row down the screen.
+  function waitForDownload(doing: string) {
+    toast({
+      id: "busy",
+      tone: "warn",
+      title: converting ? "A conversion is still running" : "A download is still running",
+      body: `Let it finish, or stop it, before ${doing}.`,
+    });
+  }
+
   function switchTab(next: TabId) {
     if (next === tab) return;
 
@@ -289,11 +305,7 @@ export default function App() {
     // transfer with no way to get back to its Stop button. Leaving the tab is
     // allowed; wiping the evidence is not.
     if (downloadInProgress) {
-      setError(
-        converting
-          ? "Finish or stop the conversion in progress before switching tabs."
-          : "Finish or stop the download in progress before switching tabs."
-      );
+      waitForDownload("switching tabs");
       return;
     }
 
@@ -399,7 +411,7 @@ export default function App() {
   function replayHistory(item: HistoryItem) {
     // Same reason as handleSubmit: this replaces whatever is on screen.
     if (downloadInProgress) {
-      setError("Finish or stop the download in progress before fetching another link.");
+      waitForDownload("fetching another link");
       return;
     }
     // History stores resolved page URLs whichever tab found them, so a replay
@@ -497,14 +509,6 @@ export default function App() {
         )}
 
         <div className="body-main">
-      {update && !needsTools ? (
-        <UpdateBanner
-          update={update}
-          busy={downloadInProgress}
-          onDismiss={() => setUpdate(null)}
-        />
-      ) : null}
-
       {settingsOpen ? (
         <SettingsPanel
           onClose={() => setSettingsOpen(false)}
@@ -579,13 +583,18 @@ export default function App() {
               identical text on one screen. The error wins: it is about what
               the user just did. */}
           {TAB_NOTICES[tab] && !error ? (
-            <p className={`tab-notice${DEGRADED_TABS[tab] ? " tab-notice-warn" : ""}`}>
-              {TAB_NOTICES[tab]}
-            </p>
+            <div className={`note ${DEGRADED_TABS[tab] ? "note-warn" : "note-info"}`}>
+              <span className="note-icon" aria-hidden="true">
+                <ToneIcon tone={DEGRADED_TABS[tab] ? "warn" : "info"} />
+              </span>
+              <p className="note-text note-body">{TAB_NOTICES[tab]}</p>
+            </div>
           ) : null}
-        </div>
 
-        {error ? <p className="error-text">{error}</p> : null}
+          {/* Inside the entry column, so on the empty screen it is as wide
+              as the field it is about rather than the whole window. */}
+          {error ? <ErrorNote message={error} onDismiss={() => setError(null)} /> : null}
+        </div>
 
         {info ? (
           <ResultCard
@@ -620,6 +629,7 @@ export default function App() {
       )}
         </div>
       </div>
+      <Toaster />
     </div>
   );
 }
