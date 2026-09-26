@@ -73,11 +73,10 @@ const TAB_LEADS: Record<TabId, string> = {
   instagram: "Paste a reel or post link to save it.",
   twitter: "Paste a post link to save the video in it.",
   twitch: "Paste a VOD or clip link to save it.",
-  other: "Paste any link — yt-dlp handles around 1750 sites.",
+  other: "Paste a link from almost any video site.",
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
-  convert:
-    "Turn files you already have into MP3 or MP4, without uploading them anywhere.",
-  scan: "Give it a page that isn't a video itself and it looks through it for anything downloadable.",
+  convert: "Convert audio and video files to MP3 or MP4.",
+  scan: "Paste a page address to find the videos on it.",
 };
 
 /// Per-tab copy. The placeholder shows the shape of link that tab expects,
@@ -89,7 +88,7 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
   instagram: "instagram.com/reel/…",
   twitter: "x.com/user/status/…",
   twitch: "twitch.tv/videos/…  ·  or a clip link",
-  other: "Paste any link — yt-dlp supports ~1750 sites",
+  other: "Paste any link",
   ai: "Describe the song or video you want…",
   // The convert tab has no input field — it uses a file picker instead — so
   // this is never rendered. It exists because the record is keyed by tab.
@@ -108,10 +107,10 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
 /// do, and will it come back. Nothing else belongs here.
 const TAB_NOTICES: Partial<Record<TabId, string>> = {
   tiktok:
-    "If TikTok links aren't working, open Settings and check for updates — TikTok changed something and the fix ships as an update to the downloader, not to the app itself. Measured 2026-09-18: broken on the version that shipped with 0.7.6, working again after updating.",
+    "TikTok links not working? Check for updates in Settings.",
   instagram:
-    "Instagram downloads aren't working. Instagram is blocking apps like this one, so it fails even when you're signed in — it's not your account, and updating won't help either. Re-measured 2026-09-18 on the newest downloader, with and without browser sign-in: every attempt refused. It'll start working again by itself once the fix arrives.",
-  ai: "AI search looks on YouTube only. For the other sites, paste a link.",
+    "Instagram is blocking downloads right now, even when you're signed in.",
+  ai: "AI search only looks on YouTube.",
 };
 
 /// Tabs whose downloads are known to be failing, surfaced as a dot on the
@@ -128,7 +127,7 @@ const DEGRADED_TABS: Partial<Record<TabId, string>> = {
   // instagram.com loads fine in a browser. Marking the tab is more honest
   // than letting someone paste a link and hit a wall, and it stops the
   // failure reading as "my login is set up wrong".
-  instagram: "Not working at the moment — Instagram is blocking it",
+  instagram: "Blocked by Instagram right now",
 };
 
 /// Which tab a pasted URL belongs to, so pasting an Instagram link while the
@@ -475,24 +474,7 @@ export default function App() {
           // away in Settings.
           onClick={() => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark")}
         >
-          {resolveTheme(theme) === "dark" ? (
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"
-              />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <circle cx="12" cy="12" r="4.2" fill="currentColor" />
-              <path
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"
-              />
-            </svg>
-          )}
+          {resolveTheme(theme) === "dark" ? <MoonIcon /> : <SunIcon />}
         </button>
         <button
           type="button"
@@ -501,12 +483,7 @@ export default function App() {
           title="Settings"
           onClick={() => setSettingsOpen((v) => !v)}
         >
-          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 6.2a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4zm7.4-1.3a7.6 7.6 0 0 0 0-1.8l1.7-1.3a.5.5 0 0 0 .1-.6l-1.6-2.8a.5.5 0 0 0-.6-.2l-2 .8a7.4 7.4 0 0 0-1.5-.9l-.3-2.1a.5.5 0 0 0-.5-.4h-3.2a.5.5 0 0 0-.5.4l-.3 2.1c-.6.2-1 .5-1.5.9l-2-.8a.5.5 0 0 0-.6.2L4.5 9.2a.5.5 0 0 0 .1.6l1.7 1.3a7.6 7.6 0 0 0 0 1.8l-1.7 1.3a.5.5 0 0 0-.1.6l1.6 2.8c.1.2.4.3.6.2l2-.8c.5.4.9.7 1.5.9l.3 2.1c0 .2.2.4.5.4h3.2c.3 0 .5-.2.5-.4l.3-2.1c.6-.2 1-.5 1.5-.9l2 .8c.2.1.5 0 .6-.2l1.6-2.8a.5.5 0 0 0-.1-.6l-1.7-1.3z"
-            />
-          </svg>
+          <GearIcon />
           </button>
           <WindowControls />
         </div>
@@ -644,5 +621,51 @@ export default function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+/// The title bar's three glyphs, drawn as one set: same 24 grid, same
+/// 1.8 stroke, round caps, so they sit beside the window controls as equals.
+function ChromeIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <ChromeIcon>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </ChromeIcon>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <ChromeIcon>
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </ChromeIcon>
+  );
+}
+
+function GearIcon() {
+  return (
+    <ChromeIcon>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </ChromeIcon>
   );
 }

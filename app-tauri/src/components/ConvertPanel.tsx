@@ -37,8 +37,8 @@ import { StopGlyph } from "@/components/DownloadRow";
 /// The two outputs, described by what you get rather than by codec: the
 /// question someone on this screen has is "which one do I want".
 const TARGETS: { id: ConvertTarget; label: string; hint: string }[] = [
-  { id: "mp3", label: "MP3", hint: "Audio only — the sound from any audio or video file" },
-  { id: "mp4", label: "MP4", hint: "Video that plays anywhere — audio files get a still picture" },
+  { id: "mp3", label: "MP3", hint: "Audio only" },
+  { id: "mp4", label: "MP4", hint: "Video, plays everywhere" },
 ];
 
 /// One file in the list, with whatever has happened to it so far.
@@ -472,8 +472,7 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
           </span>
           {rows.length === 0 ? (
             <span className="convert-drop-hint">
-              Any format ffmpeg can read. Converted files are saved next to the
-              originals, and nothing is uploaded — it all runs on this computer.
+              Saved next to the original files.
             </span>
           ) : null}
         </div>
@@ -538,10 +537,10 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
                             // MP4 is fine, but the result is a silent video
                             // and nobody should find that out afterwards.
                             target === "mp4" && !row.hasAudio
-                              ? "No sound — the video will be silent"
+                              ? "No sound, the video will be silent"
                               : null,
                             target === "mp4" && !row.hasVideo
-                              ? "No picture — you'll get a black screen with the sound"
+                              ? "No picture, the video will be black"
                               : null,
                           ]
                             .filter(Boolean)

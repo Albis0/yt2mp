@@ -159,9 +159,8 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // as a whole when everything but one server works.
     if crate::cache_node::is_tls_failure(raw) {
         return format!(
-            "Your connection wouldn't open a secure link to {}'s video \
-             servers. Something on the network is interfering — try again, or \
-             try another network or a VPN.",
+            "Couldn't connect to {}'s video servers. Try again, or use a \
+             different network or a VPN.",
             platform.label()
         );
     }
@@ -190,9 +189,8 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // has to be checked before the login branch, because the underlying
     // symptom the user then hits is "login required".
     if lower.contains("could not copy") && lower.contains("cookie database") {
-        return "Close your browser completely and try again — check the \
-                taskbar corner too, it often keeps running there. Your login \
-                can't be read while it's open."
+        return "Close your browser (check the system tray too) and try \
+                again. The login can't be read while it's open."
             .into();
     }
 
@@ -215,10 +213,7 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
             || lower.contains("unable to extract data")
             || lower.contains("video info extraction failed"))
     {
-        return "Instagram is blocking downloads right now. It's not your \
-                account and not something you can fix here — signing in again \
-                won't help. It'll start working again by itself once the fix \
-                arrives."
+        return "Instagram is blocking downloads right now. It's not your account, and signing in again won't help."
             .into();
     }
 
@@ -230,8 +225,7 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     {
         return if platform.may_require_login() {
             format!(
-                "{} needs you to be logged in for this one. Private accounts, \
-                 stories and age-restricted posts can't be downloaded.",
+                "{} needs you to be logged in for this post. Private accounts, stories and age-restricted posts can't be downloaded.",
                 platform.label()
             )
         } else {
@@ -248,7 +242,7 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     }
 
     if lower.contains("no video could be found") || lower.contains("no media found") {
-        return "There's no video on that post — it may be text or images only.".into();
+        return "That post has no video.".into();
     }
 
     if lower.contains("unsupported url") || lower.contains("is not a valid url") {
@@ -273,9 +267,7 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // yt-dlp is beforehand.
     if lower.contains("http error 403") || lower.contains("forbidden") {
         return format!(
-            "{} wouldn't hand over the file. The site has usually changed \
-             something — open Settings and check for updates, which fixes \
-             this more often than not.",
+            "{} refused the download. Check for updates in Settings, that usually fixes it.",
             platform.label()
         );
     }
@@ -285,9 +277,7 @@ pub fn explain_error(raw: &str, platform: Platform) -> String {
     // "check your link" would send them chasing a non-problem.
     if lower.contains("unexpected response") || lower.contains("please report") {
         return format!(
-            "{} changed something and this app can't read it right now. \
-             Nothing is wrong on your end — open Settings and check for \
-             updates, or wait for the fix.",
+            "{} changed something on their end. Check for updates in Settings, or try again later.",
             platform.label()
         );
     }

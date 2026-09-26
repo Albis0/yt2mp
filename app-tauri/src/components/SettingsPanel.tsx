@@ -217,7 +217,7 @@ export default function SettingsPanel({
         setUpdateNote(
           percent === null
             ? "Downloading the update. yt2mp will restart on its own."
-            : `Downloading the update — ${Math.floor(percent)}%. yt2mp will restart on its own.`
+            : `Downloading the update… ${Math.floor(percent)}%. yt2mp will restart when it's done.`
         )
       );
     } catch (err) {
@@ -318,16 +318,16 @@ export default function SettingsPanel({
     // the downloading.
     if (blocked.length > 0) {
       const names = blocked.map((s) => s.label).join(" and ");
-      return `Your ${names} login works — nothing is wrong with your account. Instagram is blocking apps like this one at the moment, so signing in again or trying another browser won't change anything. It'll start working again by itself once the fix arrives.`;
+      return `Your ${names} login works. Instagram is blocking downloads right now, so signing in again won't help.`;
     }
     if (locked.length > 0 && locked.length === result.length) {
       const names = locked.map((s) => s.label).join(" and ");
       const them = locked.length > 1 ? "them" : "it";
-      return `Close ${names} and check again — also check the taskbar corner, ${them} often keeps running there. While ${locked.length > 1 ? "these browsers are" : "this browser is"} open, your login can't be read from ${them}.`;
+      return `Close ${names} (check the system tray too) and try again. The login can't be read while ${them === "them" ? "they're" : "it's"} open.`;
     }
     if (locked.length > 0) {
       const names = locked.map((s) => s.label).join(" and ");
-      return `None of your browsers is signed in to Instagram. ${names} couldn't be checked while open — close ${locked.length > 1 ? "them" : "it"} and try again, or sign in to Instagram in Firefox, which works even while it's open.`;
+      return `None of your browsers is signed in to Instagram. ${names} couldn't be checked while open; close ${locked.length > 1 ? "them" : "it"} and try again.`;
     }
     return "None of your browsers is signed in to Instagram. Sign in to Instagram in any browser, then check again.";
   }
@@ -455,7 +455,7 @@ export default function SettingsPanel({
                   <div className="prefs-field-text">
                     <span className="prefs-field-name">Source code</span>
                     <span className="prefs-field-hint">
-                      yt2mp is open source. Releases and the changelog live here too.
+                      Releases and changelog.
                     </span>
                   </div>
                   <button
@@ -642,7 +642,7 @@ export default function SettingsPanel({
                     <span className="prefs-field-hint">
                       {loaded && browsers.length === 0
                         ? "No browser found on this computer."
-                        : "Found on this computer. Chrome, Brave, Opera and others show up here once installed."}
+                        : "Browsers installed on this PC."}
                     </span>
                   </div>
                   {browsers.length > 0 ? (
@@ -669,8 +669,8 @@ export default function SettingsPanel({
                 </div>
 
                 <p className="prefs-fine">
-                  No password is ever entered here. The session stays on this
-                  computer and is sent only to the site it belongs to.
+                  yt2mp never asks for a password. Cookies are only sent to the
+                  site they belong to.
                 </p>
               </>
             ) : null}
@@ -705,11 +705,11 @@ function describe(outcome: ProbeStep["outcome"]): string {
       // Says *why* it could not be read. A bare "close this browser and
       // retry" reads as an arbitrary demand when a Firefox-family browser on
       // the same list was tested fine while open.
-      return "it's open — close it, then check again";
+      return "open, close it and check again";
     case "signedinbutblocked":
       // Not "rate-limiting this device": measured, the block applies
       // generally, not to this connection's request rate.
-      return "signed in — but Instagram is blocking downloads";
+      return "signed in, but Instagram is blocking downloads";
     case "failed":
       return outcome.reason;
   }

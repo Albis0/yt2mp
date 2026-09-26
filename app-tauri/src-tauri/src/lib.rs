@@ -354,7 +354,7 @@ async fn probe_all(paths: Vec<PathBuf>) -> Vec<ProbedFile> {
 async fn save_a_copy(app: AppHandle, path: String, name: String) -> Result<Option<String>, String> {
     let source = PathBuf::from(&path);
     if !source.is_file() {
-        return Err("That file isn't where it was — it may have been moved.".into());
+        return Err("That file was moved or deleted.".into());
     }
 
     let start_dir = app
@@ -488,7 +488,7 @@ async fn convert_file(
 ) -> Result<String, String> {
     let source = PathBuf::from(&path);
     if !source.is_file() {
-        return Err("That file isn't where it was — it may have been moved.".into());
+        return Err("That file was moved or deleted.".into());
     }
 
     // Read the file as it is right now, not as it was when the user picked

@@ -44,7 +44,7 @@ export default function UpdateBanner({
         <span className="updatebar-text">
           {percent === null
             ? "Downloading the update…"
-            : `Downloading the update — ${Math.floor(percent)}%`}
+            : `Downloading the update… ${Math.floor(percent)}%`}
         </span>
         <span className="updatebar-note">
           yt2mp will restart on its own when this finishes.

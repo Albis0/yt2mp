@@ -311,7 +311,7 @@ pub fn explain(raw: &str, name: &str, target: Target) -> String {
         return format!("{name} isn't a media file this can read.");
     }
     if lower.contains("no such file") {
-        return format!("{name} isn't where it was — it may have been moved or deleted.");
+        return format!("{name} was moved or deleted.");
     }
     if lower.contains("permission denied") {
         return format!("Windows wouldn't let this read {name}.");
@@ -938,7 +938,7 @@ mod tests {
             let out = probe(&dest).await.expect("the mp4 probes");
             assert!(
                 out.has_video,
-                "a picture was generated - without one this is an audio file                  wearing an mp4 extension"
+                "a picture was generated - without one this is an audio file wearing an mp4 extension"
             );
             assert!(out.has_audio, "the sound survived");
 

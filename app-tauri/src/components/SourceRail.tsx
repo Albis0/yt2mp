@@ -148,7 +148,7 @@ export default function SourceRail({ active, onSelect, degraded }: SourceRailPro
             aria-selected={isActive}
             // The full name lives in the tooltip and the accessible name, so
             // the short label under the icon never has to carry it alone.
-            title={warning ? `${tab.label} — ${warning}` : tab.label}
+            title={warning ? `${tab.label}: ${warning}` : tab.label}
             aria-label={tab.label}
             className={`rail-item rail-${tab.id}${isActive ? " rail-item-active" : ""}`}
             onClick={() => onSelect(tab.id)}

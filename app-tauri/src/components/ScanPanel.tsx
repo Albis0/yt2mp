@@ -243,9 +243,7 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
 
       {phase.at === "idle" ? (
         <p className="scan-lead">
-          For pages that aren't a video themselves — an article, a lesson, a
-          listing. Paste the address of the page and this looks through it for
-          anything that can be downloaded.
+          Works on articles, course pages and listings.
         </p>
       ) : null}
 
@@ -255,21 +253,14 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
       {phase.at === "quick" ? (
         <div className="scan-wait">
           <p className="scan-wait-title">Looking at the page…</p>
-          <p className="scan-wait-sub">
-            Checking whether there's a video playing on it. Usually a few
-            seconds.
-          </p>
+          <p className="scan-wait-sub">Usually a few seconds.</p>
         </div>
       ) : null}
 
       {phase.at === "deep" ? (
         <div className="scan-wait">
-          <p className="scan-wait-title">Going through every link on the page…</p>
-          <p className="scan-wait-sub">
-            Reading the page, then checking each link on it to see if anything
-            can be downloaded. This one can take a minute — it's working, you
-            can leave it.
-          </p>
+          <p className="scan-wait-title">Checking every link on the page…</p>
+          <p className="scan-wait-sub">This can take a minute.</p>
         </div>
       ) : null}
 
@@ -279,21 +270,17 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
         <div className="scan-empty">
           {phase.deepDone ? (
             <>
-              <p className="scan-wait-title">Nothing downloadable on that page.</p>
+              <p className="scan-wait-title">No videos found on that page.</p>
               <p className="scan-wait-sub">
-                Both the page and every link on it were checked. Either there's
-                no video there, or it's on a site this can't read. If you can
-                see the video playing, try copying its own link and using the
-                Any link tab.
+                If you can see one playing, copy its link into the Any link tab.
               </p>
             </>
           ) : (
             <>
-              <p className="scan-wait-title">Nothing playing directly on that page.</p>
+              <p className="scan-wait-title">No video playing on that page.</p>
               <p className="scan-wait-sub">
-                That's normal — most pages link to their videos rather than
-                playing them. Searching deeper reads the page and checks every
-                link on it, which takes longer but finds a lot more.
+                Most pages link to their videos instead. A deeper search checks
+                every link.
               </p>
               <button type="button" className="submit-btn" onClick={runDeep}>
                 Search deeper

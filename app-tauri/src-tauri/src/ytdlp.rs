@@ -448,7 +448,7 @@ pub async fn run_ytdlp_within(
 
     let output = tokio::time::timeout(deadline, child.wait_with_output())
         .await
-        .map_err(|_| "Timed out — yt-dlp took too long to respond.".to_string())?
+        .map_err(|_| "Timed out. yt-dlp took too long to respond.".to_string())?
         .map_err(|e| format!("yt-dlp failed: {e}"))?;
 
     if !output.status.success() {
@@ -1228,7 +1228,7 @@ where
             }
             _ = &mut deadline => {
                 let _ = child.kill().await;
-                return Err("Timed out — download took too long.".into());
+                return Err("Timed out. The download took too long.".into());
             }
             line = reader.next_segment() => {
                 match line {

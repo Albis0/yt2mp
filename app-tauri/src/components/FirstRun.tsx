@@ -53,18 +53,15 @@ export default function FirstRun({
       <div className="firstrun-card">
         <h2 className="firstrun-title">Repairing yt2mp</h2>
         <p className="firstrun-text">
-          The tools yt2mp downloads with — ffmpeg and yt-dlp — are missing.
-          They normally come with the app, so something removed them; an
-          antivirus quarantine is the usual reason. Fetching them again now,
-          about 120&nbsp;MB.
+          ffmpeg and yt-dlp are missing, usually because an antivirus
+          removed them. Downloading them again (about 120&nbsp;MB).
         </p>
 
         {error ? (
           <>
             <p className="firstrun-error">{error}</p>
             <p className="firstrun-text firstrun-dim">
-              Nothing was left half-finished — anything that did download is
-              kept, so trying again picks up where this stopped.
+              Anything already downloaded is kept.
             </p>
             <button type="button" className="settings-primary" onClick={start}>
               Try again

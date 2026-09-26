@@ -409,7 +409,7 @@ export default function PlaylistView({
         <div className="bulk-bar">
           <div className="bulk-line">
             <span className="bulk-text">
-              {bulk.cancelled ? "Stopped" : "Finished"} — {bulk.done} of{" "}
+              {bulk.cancelled ? "Stopped" : "Finished"} · {bulk.done} of{" "}
               {bulk.total} saved
               {bulk.failed.length > 0 ? `, ${bulk.failed.length} failed` : ""}
             </span>
@@ -425,7 +425,7 @@ export default function PlaylistView({
             <ul className="bulk-failed">
               {bulk.failed.map((f, i) => (
                 <li key={i}>
-                  <span className="bulk-failed-title">{f.title}</span> — {f.reason}
+                  <span className="bulk-failed-title">{f.title}</span>: {f.reason}
                 </li>
               ))}
             </ul>
