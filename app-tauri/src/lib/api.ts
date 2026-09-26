@@ -132,11 +132,12 @@ export function startDownload(args: StartDownloadArgs): Promise<string> {
 }
 
 /**
- * Asks for a folder, once, before a playlist download starts. Resolves with
- * null if the user closes the dialog.
+ * The folder a playlist saves into: the download folder, asked for now if
+ * this is the first download. Resolves with null if the user closes the
+ * dialog.
  */
-export function pickFolder(): Promise<string | null> {
-  return invoke<string | null>("pick_folder");
+export function downloadFolder(): Promise<string | null> {
+  return invoke<string | null>("download_folder");
 }
 
 /// A file on disk the converter can read.
@@ -294,23 +295,45 @@ export function revealFile(path: string): Promise<void> {
 export interface Settings {
   /** Browser to borrow cookies from, or null to share nothing. */
   cookiesFrom: string | null;
+  /** Where downloads are saved without asking; null until the first one. */
+  downloadDir: string | null;
 }
 
-/// Rust uses snake_case on the wire; these two functions are the only place
-/// that difference exists, so the rest of the UI never sees it.
+interface RawSettings {
+  cookies_from: string | null;
+  download_dir: string | null;
+}
+
+/// Rust uses snake_case on the wire; this is the only place that difference
+/// exists, so the rest of the UI never sees it.
+function toSettings(raw: RawSettings): Settings {
+  return { cookiesFrom: raw.cookies_from, downloadDir: raw.download_dir ?? null };
+}
+
 export async function getSettings(): Promise<Settings> {
-  const raw = await invoke<{ cookies_from: string | null }>("get_settings");
-  return { cookiesFrom: raw.cookies_from };
+  return toSettings(await invoke<RawSettings>("get_settings"));
 }
 
-/// Returns what was actually stored, which may differ from what was sent if a
-/// value was rejected — callers should render the result rather than assume
-/// their input took effect.
-export async function saveSettings(next: Settings): Promise<Settings> {
-  const raw = await invoke<{ cookies_from: string | null }>("save_settings", {
-    next: { cookies_from: next.cookiesFrom },
-  });
-  return { cookiesFrom: raw.cookies_from };
+/// Saves the cookie choice. Returns what was actually stored, which may differ
+/// from what was sent if a value was rejected — callers should render the
+/// result rather than assume their input took effect.
+export async function saveSettings(next: Pick<Settings, "cookiesFrom">): Promise<Settings> {
+  return toSettings(
+    await invoke<RawSettings>("save_settings", {
+      next: { cookies_from: next.cookiesFrom },
+    })
+  );
+}
+
+/// Picks a new download folder. Null when the dialog was closed.
+export async function chooseDownloadDir(): Promise<Settings | null> {
+  const raw = await invoke<RawSettings | null>("choose_download_dir");
+  return raw ? toSettings(raw) : null;
+}
+
+/// Forgets the download folder, so the next download asks for one.
+export async function forgetDownloadDir(): Promise<Settings> {
+  return toSettings(await invoke<RawSettings>("forget_download_dir"));
 }
 
 /// A browser installed on this machine.

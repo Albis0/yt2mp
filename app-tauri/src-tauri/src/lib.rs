@@ -184,6 +184,34 @@ fn fit_window_to_screen(app: &AppHandle) {
     let _ = window.center();
 }
 
+/// Destinations that downloads still running have claimed. A download only
+/// appears at its final name once it is complete, so the disk alone cannot
+/// say that a name is taken: two downloads of the same title into the same
+/// folder would both pick "Song.mp3" and the second would replace the first.
+static CLAIMED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// A destination reserved for one download, released when dropped.
+struct Claim {
+    path: PathBuf,
+}
+
+impl Claim {
+    /// The first free name for `desired`, free both on disk and among the
+    /// downloads still running.
+    fn new(desired: &Path) -> Self {
+        let mut claimed = CLAIMED.lock().unwrap();
+        let path = free_path(desired, |p| p.exists() || claimed.iter().any(|c| c == p));
+        claimed.push(path.clone());
+        Self { path }
+    }
+}
+
+impl Drop for Claim {
+    fn drop(&mut self) {
+        CLAIMED.lock().unwrap().retain(|c| c != &self.path);
+    }
+}
+
 /// Returns a path that does not exist yet, adding " (2)", " (3)" … before the
 /// extension.
 ///
@@ -192,7 +220,12 @@ fn fit_window_to_screen(app: &AppHandle) {
 /// — and mixes really do repeat titles, so without this a 40-track mix with
 /// two "Intro" entries would silently end up with 39 files.
 fn unique_path(desired: &Path) -> PathBuf {
-    if !desired.exists() {
+    free_path(desired, Path::exists)
+}
+
+/// `unique_path` with the test for "taken" supplied by the caller.
+fn free_path(desired: &Path, taken: impl Fn(&Path) -> bool) -> PathBuf {
+    if !taken(desired) {
         return desired.to_path_buf();
     }
     let dir = desired.parent().unwrap_or(Path::new("."));
@@ -211,44 +244,21 @@ fn unique_path(desired: &Path) -> PathBuf {
         } else {
             format!("{stem} ({n}).{ext}")
         });
-        if !candidate.exists() {
+        if !taken(&candidate) {
             return candidate;
         }
     }
     desired.to_path_buf()
 }
 
-/// Asks once for a folder to save a whole playlist into.
-///
-/// Separate from `start_download` so the prompt happens a single time before
-/// the queue starts, rather than once per track.
+/// The folder a whole playlist saves into: the download folder, asked for
+/// here if this is the first download. Called once before the queue starts,
+/// so a first-time playlist asks a single time rather than per track.
 #[tauri::command]
-async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
-    let downloads_dir = app
-        .path()
-        .download_dir()
-        .unwrap_or_else(|_| PathBuf::from("."));
-
-    let picked = tauri::async_runtime::spawn_blocking({
-        let app = app.clone();
-        move || {
-            app.dialog()
-                .file()
-                .set_directory(&downloads_dir)
-                .blocking_pick_folder()
-        }
-    })
-    .await
-    .map_err(|e| format!("Folder dialog failed: {e}"))?;
-
-    let Some(picked) = picked else {
-        return Ok(None);
-    };
-
-    let path = picked
-        .into_path()
-        .map_err(|e| format!("Invalid folder: {e}"))?;
-    Ok(Some(path.to_string_lossy().into_owned()))
+async fn download_folder(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(download_folder_or_ask(&app)
+        .await?
+        .map(|d| d.to_string_lossy().into_owned()))
 }
 
 /// Opens a file picker for the converter tab and reports what was chosen.
@@ -551,43 +561,24 @@ async fn start_download(
     // front, so each track saves without a dialog. Asking per track would mean
     // sitting through one prompt per song, which defeats the point of a
     // "download everything" button.
-    let dest: PathBuf = if let Some(dir) = into_dir {
-        let dir = PathBuf::from(dir);
-        if !dir.is_dir() {
-            return Err("That folder no longer exists.".into());
-        }
-        unique_path(&dir.join(&default_name))
-    } else {
-        let downloads_dir = app
-            .path()
-            .download_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
-
-        // The dialog plugin's blocking API is used from inside a spawned task
-        // so the async command itself never blocks the IPC thread.
-        let file_path = tauri::async_runtime::spawn_blocking({
-            let app = app.clone();
-            let default_name = default_name.clone();
-            move || {
-                app.dialog()
-                    .file()
-                    .set_file_name(&default_name)
-                    .set_directory(&downloads_dir)
-                    .add_filter(if ext == "mp3" { "Audio" } else { "Video" }, &[ext])
-                    .blocking_save_file()
+    //
+    // Everything else goes to the saved download folder. The first download
+    // asks for it; after that nothing asks, and Settings changes it.
+    let dir: PathBuf = match into_dir {
+        Some(dir) => {
+            let dir = PathBuf::from(dir);
+            if !dir.is_dir() {
+                return Err("That folder no longer exists.".into());
             }
-        })
-        .await
-        .map_err(|e| format!("Save dialog failed: {e}"))?;
-
-        let Some(file_path) = file_path else {
-            return Err("Save cancelled".into());
-        };
-
-        file_path
-            .into_path()
-            .map_err(|e| format!("Invalid save location: {e}"))?
+            dir
+        }
+        None => match download_folder_or_ask(&app).await? {
+            Some(dir) => dir,
+            None => return Err("Save cancelled".into()),
+        },
     };
+    let claim = Claim::new(&dir.join(&default_name));
+    let dest = claim.path.clone();
 
     // Control channel: the command holds the receiver, the map holds the
     // sender so pause/resume/stop can signal it by id.
@@ -622,6 +613,9 @@ async fn start_download(
     .await;
 
     downloads.inner.lock().unwrap().remove(&id);
+    // Released only now: the file is at its name (or never will be), so the
+    // disk answers for it from here on.
+    drop(claim);
 
     match result {
         Ok(()) => Ok(dest.to_string_lossy().into_owned()),
@@ -640,6 +634,73 @@ async fn start_download(
             }
         }
     }
+}
+
+/// Held while the first download asks where downloads go, so pressing MP3 and
+/// MP4 in quick succession opens one folder dialog rather than two. The
+/// second waits, then finds the answer the first one saved.
+static ASKING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The saved download folder, or, when there is none yet, the one the user
+/// picks now — which is then saved. `None` when they close the dialog.
+async fn download_folder_or_ask(app: &AppHandle) -> Result<Option<PathBuf>, String> {
+    if let Some(dir) = settings::download_dir() {
+        return Ok(Some(dir));
+    }
+    let _asking = ASKING.lock().await;
+    if let Some(dir) = settings::download_dir() {
+        return Ok(Some(dir));
+    }
+    let Some(dir) = ask_for_folder(app, "Where should downloads be saved?").await? else {
+        return Ok(None);
+    };
+    settings::update(|s| s.download_dir = Some(dir.to_string_lossy().into_owned()))?;
+    Ok(Some(dir))
+}
+
+/// A folder dialog opening on the current download folder, or on the
+/// system's Downloads when there is none.
+async fn ask_for_folder(app: &AppHandle, title: &'static str) -> Result<Option<PathBuf>, String> {
+    let start = settings::download_dir()
+        .or_else(|| app.path().download_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    let picked = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || {
+            app.dialog()
+                .file()
+                .set_title(title)
+                .set_directory(&start)
+                .blocking_pick_folder()
+        }
+    })
+    .await
+    .map_err(|e| format!("Folder dialog failed: {e}"))?;
+
+    match picked {
+        None => Ok(None),
+        Some(p) => p
+            .into_path()
+            .map(Some)
+            .map_err(|e| format!("Invalid folder: {e}")),
+    }
+}
+
+/// Settings' "Change…": picks a new download folder and saves it. Returns the
+/// stored settings, or `None` when the dialog was closed.
+#[tauri::command]
+async fn choose_download_dir(app: AppHandle) -> Result<Option<settings::Settings>, String> {
+    let Some(dir) = ask_for_folder(&app, "Save downloads to").await? else {
+        return Ok(None);
+    };
+    settings::update(|s| s.download_dir = Some(dir.to_string_lossy().into_owned())).map(Some)
+}
+
+/// Settings' "Ask next time": forgets the folder, so the next download asks.
+#[tauri::command]
+fn forget_download_dir() -> Result<settings::Settings, String> {
+    settings::update(|s| s.download_dir = None)
 }
 
 fn signal(downloads: &State<'_, Downloads>, id: &str, control: Control) {
@@ -689,7 +750,10 @@ fn get_settings() -> settings::Settings {
 /// it can never claim a setting took effect when it did not.
 #[tauri::command]
 fn save_settings(next: settings::Settings) -> Result<settings::Settings, String> {
-    settings::save(next)
+    // Only the cookie source is edited through here. The download folder has
+    // its own commands, and taking it from `next` would clear it whenever the
+    // page saved a cookie choice without mentioning the folder.
+    settings::update(|s| s.cookies_from = next.cookies_from)
 }
 
 /// Browsers found on this machine, forks included.
@@ -784,9 +848,7 @@ async fn find_working_browser(app: AppHandle) -> Result<Vec<ProbeStep>, String> 
     // previously-chosen browser saved after it demonstrably failed is how the
     // panel ends up claiming "Currently using Zen" directly above a row saying
     // Zen did not work.
-    settings::save(settings::Settings {
-        cookies_from: winner,
-    })?;
+    settings::update(|s| s.cookies_from = winner)?;
 
     Ok(steps)
 }
@@ -848,7 +910,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fetch_info,
             start_download,
-            pick_folder,
+            download_folder,
             pick_media_files,
             convert_file,
             scan_page_quick,
@@ -868,7 +930,9 @@ pub fn run() {
             ensure_tools,
             update_ytdlp,
             check_ytdlp,
-            app_version
+            app_version,
+            choose_download_dir,
+            forget_download_dir
         ])
         .run(tauri::generate_context!())
         .expect("error while running yt2mp");
@@ -884,6 +948,27 @@ mod tests {
     #[test]
     fn strips_characters_windows_rejects() {
         assert_eq!(safe_file_name("a/b:c*d?e\"f<g>h|i"), "abcdefghi");
+    }
+
+    /// Two downloads of the same title into one folder, both still running:
+    /// neither file exists yet, so only the claim keeps them apart.
+    #[test]
+    fn running_downloads_never_share_a_destination() {
+        let dir = std::env::temp_dir().join("yt2mp-claims");
+        let _ = std::fs::create_dir_all(&dir);
+        let want = dir.join("Same Title.mp3");
+        let _ = std::fs::remove_file(&want);
+
+        let first = Claim::new(&want);
+        let second = Claim::new(&want);
+        assert_eq!(first.path, want);
+        assert_eq!(second.path, dir.join("Same Title (2).mp3"));
+
+        drop(first);
+        let third = Claim::new(&want);
+        assert_eq!(third.path, want, "a released name is free again");
+        drop((second, third));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -3,7 +3,7 @@ import {
   fetchInfo,
   formatDuration,
   onDownloadProgress,
-  pickFolder,
+  downloadFolder,
   startDownload,
   stopDownload,
   type DownloadFormat,
@@ -100,8 +100,14 @@ export default function PlaylistView({
    * than one.
    */
   async function downloadAll(format: DownloadFormat) {
-    const dir = await pickFolder();
-    // Closing the folder dialog means "no", so nothing starts.
+    // The download folder, asked for only if nothing has been downloaded yet.
+    // Closing that dialog means "no", so nothing starts.
+    let dir: string | null;
+    try {
+      dir = await downloadFolder();
+    } catch {
+      return;
+    }
     if (!dir) return;
 
     cancelRef.current = false;
@@ -438,7 +444,7 @@ export default function PlaylistView({
           >
             <span className="format-label">All as MP4</span>
           </button>
-          <span className="bulk-actions-note">Asks once where to save.</span>
+          <span className="bulk-actions-note">Saves to your download folder.</span>
         </div>
       )}
       <ul className="playlist-list">

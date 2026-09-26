@@ -63,7 +63,9 @@ function ProgressBar({
         <div className="dl-track">
           <div className="dl-fill dl-fill-done" />
         </div>
-        <span className="dl-status">Saved</span>
+        <span className="dl-status" title={dl.filePath ?? undefined}>
+          Saved
+        </span>
         {dl.filePath ? (
           <button
             type="button"

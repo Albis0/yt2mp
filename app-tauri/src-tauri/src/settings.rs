@@ -1,10 +1,10 @@
 //! Persisted user settings.
 //!
-//! Right now this holds one thing: which browser, if any, the app may borrow
-//! cookies from. That is deliberately a stored setting rather than an
-//! environment variable — the previous design required editing a .env file,
-//! which meant the feature effectively did not exist for anyone who had not
-//! read the source.
+//! Two things: which browser, if any, the app may borrow cookies from, and
+//! the folder downloads are saved into. The cookie source is deliberately a
+//! stored setting rather than an environment variable — the previous design
+//! required editing a .env file, which meant the feature effectively did not
+//! exist for anyone who had not read the source.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -23,6 +23,9 @@ pub struct Settings {
     /// Browser to take cookies from, e.g. "firefox" or "chrome:Default".
     /// `None` means the app never touches any cookie store.
     pub cookies_from: Option<String>,
+    /// Where downloads are saved without asking. Chosen on the first
+    /// download and changeable in Settings; `None` means "ask next time".
+    pub download_dir: Option<String>,
 }
 
 impl Settings {
@@ -30,6 +33,10 @@ impl Settings {
     /// hand-edited settings file cannot break every request.
     fn sanitized(mut self) -> Self {
         self.cookies_from = self.cookies_from.and_then(|raw| normalize_browser(&raw));
+        self.download_dir = self
+            .download_dir
+            .map(|d| d.trim().to_string())
+            .filter(|d| !d.is_empty());
         self
     }
 }
@@ -87,7 +94,28 @@ pub fn get() -> Settings {
 /// Stores settings and writes them to disk. A write failure is reported
 /// rather than swallowed: silently forgetting a preference the user just set
 /// is worse than telling them it did not stick.
-pub fn save(next: Settings) -> Result<Settings, String> {
+/// Changes one part of the settings and keeps the rest.
+///
+/// Every writer goes through here rather than replacing the whole struct: the
+/// cookie check and the cookie picker only know about cookies, and saving a
+/// struct built from just that would quietly forget the download folder.
+pub fn update(change: impl FnOnce(&mut Settings)) -> Result<Settings, String> {
+    let mut next = get();
+    change(&mut next);
+    save(next)
+}
+
+/// The saved download folder, if there is one and it is still there. A folder
+/// on a drive that has since been unplugged counts as none, so the next
+/// download asks again instead of failing.
+pub fn download_dir() -> Option<PathBuf> {
+    get()
+        .download_dir
+        .map(PathBuf::from)
+        .filter(|d| d.is_dir())
+}
+
+fn save(next: Settings) -> Result<Settings, String> {
     let next = next.sanitized();
     *CACHE.write().unwrap() = Some(next.clone());
 
@@ -167,9 +195,29 @@ mod tests {
     fn sanitizing_drops_an_unknown_browser() {
         let s = Settings {
             cookies_from: Some("internet-explorer".into()),
+            ..Default::default()
         }
         .sanitized();
         assert_eq!(s.cookies_from, None, "a bad stored value must not persist");
+    }
+
+    #[test]
+    fn a_blank_download_folder_means_ask() {
+        let s = Settings {
+            download_dir: Some("   ".into()),
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(s.download_dir, None);
+    }
+
+    /// Files written by versions without a download folder must still load,
+    /// or updating would reset the cookie choice along with it.
+    #[test]
+    fn an_older_settings_file_still_loads() {
+        let s: Settings = serde_json::from_str(r#"{"cookies_from":"firefox"}"#).unwrap();
+        assert_eq!(s.cookies_from.as_deref(), Some("firefox"));
+        assert_eq!(s.download_dir, None);
     }
 
     #[test]

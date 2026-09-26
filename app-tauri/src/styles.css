@@ -1922,6 +1922,15 @@ button {
   color: var(--text-3);
 }
 
+/* A folder path is one unbroken string; without this a deep one pushes the
+   buttons off the side of the panel. */
+.prefs-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+}
+
 .prefs-field-control {
   display: flex;
   align-items: center;

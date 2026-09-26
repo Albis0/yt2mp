@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   browserLabel,
+  chooseDownloadDir,
+  forgetDownloadDir,
   detectedBrowsers,
   findWorkingBrowser,
   getSettings,
@@ -134,6 +136,9 @@ export default function SettingsPanel({
   const [updateBusy, setUpdateBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
 
+  const [downloadDir, setDownloadDir] = useState<string | null>(null);
+  const [dirNote, setDirNote] = useState<string | null>(null);
+
   useEffect(() => {
     appVersion().then(setVersion).catch(() => {});
     toolsStatus()
@@ -235,6 +240,7 @@ export default function SettingsPanel({
     Promise.all([getSettings(), detectedBrowsers()])
       .then(async ([settings, found]) => {
         setChoice(settings.cookiesFrom);
+        setDownloadDir(settings.downloadDir);
         setBrowsers(found);
         if (settings.cookiesFrom) {
           setChoiceLabel(await browserLabel(settings.cookiesFrom));
@@ -339,6 +345,26 @@ export default function SettingsPanel({
     }
   }
 
+  async function changeDownloadDir() {
+    setDirNote(null);
+    try {
+      const stored = await chooseDownloadDir();
+      if (stored) setDownloadDir(stored.downloadDir);
+    } catch (err) {
+      setDirNote(typeof err === "string" ? err : "Could not save that folder.");
+    }
+  }
+
+  async function askNextTime() {
+    setDirNote(null);
+    try {
+      const stored = await forgetDownloadDir();
+      setDownloadDir(stored.downloadDir);
+    } catch (err) {
+      setDirNote(typeof err === "string" ? err : "Could not save that.");
+    }
+  }
+
   const activeLabel = choiceLabel ?? choice;
 
   return (
@@ -395,6 +421,29 @@ export default function SettingsPanel({
                         {opt.label}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Downloads save here without a dialog. The first download
+                    asks for it; this is where it changes afterwards. */}
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Download folder</span>
+                    <span className="prefs-field-hint prefs-path" title={downloadDir ?? undefined}>
+                      {dirNote ??
+                        downloadDir ??
+                        "Not chosen yet. Your next download asks where to save."}
+                    </span>
+                  </div>
+                  <div className="prefs-field-control">
+                    {downloadDir ? (
+                      <button type="button" className="btn" onClick={askNextTime}>
+                        Ask next time
+                      </button>
+                    ) : null}
+                    <button type="button" className="btn" onClick={changeDownloadDir}>
+                      {downloadDir ? "Change…" : "Choose…"}
+                    </button>
                   </div>
                 </div>
 
