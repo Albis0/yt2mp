@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   formatDuration,
   onDownloadProgress,
@@ -97,14 +97,20 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
     );
   }
 
-  function setBusy(busy: boolean) {
-    onBusyChange(busy);
-  }
+  // Derived from the rows, not set around each download: with two running,
+  // the first to finish used to clear the flag while the second was still
+  // going, and switching tabs then hid its Stop button.
+  const downloading = items.some((i) => i.running);
+  useEffect(() => {
+    onBusyChange(downloading);
+  }, [downloading, onBusyChange]);
+  useEffect(() => () => onBusyChange(false), [onBusyChange]);
 
   async function runQuick(e: React.FormEvent) {
     e.preventDefault();
     const clean = url.trim();
-    if (!clean) return;
+    // A new search replaces the list, and a running download's row with it.
+    if (!clean || downloading) return;
 
     scannedUrl.current = clean;
     setItems([]);
@@ -130,7 +136,7 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
 
   async function runDeep() {
     const clean = scannedUrl.current || url.trim();
-    if (!clean) return;
+    if (!clean || downloading) return;
 
     setPhase({ at: "deep" });
     try {
@@ -158,7 +164,6 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
       stage: "Starting",
       error: null,
     });
-    setBusy(true);
 
     const unsubscribe = onDownloadProgress(id, (p) =>
       patch(item.found.url, { percent: p.percent, stage: p.stage })
@@ -190,7 +195,6 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
       });
     } finally {
       unsubscribe();
-      setBusy(false);
     }
   }
 
@@ -209,7 +213,12 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
           spellCheck={false}
           autoComplete="off"
         />
-        <button type="submit" className="submit-btn" disabled={searching || !url.trim()}>
+        <button
+          type="submit"
+          className="submit-btn"
+          disabled={searching || downloading || !url.trim()}
+          title={downloading ? "Finish or stop the downloads below first" : undefined}
+        >
           {searching ? (
             <>
               <span className="submit-spinner" aria-hidden="true" />
@@ -311,7 +320,12 @@ export default function ScanPanel({ onBusyChange }: ScanPanelProps) {
             </div>
 
             {!phase.deepDone ? (
-              <button type="button" className="scan-deeper-btn" onClick={runDeep}>
+              <button
+                type="button"
+                className="scan-deeper-btn"
+                onClick={runDeep}
+                disabled={downloading}
+              >
                 Search deeper
               </button>
             ) : null}

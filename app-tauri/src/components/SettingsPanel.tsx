@@ -100,10 +100,15 @@ export default function SettingsPanel({
   onClose,
   theme,
   onThemeChange,
+  busy,
 }: {
   onClose: () => void;
   theme: ThemePref;
   onThemeChange: (t: ThemePref) => void;
+  /** A download or conversion is running. Installing an update restarts the
+   *  app and replacing yt-dlp swaps the program a download is running on, so
+   *  both wait until it is done, the same as the update banner does. */
+  busy: boolean;
 }) {
   const [page, setPage] = useState<PageId>("general");
   const [browsers, setBrowsers] = useState<Browser[]>([]);
@@ -127,6 +132,7 @@ export default function SettingsPanel({
   const [update, setUpdate] = useState<Available | null>(null);
   const [updateNote, setUpdateNote] = useState<string | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     appVersion().then(setVersion).catch(() => {});
@@ -184,6 +190,30 @@ export default function SettingsPanel({
       );
     } finally {
       setYtdlpBusy(false);
+    }
+  }
+
+  /** The banner's install, with the same feedback. Called bare, a failure
+   *  here was an unhandled rejection: the button did nothing, said nothing,
+   *  and could be pressed again to start a second download on top. */
+  async function installUpdate(found: Available) {
+    if (!found.canInstall) {
+      openReleasePage();
+      return;
+    }
+    setInstalling(true);
+    setUpdateNote("Downloading the update. yt2mp will restart on its own.");
+    try {
+      await install(found, (percent) =>
+        setUpdateNote(
+          percent === null
+            ? "Downloading the update. yt2mp will restart on its own."
+            : `Downloading the update — ${Math.floor(percent)}%. yt2mp will restart on its own.`
+        )
+      );
+    } catch (err) {
+      setUpdateNote(typeof err === "string" ? err : "The update could not install.");
+      setInstalling(false);
     }
   }
 
@@ -397,13 +427,19 @@ export default function SettingsPanel({
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() =>
-                          update.canInstall ? install(update) : openReleasePage()
+                        onClick={() => installUpdate(update)}
+                        disabled={installing || (busy && update.canInstall)}
+                        title={
+                          busy && update.canInstall
+                            ? "Finish your download first, then update."
+                            : undefined
                         }
                       >
-                        {update.canInstall
-                          ? `Update to ${update.version}`
-                          : "Get it from GitHub"}
+                        {installing
+                          ? "Updating…"
+                          : update.canInstall
+                            ? `Update to ${update.version}`
+                            : "Get it from GitHub"}
                       </button>
                     ) : (
                       <button
@@ -439,7 +475,8 @@ export default function SettingsPanel({
                         type="button"
                         className="btn btn-primary"
                         onClick={runYtdlpUpdate}
-                        disabled={ytdlpBusy}
+                        disabled={ytdlpBusy || busy}
+                        title={busy ? "Finish your download first, then update." : undefined}
                       >
                         {ytdlpBusy ? (
                           <>

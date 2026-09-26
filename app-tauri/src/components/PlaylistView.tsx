@@ -52,13 +52,20 @@ interface PlaylistViewProps {
     format: DownloadFormat,
     platform: Platform
   ) => void;
+  /** Raised while anything here is downloading, so the app keeps this screen
+   *  (and its Stop buttons) up until it is done. */
+  onBusyChange: (busy: boolean) => void;
 }
 
 // Each track only fetches its own real info (formats, thumbnail) the moment
 // the user expands it — the playlist itself loads instantly via
 // --flat-playlist, so opening a 200-track playlist doesn't mean waiting on
 // 200 yt-dlp calls up front.
-export default function PlaylistView({ playlist, onDownloaded }: PlaylistViewProps) {
+export default function PlaylistView({
+  playlist,
+  onDownloaded,
+  onBusyChange,
+}: PlaylistViewProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [tracks, setTracks] = useState<Record<string, TrackState>>({});
   const [bulk, setBulk] = useState<BulkState | null>(null);
@@ -78,6 +85,9 @@ export default function PlaylistView({ playlist, onDownloaded }: PlaylistViewPro
     return () => {
       aliveRef.current = false;
       cancelRef.current = true;
+      // The queue stops between tracks, but the track in flight would carry
+      // on with nothing left on screen to stop it.
+      if (activeIdRef.current) stopDownload(activeIdRef.current);
     };
   }, []);
 
@@ -153,11 +163,22 @@ export default function PlaylistView({ playlist, onDownloaded }: PlaylistViewPro
             intoDir: dir,
           });
           setBulk((b) => (b ? { ...b, done: b.done + 1 } : b));
+          // Built from scratch rather than spread from the row: when no
+          // progress event had arrived yet the row did not exist, and
+          // spreading it threw, turning a saved track into a "failed" one.
           setTracks((t) => ({
             ...t,
             [entry.id]: {
-              ...t[entry.id],
-              download: { ...t[entry.id]!.download!, done: true },
+              loading: false,
+              error: null,
+              info: t[entry.id]?.info ?? data.video,
+              download: {
+                id: downloadId,
+                format,
+                progress: { percent: 100, stage: "Saved" },
+                done: true,
+                error: null,
+              },
             },
           }));
           onDownloaded(
@@ -339,6 +360,14 @@ export default function PlaylistView({ playlist, onDownloaded }: PlaylistViewPro
   }
 
   const running = !!bulk && !bulk.finished;
+  const anyTrackBusy = Object.values(tracks).some(
+    (t) => !!t.download && !t.download.done && !t.download.error
+  );
+  const busy = running || anyTrackBusy;
+  useEffect(() => {
+    onBusyChange(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange(false), [onBusyChange]);
 
   return (
     <div className="playlist-view">

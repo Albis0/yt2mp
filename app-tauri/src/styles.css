@@ -1420,9 +1420,14 @@ button {
   transition: border-color 0.14s ease, color 0.14s ease;
 }
 
-.scan-deeper-btn:hover {
+.scan-deeper-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.scan-deeper-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .scan-list {

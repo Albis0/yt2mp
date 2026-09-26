@@ -182,6 +182,13 @@ export default function App() {
   // the same things: switching tabs away from its Stop button, and installing
   // an update that would kill the process.
   const [converting, setConverting] = useState(false);
+  // Downloads started from the page scanner and from a playlist. Each screen
+  // owns its own rows, so each reports whether any of them is still running.
+  // Kept apart from `converting` so the message names the right thing: the
+  // scanner used to share that flag, and told people to finish a
+  // "conversion" while they were downloading.
+  const [scanBusy, setScanBusy] = useState(false);
+  const [playlistBusy, setPlaylistBusy] = useState(false);
 
   // AI is the one tab that isn't a site — it takes free text rather than a URL.
   const mode: Mode = tab === "ai" ? "ai" : "link";
@@ -258,6 +265,13 @@ export default function App() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Fetching clears the board, the same as switching tabs does, and a
+    // running download's Stop button goes with it: the transfer carries on
+    // in the background with nothing on screen to stop it.
+    if (downloadInProgress) {
+      setError("Finish or stop the download in progress before fetching another link.");
+      return;
+    }
     loadInfo(url, mode);
   }
 
@@ -268,6 +282,8 @@ export default function App() {
   /// separately at each call site.
   const downloadInProgress =
     converting ||
+    scanBusy ||
+    playlistBusy ||
     Object.values(downloads).some((d) => !d.done && !d.error && !d.stopped);
 
   function switchTab(next: TabId) {
@@ -431,6 +447,11 @@ export default function App() {
   }
 
   function replayHistory(item: HistoryItem) {
+    // Same reason as handleSubmit: this replaces whatever is on screen.
+    if (downloadInProgress) {
+      setError("Finish or stop the download in progress before fetching another link.");
+      return;
+    }
     // History stores resolved page URLs whichever tab found them, so a replay
     // always goes through link mode — landing on the tab the item came from.
     setTab(item.platform ?? tabForUrl(item.url) ?? "other");
@@ -563,6 +584,7 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
           theme={theme}
           onThemeChange={setTheme}
+          busy={downloadInProgress}
         />
       ) : null}
 
@@ -596,7 +618,7 @@ export default function App() {
           {tab === "convert" ? (
             <ConvertPanel onBusyChange={setConverting} />
           ) : tab === "scan" ? (
-            <ScanPanel onBusyChange={setConverting} />
+            <ScanPanel onBusyChange={setScanBusy} />
           ) : (
           <form className="download-form" onSubmit={handleSubmit}>
             <input
@@ -655,6 +677,7 @@ export default function App() {
           <PlaylistView
             playlist={playlist}
             onDownloaded={handlePlaylistTrackDownloaded}
+            onBusyChange={setPlaylistBusy}
           />
         ) : null}
 
