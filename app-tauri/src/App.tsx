@@ -465,20 +465,15 @@ export default function App() {
           type="button"
           className="chrome-btn"
           aria-label={
-            theme === "system"
-              ? "Theme: following the system. Switch to light."
-              : theme === "light"
-                ? "Theme: light. Switch to dark."
-                : "Theme: dark. Follow the system."
+            resolveTheme(theme) === "dark" ? "Switch to light theme" : "Switch to dark theme"
           }
-          title="Theme"
-          // Cycles system → light → dark → system, so every state including
-          // "follow the system" is reachable from the chrome without opening
-          // settings. The same three states are named explicitly in the
-          // settings modal for anyone who wants to pick directly.
-          onClick={() =>
-            setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"))
-          }
+          title={resolveTheme(theme) === "dark" ? "Light theme" : "Dark theme"}
+          // Flips what is on screen, every click. It used to cycle
+          // system → light → dark → system, and on a dark desktop the
+          // dark → system step changed nothing visible, so going from dark
+          // to light took two clicks. "Follow the system" is still one pick
+          // away in Settings.
+          onClick={() => setTheme(resolveTheme(theme) === "dark" ? "light" : "dark")}
         >
           {resolveTheme(theme) === "dark" ? (
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
