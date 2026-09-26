@@ -191,6 +191,11 @@ pub struct VideoInfo {
     /// the user pasted something shorter.
     #[serde(rename = "webpageUrl")]
     pub webpage_url: String,
+    /// The link the user actually pasted, when the media comes from somewhere
+    /// else: a Spotify song is downloaded from YouTube Music, and history
+    /// should replay the Spotify link, not the YouTube one.
+    #[serde(rename = "sourceUrl", default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -669,6 +674,7 @@ fn parse_video_info(value: &serde_json::Value, platform: crate::platform::Platfo
         platform,
         can_embed: platform.supports_embed(),
         webpage_url,
+        source_url: None,
     }
 }
 
@@ -1268,8 +1274,18 @@ where
                             finished_bytes += stream_bytes;
                             stream_bytes = 0;
                         }
+                        // The byte count stays on the row through the stages
+                        // that move no data. Dropping it there made the size
+                        // vanish for the last stretch of every download,
+                        // which is when people look at it.
+                        let so_far = Some(Transfer {
+                            downloaded: finished_bytes + stream_bytes,
+                            speed: None,
+                            eta: None,
+                        })
+                        .filter(|t| t.downloaded > 0);
                         if line.contains("Merging formats") {
-                            on_progress(95.0, "Merging", None);
+                            on_progress(95.0, "Merging", so_far);
                             continue;
                         }
                         // The MP3 re-encode reports no percentage of its own.
@@ -1277,7 +1293,7 @@ where
                         // encode, which on a long mix is minutes of looking
                         // stuck.
                         if line.starts_with("[ExtractAudio]") {
-                            on_progress(90.0, "Converting", None);
+                            on_progress(90.0, "Converting", so_far);
                             continue;
                         }
                         // The template line when yt-dlp honours it, its own
@@ -1354,7 +1370,13 @@ where
         return Err("Download finished but the file is missing.".into());
     }
 
-    on_progress(100.0, "Saved", None);
+    // The finished file's real size, for the row to show once it is saved.
+    let saved = std::fs::metadata(dest).map(|m| m.len()).ok().map(|len| Transfer {
+        downloaded: len,
+        speed: None,
+        eta: None,
+    });
+    on_progress(100.0, "Saved", saved);
     Ok(())
 }
 
@@ -1427,7 +1449,11 @@ mod tests {
                 crate::platform::Platform::YouTube,
                 rx,
                 |_, stage, transfer| {
-                    transfers.extend(transfer);
+                    // "Saved" carries the finished file's size, which a merge
+                    // or re-encode can make smaller than the bytes fetched.
+                    if stage != "Saved" {
+                        transfers.extend(transfer);
+                    }
                     if stages.last().map(String::as_str) != Some(stage) {
                         stages.push(stage.to_string());
                     }

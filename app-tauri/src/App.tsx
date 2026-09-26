@@ -72,6 +72,7 @@ const AI_LOADING_PHRASES = [
 /// which is the question someone opening the app actually has.
 const TAB_LEADS: Record<TabId, string> = {
   youtube: "Paste a video or playlist link to pull the audio or the video.",
+  spotify: "Paste a song, album or playlist link. It downloads from YouTube Music.",
   tiktok: "Paste a TikTok link to save the clip.",
   instagram: "Paste a reel or post link to save it.",
   twitter: "Paste a post link to save the video in it.",
@@ -87,6 +88,7 @@ const TAB_LEADS: Record<TabId, string> = {
 /// recognise their own URLs.
 const TAB_PLACEHOLDERS: Record<TabId, string> = {
   youtube: "youtube.com/watch?v=…  ·  or a playlist link",
+  spotify: "open.spotify.com/track/…  ·  or an album or playlist",
   tiktok: "tiktok.com/@user/video/…",
   instagram: "instagram.com/reel/…",
   twitter: "x.com/user/status/…",
@@ -135,6 +137,7 @@ const DEGRADED_TABS: Partial<Record<TabId, string>> = {
 /// authoritative say once the link is submitted.
 function tabForUrl(raw: string): TabId | null {
   const url = raw.trim();
+  if (/^spotify:/i.test(url)) return "spotify";
   if (!/^https?:\/\//i.test(url)) return null;
 
   const host = url
@@ -152,6 +155,8 @@ function tabForUrl(raw: string): TabId | null {
   if (["instagram.com", "instagr.am"].some(on)) return "instagram";
   if (["twitter.com", "x.com", "t.co"].some(on)) return "twitter";
   if (on("twitch.tv")) return "twitch";
+  if (["open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link"].some(on))
+    return "spotify";
   return "other";
 }
 
@@ -379,7 +384,9 @@ export default function App() {
       setHistory(
         addHistory({
           videoId: info.id,
-          url: videoUrl,
+          // A Spotify song replays from its Spotify link, so it lands back
+          // on the Spotify tab and is matched afresh.
+          url: info.sourceUrl ?? videoUrl,
           title: info.title,
           thumbnail: info.thumbnail,
           format,

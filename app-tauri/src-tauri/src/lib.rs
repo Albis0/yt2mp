@@ -13,6 +13,7 @@ mod groq;
 mod platform;
 mod scan;
 mod settings;
+mod spotify;
 mod tools;
 mod ytdlp;
 
@@ -71,6 +72,10 @@ async fn fetch_info(url: String, mode: String) -> Result<InfoResult, String> {
         return Err("That doesn't look like a link. Paste a URL, or switch to AI search.".into());
     };
 
+    if detected == platform::Platform::Spotify {
+        return spotify_info(&clean).await;
+    }
+
     if platform::is_collection(&clean, detected) {
         let playlist = ytdlp::get_playlist_info(&clean, detected)
             .await
@@ -81,6 +86,50 @@ async fn fetch_info(url: String, mode: String) -> Result<InfoResult, String> {
     let video = ytdlp::get_video_info(&clean, detected)
         .await
         .map_err(|e| platform::explain_error(&e, detected))?;
+    Ok(InfoResult::Video { video })
+}
+
+/// A Spotify song becomes its YouTube Music match, dressed in Spotify's own
+/// name, artists and cover. An album or playlist becomes a list of Spotify
+/// song links, each matched when it is opened or downloaded.
+async fn spotify_info(url: &str) -> Result<InfoResult, String> {
+    let link = spotify::resolve(url).await?;
+    if link.kind != spotify::Kind::Track {
+        let list = spotify::collection(&link).await?;
+        let entries = list
+            .tracks
+            .iter()
+            .map(|t| ytdlp::PlaylistEntry {
+                id: t.id.clone(),
+                title: t.title.clone(),
+                url: t.url(),
+                duration: t.duration,
+                uploader: t.artist_line(),
+            })
+            .collect();
+        return Ok(InfoResult::Playlist {
+            playlist: ytdlp::PlaylistInfo { id: list.id, title: list.title, entries },
+        });
+    }
+
+    let song = spotify::track(&link.id).await?;
+    let found = spotify::find(&song).await?;
+    let mut video = ytdlp::get_video_info(&found.candidate.watch_url(), platform::Platform::YouTube)
+        .await
+        .map_err(|e| platform::explain_error(&e, platform::Platform::YouTube))?;
+
+    // Audio only: a YouTube Music song's "video" is its cover on a loop.
+    video.title = song.file_title();
+    video.uploader = found.candidate.album.clone().unwrap_or_else(|| song.artist_line());
+    if let Some(cover) = song.cover.clone() {
+        video.thumbnail = cover;
+    }
+    video.available_heights.clear();
+    video.qualities.clear();
+    video.platform = platform::Platform::Spotify;
+    video.can_embed = false;
+    video.webpage_url = found.candidate.watch_url();
+    video.source_url = Some(song.url());
     Ok(InfoResult::Video { video })
 }
 
@@ -572,8 +621,17 @@ async fn start_download(
     title: String,
     into_dir: Option<String>,
 ) -> Result<String, String> {
-    let Some(detected) = platform::detect(&url) else {
+    let Some(mut detected) = platform::detect(&url) else {
         return Err("That doesn't look like a link.".into());
+    };
+    // Normally the frontend already passes the matched YouTube address; a
+    // Spotify link that arrives here anyway is matched now rather than handed
+    // to yt-dlp, which has no Spotify support at all.
+    let url = if detected == platform::Platform::Spotify {
+        detected = platform::Platform::YouTube;
+        spotify::youtube_url(&url).await?
+    } else {
+        url
     };
     if format != "mp3" && format != "mp4" {
         return Err("Format must be mp3 or mp4.".into());
@@ -915,7 +973,10 @@ pub fn run() {
         .manage(Downloads::default())
         .setup(|app| {
             binaries::init(app.handle());
-            groq::init(app.handle().path().resource_dir().ok());
+            groq::init(
+                app.handle().path().resource_dir().ok(),
+                app.handle().path().app_config_dir().ok(),
+            );
             settings::init(app.handle().path().app_config_dir().ok());
             fit_window_to_screen(app.handle());
             Ok(())

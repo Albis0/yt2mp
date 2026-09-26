@@ -28,7 +28,7 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com https://*.cdninstagram.com https://*.fbcdn.net https://pbs.twimg.com https://*.twimg.com https://*.jtvnw.net https://*.twitch.tv",
+        "img-src": "'self' data: https://i.ytimg.com https://*.ytimg.com https://yt3.ggpht.com https://*.tiktokcdn.com https://*.tiktokcdn-us.com https://*.cdninstagram.com https://*.fbcdn.net https://pbs.twimg.com https://*.twimg.com https://*.jtvnw.net https://*.twitch.tv https://i.scdn.co https://*.spotifycdn.com",
         "frame-src": "https://www.youtube.com https://www.youtube-nocookie.com",
         "connect-src": "'self' ipc: http://ipc.localhost"
       }

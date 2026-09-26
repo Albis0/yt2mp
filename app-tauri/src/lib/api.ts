@@ -21,6 +21,7 @@ export type Platform =
   | "instagram"
   | "twitter"
   | "twitch"
+  | "spotify"
   | "other";
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -29,6 +30,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   instagram: "Instagram",
   twitter: "X",
   twitch: "Twitch",
+  spotify: "Spotify",
   other: "Link",
 };
 
@@ -47,6 +49,9 @@ export interface VideoInfo {
   canEmbed: boolean;
   /** yt-dlp's resolved page URL — survives short links (vm.tiktok.com, t.co). */
   webpageUrl: string;
+  /** The link the user pasted when the media comes from elsewhere: a Spotify
+   *  song downloads from YouTube Music, and history keeps the Spotify link. */
+  sourceUrl?: string;
 }
 
 export interface PlaylistEntry {

@@ -52,6 +52,10 @@
 }
 
 /* ---------- Light ---------- */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 :root,
 :root[data-theme="light"] {
   /* Built on the logo's own cream (#F1EADB) and its edge (#D9CEB8)
@@ -82,6 +86,9 @@
    neutral dark next to a warm light made them read as two apps, and
    the cream-on-black mark sat on it like a sticker. */
 :root[data-theme="dark"] {
+  /* Native parts (scrollbars, pickers) follow the app's theme, not the
+     system's: a light scrollbar down a dark window was the result. */
+  color-scheme: dark;
   --bg: #1a1714;
   --chrome: #141210;
   --surface: #24201c;
@@ -182,6 +189,8 @@ button {
 .page-instagram { --accent: #c62d78; --accent-press: #a72463; }
 .page-twitter { --accent: #38424e; --accent-press: #232c36; }
 .page-twitch { --accent: #7b3fe4; --accent-press: #6832c4; }
+/* Spotify's own button: its green with black text, in both themes. */
+.page-spotify { --accent: #1ed760; --accent-press: #1db954; --on-accent: #000000; }
 .page-other { --accent: #2563eb; --accent-press: #1d4ed8; }
 /* Fuchsia: no site in the rail uses it, and it stays clear of
    Twitch's violet two rows up. */
@@ -200,6 +209,7 @@ button {
 :root[data-theme="dark"] .page-instagram { --accent: #ff5fa2; --accent-press: #ff85b8; }
 :root[data-theme="dark"] .page-twitter { --accent: #9fb0c4; --accent-press: #bccadb; }
 :root[data-theme="dark"] .page-twitch { --accent: #a87bff; --accent-press: #bd9bff; }
+:root[data-theme="dark"] .page-spotify { --accent: #1ed760; --accent-press: #3be477; --on-accent: #000000; }
 :root[data-theme="dark"] .page-other { --accent: #60a5fa; --accent-press: #93c5fd; }
 :root[data-theme="dark"] .page-ai { --accent: #e879f9; --accent-press: #f0abfc; }
 :root[data-theme="dark"] .page-convert { --accent: #4ade80; --accent-press: #86efac; }
@@ -744,14 +754,15 @@ button {
 }
 
 /* ---------- Toasts ----------
-   Bottom right, above everything including the settings dialog, since
-   most of what raises one happens inside it. Newest at the bottom, next
-   to where the eye already is. */
+   Top right, just under the title bar, above everything including the
+   settings dialog, since most of what raises one happens inside it.
+   Clear of the download rows' right edge, where the Cancel and Show
+   buttons live. */
 
 .toaster {
   position: fixed;
+  top: 54px;
   right: 16px;
-  bottom: 16px;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -898,7 +909,7 @@ button {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.98);
+    transform: translateY(-10px) scale(0.98);
   }
 }
 
@@ -967,6 +978,12 @@ button {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* A square album cover in a 16:9 frame: shown whole, not cropped to a
+   strip of its middle. */
+.result-thumb-cover img {
+  object-fit: contain;
 }
 
 .result-thumb:disabled {

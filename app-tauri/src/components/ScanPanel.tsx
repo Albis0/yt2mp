@@ -72,7 +72,8 @@ function itemOf(found: Found): Item {
 
 function rowState(item: Item): RowState {
   if (item.running) return { at: "running", progress: item.progress };
-  if (item.done) return { at: "done", filePath: item.savedPath };
+  if (item.done)
+    return { at: "done", filePath: item.savedPath, bytes: item.progress.transfer?.downloaded };
   if (item.error) return { at: "failed", error: item.error };
   if (item.stopped) return { at: "cancelled" };
   return { at: "idle" };

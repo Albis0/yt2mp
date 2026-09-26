@@ -20,7 +20,8 @@ import {
 export type RowState =
   | { at: "idle" }
   | { at: "running"; progress: DownloadProgress }
-  | { at: "done"; filePath: string | null }
+  /** `bytes` is the saved file's size, when the last progress event had it. */
+  | { at: "done"; filePath: string | null; bytes?: number | null }
   | { at: "failed"; error: string }
   /** Stopped by the user. Reads as a fresh start, with a quiet note. */
   | { at: "cancelled" };
@@ -118,6 +119,9 @@ export default function DownloadRow({
           </button>
         ) : done ? (
           <>
+            {state.bytes ? (
+              <span className="dlrow-size">{formatBytes(state.bytes)}</span>
+            ) : null}
             <span className="dlrow-saved">
               <CheckGlyph />
               Saved
@@ -164,7 +168,12 @@ function Progress({ progress, size }: { progress: DownloadProgress; size: number
   const measuring = percent > 0 && percent < 100;
 
   const parts: string[] = [];
-  if (transfer) {
+  // Merging and converting carry the bytes fetched so far but move none, so
+  // they read as a size and a stage rather than a speed.
+  const moving = stage === "Downloading" || stage === "Audio";
+  if (transfer && !moving) {
+    parts.push(`${formatBytes(transfer.downloaded)} · ${stage}…`);
+  } else if (transfer) {
     parts.push(`${Math.floor(percent)}%`);
     const total = size && size >= transfer.downloaded ? size : null;
     parts.push(
@@ -181,7 +190,7 @@ function Progress({ progress, size }: { progress: DownloadProgress; size: number
   return (
     <div className="dlrow-progress">
       <div
-        className={`dlrow-track${measuring || transfer ? "" : " is-waiting"}`}
+        className={`dlrow-track${measuring || (transfer && moving) ? "" : " is-waiting"}`}
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}

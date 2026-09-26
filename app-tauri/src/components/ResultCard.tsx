@@ -19,7 +19,8 @@ function rowStateOf(dl: ActiveDownload | undefined): RowState {
   // failure: the row simply goes back to how it was.
   if (dl.error === "Save cancelled") return { at: "idle" };
   if (dl.error) return { at: "failed", error: dl.error };
-  if (dl.done) return { at: "done", filePath: dl.filePath };
+  if (dl.done)
+    return { at: "done", filePath: dl.filePath, bytes: dl.progress.transfer?.downloaded };
   return { at: "running", progress: dl.progress };
 }
 
@@ -41,6 +42,12 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
   const mp3Key = "mp3-auto";
   const videoRows =
     topQualities.length > 0 ? topQualities : [{ height: 0, estimatedBytes: null }];
+  // A YouTube Music song has no video worth saving: its picture is the cover
+  // on a loop. Spotify results are audio only.
+  const audioOnly = info.platform === "spotify";
+  // Opening the post goes to where the user found it, not to the YouTube
+  // copy it downloads from.
+  const pageUrl = info.sourceUrl ?? info.webpageUrl;
 
   return (
     <div className="result-card">
@@ -59,11 +66,11 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
           // where they're already logged in if the site needs it.
           <button
             type="button"
-            className="result-thumb"
+            className={`result-thumb${audioOnly ? " result-thumb-cover" : ""}`}
             onClick={() =>
-              canEmbed ? setPlaying(true) : info.webpageUrl && openUrl(info.webpageUrl)
+              canEmbed ? setPlaying(true) : pageUrl && openUrl(pageUrl)
             }
-            disabled={!canEmbed && !info.webpageUrl}
+            disabled={!canEmbed && !pageUrl}
             aria-label={canEmbed ? "Play preview" : `Open on ${platformLabel}`}
             title={canEmbed ? undefined : `Open on ${platformLabel}`}
           >
@@ -100,9 +107,9 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
             />
           </div>
 
-          <div className="format-group-label">Video</div>
+          {audioOnly ? null : <div className="format-group-label">Video</div>}
           <div className="dllist">
-            {videoRows.map((q) => {
+            {(audioOnly ? [] : videoRows).map((q) => {
               const h = q.height || undefined;
               const key = `mp4-${h ?? "auto"}`;
               const res = h ? resolutionTag(h) : null;

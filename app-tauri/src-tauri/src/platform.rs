@@ -18,6 +18,8 @@ pub enum Platform {
     Instagram,
     Twitter,
     Twitch,
+    /// Downloaded from YouTube Music, matched by src/spotify.rs.
+    Spotify,
     /// A URL that looks like a link but belongs to none of the sites the UI
     /// has specific handling for. yt-dlp may still support it — there are
     /// ~1750 extractors — so these are passed through rather than rejected.
@@ -33,6 +35,7 @@ impl Platform {
             Platform::Instagram => "Instagram",
             Platform::Twitter => "X",
             Platform::Twitch => "Twitch",
+            Platform::Spotify => "Spotify",
             Platform::Other => "Link",
         }
     }
@@ -86,6 +89,9 @@ fn host_matches(host: &str, domain: &str) -> bool {
 /// and a host resolves to at least `Other`; anything else is not a link.
 pub fn detect(url: &str) -> Option<Platform> {
     let url = url.trim();
+    if url.starts_with("spotify:") {
+        return Some(Platform::Spotify);
+    }
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return None;
     }
@@ -114,6 +120,11 @@ pub fn detect(url: &str) -> Option<Platform> {
         Platform::Twitter
     } else if ["twitch.tv"].iter().any(|d| host_matches(&host, d)) {
         Platform::Twitch
+    } else if ["open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link"]
+        .iter()
+        .any(|d| host_matches(&host, d))
+    {
+        Platform::Spotify
     } else {
         Platform::Other
     };

@@ -72,6 +72,11 @@ export default function PlaylistView({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [tracks, setTracks] = useState<Record<string, TrackState>>({});
   const [bulk, setBulk] = useState<BulkState | null>(null);
+  // A Spotify album or playlist downloads from YouTube Music, where a song's
+  // "video" is its cover on a loop. Only audio is offered.
+  const formats = playlist.entries.some((e) => e.url.includes("open.spotify.com/"))
+    ? (["mp3"] as const)
+    : (["mp3", "mp4"] as const);
 
   // The queue loop reads this to decide whether to keep going. State alone
   // would not work: the loop captures the value from the render it started in,
@@ -167,7 +172,9 @@ export default function PlaylistView({
         try {
           const filePath = await startDownload({
             id: downloadId,
-            url: entry.url,
+            // The resolved address: for a Spotify list the entry is a Spotify
+            // link, and what downloads is its YouTube Music match.
+            url: data.video.webpageUrl || entry.url,
             format,
             title: data.video.title,
             intoDir: dir,
@@ -185,7 +192,12 @@ export default function PlaylistView({
               download: {
                 id: downloadId,
                 format,
-                progress: { percent: 100, stage: "Saved" },
+                // Keeps the last event's byte count for the saved row.
+                progress: {
+                  percent: 100,
+                  stage: "Saved",
+                  transfer: t[entry.id]?.download?.progress.transfer,
+                },
                 done: true,
                 error: null,
                 filePath,
@@ -326,7 +338,7 @@ export default function PlaylistView({
     try {
       const filePath = await startDownload({
         id: downloadId,
-        url,
+        url: track.info.webpageUrl || url,
         format,
         title: track.info.title,
       });
@@ -365,7 +377,8 @@ export default function PlaylistView({
     if (dl.error === "Download stopped") return { at: "cancelled" };
     if (dl.error === "Save cancelled") return { at: "idle" };
     if (dl.error) return { at: "failed", error: dl.error };
-    if (dl.done) return { at: "done", filePath: dl.filePath };
+    if (dl.done)
+      return { at: "done", filePath: dl.filePath, bytes: dl.progress.transfer?.downloaded };
     return { at: "running", progress: dl.progress };
   }
 
@@ -441,13 +454,15 @@ export default function PlaylistView({
           >
             <span className="format-label">All as MP3</span>
           </button>
-          <button
-            type="button"
-            className="format-btn"
-            onClick={() => downloadAll("mp4")}
-          >
-            <span className="format-label">All as MP4</span>
-          </button>
+          {formats.length > 1 ? (
+            <button
+              type="button"
+              className="format-btn"
+              onClick={() => downloadAll("mp4")}
+            >
+              <span className="format-label">All as MP4</span>
+            </button>
+          ) : null}
           <span className="bulk-actions-note">Saves to your download folder.</span>
         </div>
       )}
@@ -485,7 +500,7 @@ export default function PlaylistView({
                     </p>
                   ) : track?.info ? (
                     <div className="dllist playlist-formats">
-                      {(["mp3", "mp4"] as const).map((f) => (
+                      {formats.map((f) => (
                         <DownloadRow
                           key={f}
                           label={f === "mp3" ? "MP3" : "MP4"}

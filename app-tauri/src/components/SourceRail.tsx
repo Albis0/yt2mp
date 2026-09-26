@@ -2,6 +2,7 @@ import type { Platform } from "@/lib/api";
 import {
   InstagramLogo,
   TikTokLogo,
+  SpotifyLogo,
   TwitchLogo,
   XLogo,
   YouTubeLogo,
@@ -109,6 +110,7 @@ function ScanIcon() {
 /// belongs after everything that does rather than interrupting that run.
 export const TABS: TabDef[] = [
   { id: "youtube", label: "YouTube", short: "YouTube", icon: YouTubeLogo },
+  { id: "spotify", label: "Spotify", short: "Spotify", icon: SpotifyLogo },
   { id: "tiktok", label: "TikTok", short: "TikTok", icon: TikTokLogo },
   { id: "instagram", label: "Instagram", short: "Insta", icon: InstagramLogo },
   { id: "twitter", label: "X", short: "X", icon: XLogo },
