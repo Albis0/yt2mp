@@ -115,8 +115,12 @@ fn keys() -> &'static [String] {
     KEYS.get().map(|v| v.as_slice()).unwrap_or(&[])
 }
 
+/// The Spotify check's own keys, or the AI search's until it has some.
 fn verify_keys() -> &'static [String] {
-    VERIFY_KEYS.get().map(|v| v.as_slice()).unwrap_or(&[])
+    match VERIFY_KEYS.get().map(|v| v.as_slice()) {
+        Some(own) if !own.is_empty() => own,
+        _ => keys(),
+    }
 }
 
 /// Whether Spotify matches can be checked by the model at all.
