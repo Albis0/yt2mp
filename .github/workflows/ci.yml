@@ -136,8 +136,28 @@ jobs:
             libsoup-3.0-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf \
-            ffmpeg
+            patchelf
+
+      # The converter's tests run against the ffmpeg the Linux build ships
+      # (BtbN's 8.1, the same URL as scripts/fetch-binaries.mjs), not Ubuntu's.
+      # 22.04's apt ffmpeg is 4.4, which is missing options and encoders the
+      # converter uses (libaom's -still-picture, AMR); testing against it would
+      # fail on files the app makes fine, and pass on nothing the app ships.
+      # Cached, so it is downloaded once rather than on every push.
+      - name: Cache the shipped Linux ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-shipped
+          key: ffmpeg-n8.1-latest-linux64-gpl
+
+      - name: Put the shipped Linux ffmpeg on PATH
+        run: |
+          if [ ! -x "$HOME/ffmpeg-shipped/ffmpeg" ]; then
+            mkdir -p "$HOME/ffmpeg-shipped"
+            curl -fsSL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz" \
+              | tar -xJ --strip-components=2 -C "$HOME/ffmpeg-shipped" --wildcards '*/bin/ffmpeg'
+          fi
+          echo "$HOME/ffmpeg-shipped" >> "$GITHUB_PATH"
 
       # The converter's end-to-end tests need an ffmpeg that can encode MP3.
       # Without one they skip themselves, which is the right behaviour on a
