@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import {
   convertFile,
+  discardConverted,
   fileSize,
   formatBytes,
   formatDuration,
   formatEta,
   onDownloadProgress,
-  pickMediaFiles,
+  pickMediaFile,
   probeFiles,
   revealFile,
-  saveACopy,
+  saveConverted,
   stopDownload,
   type ConvertTarget,
+  type FileKind,
   type PickedFile,
   type SourceInfo,
   type Transfer,
@@ -20,285 +22,223 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { StopGlyph } from "@/components/DownloadRow";
 import ErrorNote from "@/components/ErrorNote";
 
-/// The converter: files already on the user's disk, no network involved.
+/// The converter, as three steps on one screen: a file goes in, a format is
+/// picked, the converted file comes out with a Download button.
 ///
-/// Every other tab starts from a link and ends with a save dialog. This one is
-/// the mirror image — the file is already theirs, and the result belongs
-/// beside it. So there is no dialog per file: a converter that asks twenty
-/// times to convert twenty files is a converter people use once.
+/// One file at a time, on purpose. The question on this screen is "what can
+/// this file become", and the answer depends on the file: a song can't become
+/// a GIF, a photo can't become an MP3. A list of files would need a format
+/// per row or a format that fits none of them.
 ///
-/// The list is the whole interface. Each row carries its own state, so one
-/// file failing never stops the rest, and a row that failed says why on the
-/// row rather than in a banner that could belong to any of them.
-///
-/// Two targets, one switch. The switch sits above the list rather than on each
-/// row because the reason someone opens this tab is to turn a pile of files
-/// into one thing — picking audio-or-video once is the choice they actually
-/// meant to make, and the same reasoning the page-scan list follows.
+/// The converted file waits in the app's own folder until Download is
+/// pressed, so converting to three formats to compare them leaves nothing
+/// behind but the one that was kept.
 
-/// What a row is currently set to become.
-/// The two outputs, described by what you get rather than by codec: the
-/// question someone on this screen has is "which one do I want".
-const TARGETS: { id: ConvertTarget; label: string; hint: string }[] = [
-  { id: "mp3", label: "MP3", hint: "Audio only" },
-  { id: "mp4", label: "MP4", hint: "Video, plays everywhere" },
+interface Format {
+  id: ConvertTarget;
+  label: string;
+  hint: string;
+}
+
+const GROUPS: { kind: FileKind; title: string; formats: Format[] }[] = [
+  {
+    kind: "video",
+    title: "Video",
+    formats: [
+      { id: "mp4", label: "MP4", hint: "Plays everywhere" },
+      { id: "mkv", label: "MKV", hint: "Keeps every track" },
+      { id: "webm", label: "WebM", hint: "For the web" },
+      { id: "mov", label: "MOV", hint: "Apple and editors" },
+      { id: "avi", label: "AVI", hint: "Older players and TVs" },
+      { id: "gif", label: "GIF", hint: "Short loop, no sound" },
+    ],
+  },
+  {
+    kind: "audio",
+    title: "Audio",
+    formats: [
+      { id: "mp3", label: "MP3", hint: "Plays everywhere" },
+      { id: "m4a", label: "M4A", hint: "Apple, small" },
+      { id: "wav", label: "WAV", hint: "Uncompressed" },
+      { id: "flac", label: "FLAC", hint: "Lossless, smaller" },
+      { id: "ogg", label: "OGG", hint: "Open format" },
+      { id: "opus", label: "Opus", hint: "Smallest" },
+    ],
+  },
+  {
+    kind: "image",
+    title: "Image",
+    formats: [
+      { id: "png", label: "PNG", hint: "Lossless" },
+      { id: "jpg", label: "JPG", hint: "Small, for photos" },
+      { id: "webp", label: "WebP", hint: "Smallest, for the web" },
+    ],
+  },
 ];
 
-/// One file in the list, with whatever has happened to it so far.
-///
-/// A row is not "a source file" — it is one slot in the list, which starts out
-/// holding the file you picked and afterwards holds the file that replaced it.
-/// That is the whole point of the tab: you put a file in, and the converted
-/// one is what comes back out. Keeping the original visible next to its own
-/// output would leave the user to work out which of the two rows is the one
-/// they wanted.
-interface Row {
-  /// Absolute path. Doubles as the row key — the same file cannot be queued
-  /// twice, which is the behaviour people expect from a drop list.
-  path: string;
-  name: string;
-  sizeBytes: number | null;
-  duration: number | null;
-  /// False when the file carries no audio. Kept in the list rather than
-  /// dropped, so the user can see which of their files was refused and why.
-  hasAudio: boolean;
-  /// True when there is a picture in the file. Only ever descriptive — a
-  /// soundless file cannot become an MP3, but a pictureless one becomes a
-  /// perfectly good MP4.
-  hasVideo: boolean;
-  /// Set when the file could not be read at all — the reason is shown as-is.
-  unreadable: string | null;
-  /// Per-attempt id, needed so stop targets the right conversion.
-  id: string | null;
+const LABEL: Record<ConvertTarget, string> = Object.fromEntries(
+  GROUPS.flatMap((g) => g.formats.map((f) => [f.id, f.label]))
+) as Record<ConvertTarget, string>;
+
+/// Mirrors `Target::accepts` in convert.rs: what a file of this kind can
+/// become. Rust checks again before converting.
+function accepts(target: ConvertTarget, file: SourceInfo): boolean {
+  const audioOut = ["mp3", "m4a", "wav", "flac", "ogg", "opus"].includes(target);
+  const imageOut = ["png", "jpg", "webp"].includes(target);
+  if (file.kind === "video") return !imageOut && (!audioOut || file.hasAudio);
+  if (file.kind === "audio") return audioOut || target === "mp4";
+  return imageOut;
+}
+
+/// The hint changes where the same format means something different for
+/// this file: an MP4 made from a song is a video with a still picture.
+function hintFor(format: Format, file: SourceInfo): string {
+  if (file.kind === "audio" && format.id === "mp4") return "Video with a black picture";
+  if (file.kind === "video" && !file.hasAudio && ["mp4", "mkv", "webm", "mov", "avi"].includes(format.id))
+    return `${format.hint}, silent`;
+  return format.hint;
+}
+
+const CODECS: Record<string, string> = {
+  h264: "H.264",
+  hevc: "HEVC",
+  vp8: "VP8",
+  vp9: "VP9",
+  av1: "AV1",
+  mpeg4: "MPEG-4",
+  aac: "AAC",
+  mp3: "MP3",
+  opus: "Opus",
+  vorbis: "Vorbis",
+  flac: "FLAC",
+  pcm_s16le: "PCM",
+  png: "PNG",
+  mjpeg: "JPEG",
+  webp: "WebP",
+  gif: "GIF",
+};
+
+/// The groups in the order this file wants them: its own kind first, so a
+/// song opens on the audio formats and a video on the video ones.
+function groupsFor(file: SourceInfo) {
+  return [...GROUPS].sort((a, b) => Number(b.kind === file.kind) - Number(a.kind === file.kind));
+}
+
+/// The format picked for a new file: the first one it can become that isn't
+/// what it already is. A PNG's first offer being PNG would be a Convert
+/// button that does nothing useful.
+function firstPick(file: SourceInfo): ConvertTarget | null {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const same = (id: ConvertTarget) => id === ext || (id === "jpg" && ext === "jpeg");
+  const offered = groupsFor(file)
+    .flatMap((g) => g.formats)
+    .filter((f) => accepts(f.id, file));
+  return (offered.find((f) => !same(f.id)) ?? offered[0])?.id ?? null;
+}
+
+function codecName(codec: string | null): string | null {
+  if (!codec) return null;
+  return CODECS[codec] ?? codec.toUpperCase();
+}
+
+function describe(file: SourceInfo): string {
+  const kind = file.kind === "video" ? "Video" : file.kind === "audio" ? "Audio" : "Image";
+  const codecs = [codecName(file.kind === "audio" ? null : file.videoCodec), codecName(file.audioCodec)]
+    .filter(Boolean)
+    .join(" + ");
+  return [
+    kind,
+    file.duration !== null && file.kind !== "image" ? formatDuration(file.duration) : null,
+    file.width && file.height ? `${file.width}×${file.height}` : null,
+    codecs || null,
+    file.sizeBytes !== null ? formatBytes(file.sizeBytes) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+interface Progress {
   percent: number;
   stage: string;
-  /// Output written so far and the time left, once the encode has run long
-  /// enough to estimate it.
   transfer?: Transfer;
-  running: boolean;
-  done: boolean;
-  outputPath: string | null;
-  error: string | null;
-  stopped: boolean;
-  /// True while the save dialog is open for this row.
-  saving: boolean;
-  /// Where the user last saved a copy, so the row can confirm it.
-  savedTo: string | null;
-  /// Set once the converted file exists. From here on the row shows that
-  /// file's name and size, and the original is remembered only so a failed
-  /// save can still say what it came from.
-  converted: ConvertedInfo | null;
 }
 
-/// What the row shows after the conversion — the new file, not the source.
-interface ConvertedInfo {
+interface Result {
   path: string;
   name: string;
   sizeBytes: number | null;
-  /// What it was converted to. Stored per row rather than read from the
-  /// panel's switch: flipping the switch after converting five files must not
-  /// relabel those five rows as something they are not.
   target: ConvertTarget;
-}
-
-/// The name to show for a converted file, taken from the path it was actually
-/// written to.
-///
-/// Deliberately not computed from the source name. The obvious version of this
-/// — swap the extension — is right until it is not: converting an MP4 to MP4
-/// cannot overwrite its own source, so the backend writes "clip (2).mp4", and
-/// if *that* name is taken too it writes "(3)". A predicted name would then
-/// label a row with a file that is not the one behind it, and the Show button
-/// would open a different file than the row claims to be.
-///
-/// The backend already returns the real path. Reading the name off it cannot
-/// disagree with what is on disk.
-function convertedNameFor(outputPath: string): string {
-  const cut = Math.max(outputPath.lastIndexOf("\\"), outputPath.lastIndexOf("/"));
-  const name = cut >= 0 ? outputPath.slice(cut + 1) : outputPath;
-  // A path that somehow ends in a separator would leave nothing to show; the
-  // whole path is a poor label but an honest one.
-  return name || outputPath;
-}
-
-function rowFromSource(info: SourceInfo): Row {
-  return {
-    path: info.path,
-    name: info.name,
-    sizeBytes: info.sizeBytes,
-    duration: info.duration,
-    hasAudio: info.hasAudio,
-    hasVideo: info.hasVideo,
-    unreadable: null,
-    id: null,
-    percent: 0,
-    stage: "Waiting",
-    running: false,
-    done: false,
-    outputPath: null,
-    error: null,
-    stopped: false,
-    saving: false,
-    savedTo: null,
-    converted: null,
-  };
-}
-
-/// A row for a file that could not be read. It still appears in the list:
-/// picking five files and silently getting four rows is worse than a fifth row
-/// saying what was wrong.
-function rowFromBad(path: string, name: string, reason: string): Row {
-  return {
-    ...rowFromSource({
-      path,
-      name,
-      sizeBytes: null,
-      duration: null,
-      hasAudio: false,
-      hasVideo: false,
-    }),
-    unreadable: reason,
-  };
-}
-
-/// Whether this row can produce the chosen target at all.
-///
-/// The only real restriction is sound: no audio means no MP3, because the
-/// result would be a valid, empty, useless file. There is deliberately no
-/// matching rule for video — an MP3 turned into an MP4 is a black-screen
-/// video, which is exactly what someone facing an upload form that only takes
-/// video is after.
-function canProduce(row: Row, target: ConvertTarget): boolean {
-  if (row.unreadable) return false;
-  return target === "mp3" ? row.hasAudio : true;
-}
-
-/// Why a row cannot be converted to the chosen target, in the user's terms.
-/// Null when there is nothing wrong with it.
-function refusal(row: Row, target: ConvertTarget): string | null {
-  if (row.unreadable) return row.unreadable;
-  if (target === "mp3" && !row.hasAudio) return "No sound in this file";
-  return null;
-}
-
-/// True when a row is ready to be converted — able to produce the target and
-/// not already done. Stopped and failed rows count as ready again, since
-/// retrying is the obvious next thing to want.
-function isConvertible(row: Row, target: ConvertTarget): boolean {
-  return canProduce(row, target) && !row.done && !row.running;
+  /// Where Download put it, once it has.
+  savedTo: string | null;
 }
 
 interface ConvertPanelProps {
-  /// Raised whenever a conversion starts or finishes, so the app can block tab
-  /// switching while work is in flight — the same rule downloads follow.
+  /// Raised while a conversion runs, so the app can block switching tabs,
+  /// the same rule downloads follow.
   onBusyChange: (busy: boolean) => void;
 }
 
 export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [target, setTarget] = useState<ConvertTarget>("mp3");
-  const [picking, setPicking] = useState(false);
-  const [pickError, setPickError] = useState<string | null>(null);
+  const [file, setFile] = useState<SourceInfo | null>(null);
+  const [target, setTarget] = useState<ConvertTarget | null>(null);
+  const [reading, setReading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Convert-all walks the list one file at a time; this lets the loop see
-  // stops and removals that happened after it started, without restarting the
-  // effect on every progress tick.
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-
-  // Same reason: the loop reads the target it started with rather than closing
-  // over a stale one.
-  const targetRef = useRef(target);
-  targetRef.current = target;
-
-  const busy = rows.some((r) => r.running);
+  const running = runId !== null;
   useEffect(() => {
-    onBusyChange(busy);
-  }, [busy, onBusyChange]);
+    onBusyChange(running);
+  }, [running, onBusyChange]);
 
-  const pending = rows.filter((r) => isConvertible(r, target));
-  const converted = rows.filter((r) => r.done).length;
+  // The drop handler outlives renders; it reads the latest state through here.
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const resultRef = useRef(result);
+  resultRef.current = result;
 
-  function patch(path: string, next: Partial<Row>) {
-    setRows((list) =>
-      list.map((r) => (r.path === path ? { ...r, ...next } : r))
-    );
+  /// Takes the first file that was picked or dropped. A new file replaces
+  /// the old one, and a converted file nobody downloaded goes with it.
+  function take(picked: PickedFile | undefined | null) {
+    if (!picked) return;
+    if (picked.kind === "bad") {
+      setError(picked.reason);
+      return;
+    }
+    const old = resultRef.current;
+    if (old && !old.savedTo) discardConverted(old.path).catch(() => {});
+    setFile(picked.info);
+    setResult(null);
+    setProgress(null);
+    setError(null);
+    // A format is picked for it straight away, so Convert is ready at once;
+    // anything else is one click away.
+    setTarget(firstPick(picked.info));
   }
 
-  /// Switching target clears what was already converted *as state*, not as
-  /// files: the MP3s stay on disk, but a row still showing "Download" for an
-  /// MP3 while the switch reads MP4 is a row lying about what pressing it
-  /// gives you. Resetting to the source is honest, and re-converting is one
-  /// press away.
-  function changeTarget(next: ConvertTarget) {
-    if (next === target || busy) return;
-    setTarget(next);
-    setRows((list) =>
-      list.map((r) =>
-        r.done || r.error || r.stopped
-          ? {
-              ...r,
-              id: null,
-              percent: 0,
-              stage: "Waiting",
-              done: false,
-              outputPath: null,
-              error: null,
-              stopped: false,
-              saving: false,
-              savedTo: null,
-              converted: null,
-            }
-          : r
-      )
-    );
-  }
-
-  /// Adds probed files to the list, skipping ones already in it.
-  function addPicked(picked: PickedFile[]) {
-    if (picked.length === 0) return;
-    setRows((list) => {
-        const seen = new Set(list.map((r) => r.path));
-        const added: Row[] = [];
-        for (const file of picked) {
-          const path = file.kind === "ok" ? file.info.path : file.path;
-          // Re-picking a file that is already listed is a no-op rather than a
-          // duplicate row: the list is keyed by path, and two rows for one
-          // file would race each other writing the same output.
-          if (seen.has(path)) continue;
-          seen.add(path);
-          added.push(
-            file.kind === "ok"
-              ? rowFromSource(file.info)
-              : rowFromBad(file.path, file.name, file.reason)
-          );
-        }
-        return [...list, ...added];
-      });
-  }
-
-  async function addFiles() {
-    setPickError(null);
-    setPicking(true);
+  async function choose() {
+    setError(null);
+    setReading(true);
     try {
-      addPicked(await pickMediaFiles());
+      take(await pickMediaFile());
     } catch (err) {
-      setPickError(typeof err === "string" ? err : "Could not open the file picker.");
+      setError(typeof err === "string" ? err : "Could not open the file picker.");
     } finally {
-      setPicking(false);
+      setReading(false);
     }
   }
 
-  // Files dropped anywhere on the window while this tab is open. The window
-  // hands over paths, not file contents, so they are probed in Rust exactly
-  // like picked ones.
-  const [dragging, setDragging] = useState(false);
+  // A file dropped anywhere on the window while this tab is open.
   useEffect(() => {
     let stop: (() => void) | null = null;
     let gone = false;
     getCurrentWebview()
       .onDragDropEvent(async (event) => {
         const e = event.payload;
+        if (runningRef.current) return;
         if (e.type === "enter" || e.type === "over") {
           setDragging(true);
         } else if (e.type === "leave") {
@@ -306,14 +246,14 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
         } else if (e.type === "drop") {
           setDragging(false);
           if (e.paths.length === 0) return;
-          setPickError(null);
-          setPicking(true);
+          setError(null);
+          setReading(true);
           try {
-            addPicked(await probeFiles(e.paths));
+            take((await probeFiles(e.paths.slice(0, 1)))[0]);
           } catch (err) {
-            setPickError(typeof err === "string" ? err : "Could not read those files.");
+            setError(typeof err === "string" ? err : "Could not read that file.");
           } finally {
-            setPicking(false);
+            setReading(false);
           }
         }
       })
@@ -328,368 +268,205 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
     };
   }, []);
 
-  /// Converts one row. Resolves when it is finished either way, so the
-  /// convert-all loop can await it and keep the queue sequential — running
-  /// several ffmpeg processes at once would just make them contend for the
-  /// same CPU and finish no sooner. That matters more for video, where a
-  /// single encode already uses every core it can get.
-  async function convertRow(row: Row, to: ConvertTarget): Promise<void> {
+  async function convert() {
+    if (!file || !target || running) return;
+    const old = resultRef.current;
+    if (old && !old.savedTo) discardConverted(old.path).catch(() => {});
     const id = crypto.randomUUID();
-    patch(row.path, {
-      id,
-      running: true,
-      percent: 0,
-      stage: "Starting",
-      error: null,
-      stopped: false,
-    });
-
+    setRunId(id);
+    setResult(null);
+    setError(null);
+    setProgress({ percent: 0, stage: "Starting" });
     const unsubscribe = onDownloadProgress(id, (p) =>
-      patch(row.path, { percent: p.percent, stage: p.stage, transfer: p.transfer })
+      setProgress({ percent: p.percent, stage: p.stage, transfer: p.transfer })
     );
-
     try {
-      const outputPath = await convertFile({
-        id,
-        path: row.path,
-        target: to,
-        duration: row.duration,
-      });
-
-      // The row stops being the source file here and becomes the output. Both
-      // its name and its size come from the file that was actually written,
-      // never from a prediction about it: a row that names a file it does not
-      // point at is the one kind of wrong nobody would think to check.
-      const outName = convertedNameFor(outputPath);
-      const outSize = await fileSize(outputPath).catch(() => null);
-
-      patch(row.path, {
-        running: false,
-        done: true,
-        percent: 100,
-        stage: "Done",
-        outputPath,
-        converted: {
-          path: outputPath,
-          name: outName,
-          sizeBytes: outSize,
-          target: to,
-        },
+      const path = await convertFile({ id, path: file.path, target, duration: file.duration });
+      const cut = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+      setResult({
+        path,
+        name: path.slice(cut + 1),
+        sizeBytes: await fileSize(path).catch(() => null),
+        target,
+        savedTo: null,
       });
     } catch (err) {
       const message = typeof err === "string" ? err : "Conversion failed.";
-      patch(row.path, {
-        running: false,
-        // Stop is a deliberate action, not a failure — the row says "Stopped"
-        // and offers another go rather than showing red error text.
-        stopped: message === "Conversion stopped",
-        error: message === "Conversion stopped" ? null : message,
-      });
+      if (message !== "Conversion stopped") setError(message);
     } finally {
       unsubscribe();
+      setRunId(null);
+      setProgress(null);
     }
   }
 
-  async function convertAll() {
-    // The target is read once, up front. Flipping the switch mid-queue must
-    // not leave half the list as MP3s and half as MP4s with no way to tell
-    // which is which — and the switch is disabled while the queue runs anyway.
-    const to = targetRef.current;
-
-    // Snapshot the queue, then re-check each row against current state before
-    // starting it: a file removed or already converted while the queue was
-    // running must not be picked up.
-    for (const queued of rowsRef.current.filter((r) => isConvertible(r, to))) {
-      const current = rowsRef.current.find((r) => r.path === queued.path);
-      if (!current || !isConvertible(current, to)) continue;
-      await convertRow(current, to);
-    }
-  }
-
-  function stopRow(row: Row) {
-    if (row.id) stopDownload(row.id);
-  }
-
-  /// Saves a finished file somewhere the user chooses. It already exists
-  /// beside the original, so this is a copy — cancelling leaves everything as
-  /// it was, which is why a closed dialog is not treated as an error.
-  async function download(row: Row) {
-    if (!row.converted) return;
-    patch(row.path, { saving: true, error: null });
+  async function download() {
+    if (!result) return;
+    setSaving(true);
+    setError(null);
     try {
-      const saved = await saveACopy(row.converted.path, row.converted.name);
-      patch(row.path, { saving: false, savedTo: saved ?? null });
+      const savedTo = await saveConverted(result.path);
+      if (savedTo) setResult({ ...result, savedTo });
     } catch (err) {
-      patch(row.path, {
-        saving: false,
-        error: typeof err === "string" ? err : "Couldn't save that file.",
-      });
+      setError(typeof err === "string" ? err : "Couldn't save that file.");
+    } finally {
+      setSaving(false);
     }
   }
 
-  function removeRow(path: string) {
-    setRows((list) => list.filter((r) => r.path !== path));
+  function startOver() {
+    if (result && !result.savedTo) discardConverted(result.path).catch(() => {});
+    setFile(null);
+    setTarget(null);
+    setResult(null);
+    setError(null);
   }
 
-  function clearFinished() {
-    setRows((list) => list.filter((r) => !r.done));
-  }
+  const savedName = result?.savedTo
+    ? result.savedTo.slice(Math.max(result.savedTo.lastIndexOf("\\"), result.savedTo.lastIndexOf("/")) + 1)
+    : null;
 
   return (
     <section className="convert">
-      {/* 1. What the files become. Chosen first, because it decides what
-          the list below can do — an MP3 needs sound in the file. Disabled
-          mid-queue rather than hidden, so it still says which one is in
-          use. */}
-      <div className="convert-step">
-        <span className="convert-step-label">Convert to</span>
-        <div className="convert-targets" role="radiogroup" aria-label="Convert files to">
-          {TARGETS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="radio"
-              aria-checked={target === t.id}
-              className={`convert-option${target === t.id ? " is-on" : ""}`}
-              onClick={() => changeTarget(t.id)}
-              disabled={busy}
-            >
-              <span className="convert-option-name">{t.label}</span>
-              <span className="convert-option-hint">{t.hint}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. The files. The whole box takes a drop, and says so; the button
-          is for anyone who would rather browse. Once files are listed it
-          shrinks to one line, since its explaining is done. */}
-      <div
-        className={`convert-drop${dragging ? " is-over" : ""}${rows.length > 0 ? " is-compact" : ""}`}
-      >
-        <DropGlyph />
-        <div className="convert-drop-text">
-          <span className="convert-drop-title">
-            {dragging
-              ? "Drop to add them"
-              : rows.length > 0
-                ? "Drop more files here"
-                : "Drop audio or video files here"}
+      {/* 1. The file. */}
+      {!file ? (
+        <div className={`conv-drop${dragging ? " is-over" : ""}`}>
+          <span className="conv-drop-icon" aria-hidden="true">
+            <DropGlyph />
           </span>
-          {rows.length === 0 ? (
-            <span className="convert-drop-hint">
-              Saved next to the original files.
-            </span>
-          ) : null}
+          <span className="conv-drop-title">{dragging ? "Drop it" : "Drop a file here"}</span>
+          <span className="conv-drop-hint">Any video, song or picture</span>
+          <button type="button" className="submit-btn conv-drop-btn" onClick={choose} disabled={reading}>
+            {reading ? (
+              <>
+                <span className="submit-spinner" aria-hidden="true" />
+                Reading…
+              </>
+            ) : (
+              "Choose a file"
+            )}
+          </button>
         </div>
-        <button type="button" className="btn" onClick={addFiles} disabled={picking}>
-          {picking ? (
-            <>
-              <span className="submit-spinner" aria-hidden="true" />
-              Reading…
-            </>
-          ) : rows.length > 0 ? (
-            "Add files"
-          ) : (
-            "Choose files"
-          )}
-        </button>
-      </div>
-
-      {pickError ? <ErrorNote message={pickError} onDismiss={() => setPickError(null)} /> : null}
-
-      {rows.length === 0 ? null : (
-        <ul className="convert-list">
-          {rows.map((row) => {
-            const why = refusal(row, target);
-            return (
-              <li className="convert-item" key={row.path}>
-                {/* Once converted the row *is* the new file: it shows that
-                    file's name and size, not the source's. The original is
-                    gone from the list because it is no longer what is on
-                    offer. */}
-                <div className="convert-meta">
-                  <span
-                    className="convert-name"
-                    title={row.converted ? row.converted.path : row.path}
-                  >
-                    {row.converted ? row.converted.name : row.name}
-                  </span>
-                  <span className="convert-sub">
-                    {why
-                      ? why
-                      : row.converted
-                        ? [
-                            row.converted.target.toUpperCase(),
-                            row.duration !== null
-                              ? formatDuration(row.duration)
-                              : null,
-                            row.converted.sizeBytes !== null
-                              ? formatBytes(row.converted.sizeBytes)
-                              : null,
-                            row.savedTo ? "Saved" : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : [
-                            row.duration !== null
-                              ? formatDuration(row.duration)
-                              : null,
-                            row.sizeBytes !== null
-                              ? formatBytes(row.sizeBytes)
-                              : null,
-                            // Only worth saying when it changes what the
-                            // output will be: a soundless file becoming an
-                            // MP4 is fine, but the result is a silent video
-                            // and nobody should find that out afterwards.
-                            target === "mp4" && !row.hasAudio
-                              ? "No sound, the video will be silent"
-                              : null,
-                            target === "mp4" && !row.hasVideo
-                              ? "No picture, the video will be black"
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                  </span>
-                </div>
-
-                <div className="convert-state">
-                  {row.done ? (
-                    <>
-                      {/* No progress bar on a finished row: the bar answered
-                          "how far along", and that question is closed. What is
-                          live now is the file and what can be done with it. */}
-                      <button
-                        type="button"
-                        className="convert-download-btn"
-                        onClick={() => download(row)}
-                        disabled={row.saving}
-                      >
-                        {row.saving ? "Saving…" : "Download"}
-                      </button>
-                      {row.outputPath ? (
-                        <button
-                          type="button"
-                          className="dl-ctrl-btn"
-                          onClick={() => revealFile(row.savedTo ?? row.outputPath!)}
-                        >
-                          Show
-                        </button>
-                      ) : null}
-                    </>
-                  ) : row.running ? (
-                    <>
-                      {/* The same bar and cancel control as a download row,
-                          so a conversion reads as the same kind of work. */}
-                      <div className="convert-progress">
-                        <div
-                          className={`dlrow-track${row.percent > 0 ? "" : " is-waiting"}`}
-                        >
-                          <div className="dlrow-fill" style={{ width: `${row.percent}%` }} />
-                        </div>
-                        <span className="dlrow-meta">
-                          {row.percent > 0
-                            ? [
-                                `${Math.floor(row.percent)}%`,
-                                row.stage,
-                                row.transfer?.downloaded
-                                  ? formatBytes(row.transfer.downloaded)
-                                  : null,
-                                row.transfer?.eta != null ? formatEta(row.transfer.eta) : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")
-                            : `${row.stage}…`}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="dlrow-icon dlrow-cancel"
-                        onClick={() => stopRow(row)}
-                        aria-label={`Cancel ${row.name}`}
-                        title="Cancel"
-                      >
-                        <StopGlyph />
-                      </button>
-                    </>
-                  ) : row.error ? (
-                    <>
-                      <span className="dl-status dl-status-error">{row.error}</span>
-                      <button
-                        type="button"
-                        className="dl-ctrl-btn"
-                        onClick={() => convertRow(row, target)}
-                        disabled={busy}
-                      >
-                        Try again
-                      </button>
-                    </>
-                  ) : row.stopped ? (
-                    <>
-                      <span className="dl-status">Cancelled</span>
-                      <button
-                        type="button"
-                        className="dl-ctrl-btn"
-                        onClick={() => convertRow(row, target)}
-                        disabled={busy}
-                      >
-                        Try again
-                      </button>
-                    </>
-                  ) : why ? null : (
-                    <button
-                      type="button"
-                      className="dl-ctrl-btn"
-                      onClick={() => convertRow(row, target)}
-                      disabled={busy}
-                    >
-                      Convert
-                    </button>
-                  )}
-
-                  {/* Removing is always available except mid-conversion, where
-                      it would leave a running ffmpeg with no row to stop it. */}
-                  {row.running ? null : (
-                    <button
-                      type="button"
-                      className="convert-remove"
-                      aria-label={`Remove ${row.name}`}
-                      title="Remove from the list"
-                      onClick={() => removeRow(row.path)}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      ) : (
+        <div className={`conv-file${dragging ? " is-over" : ""}`}>
+          <span className={`conv-file-icon conv-kind-${file.kind}`} aria-hidden="true">
+            <KindGlyph kind={file.kind} />
+          </span>
+          <div className="conv-file-text">
+            <span className="conv-file-name" title={file.path}>
+              {file.name}
+            </span>
+            <span className="conv-file-meta">{describe(file)}</span>
+          </div>
+          <button type="button" className="dl-ctrl-btn" onClick={choose} disabled={running || reading}>
+            {reading ? "Reading…" : "Change"}
+          </button>
+        </div>
       )}
 
-      {/* 3. Go. Sits under the list it acts on, and names both how many
-          files and what they become, so the button is its own summary. */}
-      {rows.length > 0 ? (
-        <div className="convert-footer">
-          {converted > 0 && !busy ? (
-            <button type="button" className="history-clear" onClick={clearFinished}>
-              Clear finished
-            </button>
-          ) : (
-            <span />
-          )}
+      {/* 2. What it becomes. Only what this file can be, grouped. */}
+      {file ? (
+        <div className="convert-step">
+          <span className="convert-step-label">Convert to</span>
+          {groupsFor(file).map((group) => {
+            const formats = group.formats.filter((f) => accepts(f.id, file));
+            if (!formats.length) return null;
+            return (
+              <div className="conv-group" key={group.kind}>
+                <span className="conv-group-title">{group.title}</span>
+                <div className="conv-formats" role="radiogroup" aria-label={`${group.title} formats`}>
+                  {formats.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={target === f.id}
+                      className={`conv-format${target === f.id ? " is-on" : ""}`}
+                      onClick={() => setTarget(f.id)}
+                      disabled={running}
+                    >
+                      <span className="conv-format-name">{f.label}</span>
+                      <span className="conv-format-hint">{hintFor(f, file)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {file.kind === "video" && !file.hasAudio ? (
+            <span className="conv-note">This video has no sound, so there are no audio formats.</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {error ? <ErrorNote message={error} onDismiss={() => setError(null)} /> : null}
+
+      {/* 3. Convert, then the result. */}
+      {file && running && progress ? (
+        <div className="conv-run">
+          <div className="convert-progress">
+            <div className={`dlrow-track${progress.percent > 0 ? "" : " is-waiting"}`}>
+              <div className="dlrow-fill" style={{ width: `${progress.percent}%` }} />
+            </div>
+            <span className="dlrow-meta">
+              {progress.percent > 0
+                ? [
+                    `${Math.floor(progress.percent)}%`,
+                    progress.stage,
+                    progress.transfer?.downloaded ? formatBytes(progress.transfer.downloaded) : null,
+                    progress.transfer?.eta != null ? formatEta(progress.transfer.eta) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : `${progress.stage}…`}
+            </span>
+          </div>
           <button
             type="button"
-            className="submit-btn"
-            onClick={convertAll}
-            disabled={busy || pending.length === 0}
+            className="dlrow-icon dlrow-cancel"
+            onClick={() => runId && stopDownload(runId)}
+            aria-label="Cancel"
+            title="Cancel"
           >
-            {busy
-              ? "Converting…"
-              : pending.length > 0
-                ? `Convert ${pending.length} file${pending.length > 1 ? "s" : ""} to ${target.toUpperCase()}`
-                : "All converted"}
+            <StopGlyph />
+          </button>
+        </div>
+      ) : file && result && result.target === target ? (
+        <div className="conv-done">
+          <span className="conv-done-icon" aria-hidden="true">
+            <CheckGlyph />
+          </span>
+          <div className="conv-file-text">
+            <span className="conv-file-name">{savedName ?? result.name}</span>
+            <span className="conv-file-meta">
+              {[
+                LABEL[result.target],
+                result.sizeBytes !== null ? formatBytes(result.sizeBytes) : null,
+                result.savedTo ? "Saved to your download folder" : "Ready",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </div>
+          {result.savedTo ? (
+            <>
+              <button type="button" className="dl-ctrl-btn" onClick={() => revealFile(result.savedTo!)}>
+                Show in folder
+              </button>
+              <button type="button" className="dl-ctrl-btn" onClick={startOver}>
+                New file
+              </button>
+            </>
+          ) : (
+            <button type="button" className="submit-btn" onClick={download} disabled={saving}>
+              {saving ? "Saving…" : "Download"}
+            </button>
+          )}
+        </div>
+      ) : file ? (
+        <div className="conv-go">
+          <button type="button" className="submit-btn" onClick={convert} disabled={!target}>
+            {target ? `Convert to ${LABEL[target]}` : "Pick a format"}
           </button>
         </div>
       ) : null}
@@ -699,15 +476,58 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
 
 function DropGlyph() {
   return (
-    <svg className="convert-drop-glyph" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
       <path
-        d="M12 3.5v11M7.5 10 12 14.5 16.5 10M4.5 15.5v2.2c0 1.3 1 2.3 2.3 2.3h10.4c1.3 0 2.3-1 2.3-2.3v-2.2"
+        d="M12 15.5v-11M7.5 9 12 4.5 16.5 9M4.5 15.5v2.2c0 1.3 1 2.3 2.3 2.3h10.4c1.3 0 2.3-1 2.3-2.3v-2.2"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function KindGlyph({ kind }: { kind: FileKind }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {kind === "video" ? (
+        <>
+          <rect x="3" y="5" width="13" height="14" rx="2.5" />
+          <path d="M16 10l5-3v10l-5-3" />
+        </>
+      ) : kind === "audio" ? (
+        <>
+          <path d="M9 18V5l11-2v13" />
+          <circle cx="6.5" cy="18" r="2.5" />
+          <circle cx="17.5" cy="16" r="2.5" />
+        </>
+      ) : (
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="2.5" />
+          <circle cx="9" cy="10" r="1.8" />
+          <path d="M21 16l-5-5-9 9" />
+        </>
+      )}
     </svg>
   );
 }

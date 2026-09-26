@@ -5698,7 +5698,7 @@ dependencies = [
 
 [[package]]
 name = "yt2mp"
-version = "0.7.16"
+version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
  "dirs 5.0.1",

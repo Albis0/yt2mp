@@ -120,7 +120,7 @@ const TAB_LEADS: Record<TabId, string> = {
   twitch: "Paste a VOD or clip link to save it.",
   other: "Paste a link from almost any video site.",
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
-  convert: "Convert audio and video files to MP3 or MP4.",
+  convert: "Turn a video, song or picture into another format.",
   scan: "Paste a page address to find the videos on it.",
 };
 

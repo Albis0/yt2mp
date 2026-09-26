@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discard-converted"
+description = "Enables the discard_converted command without any pre-configured scope."
+commands.allow = ["discard_converted"]
+
+[[permission]]
+identifier = "deny-discard-converted"
+description = "Denies the discard_converted command without any pre-configured scope."
+commands.deny = ["discard_converted"]

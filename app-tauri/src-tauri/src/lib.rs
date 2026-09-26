@@ -516,17 +516,48 @@ enum ProbedFile {
     Bad { path: String, name: String, reason: String },
 }
 
-/// Converts one already-on-disk file to MP3 or MP4, beside the original.
+/// Opens a file picker for the converter and probes the one file chosen.
+/// None when the dialog is closed.
+#[tauri::command]
+async fn pick_media_file(app: AppHandle) -> Result<Option<ProbedFile>, String> {
+    let start_dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let picked = tauri::async_runtime::spawn_blocking({
+        let app = app.clone();
+        move || app.dialog().file().set_directory(&start_dir).blocking_pick_file()
+    })
+    .await
+    .map_err(|e| format!("File dialog failed: {e}"))?;
+
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    Ok(probe_all(vec![path]).await.pop())
+}
+
+/// Where converted files wait until they are downloaded: a folder of the
+/// app's own, one subfolder per conversion so two files with the same name
+/// never meet. Emptied at every start, so nothing piles up there.
+fn convert_workspace(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_cache_dir().ok().map(|d| d.join("converted"))
+}
+
+fn clear_convert_workspace(app: &AppHandle) {
+    if let Some(dir) = convert_workspace(app) {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// Converts one already-on-disk file into the converter's own folder. The
+/// original is never touched, and nothing lands among the user's files until
+/// they press Download ([`save_converted`]).
 ///
 /// Shares the download path's registry and its `download:progress` channel, so
-/// the same stop button and the same progress plumbing work here — a converted
-/// row and a downloaded row behave identically from the UI's side.
-///
-/// One command for both targets rather than two: everything around the
-/// conversion — the registry entry, the progress channel, the collision guard,
-/// deleting a half-written file — is identical, and only the arguments handed
-/// to ffmpeg differ. Splitting it would duplicate all of that so the two
-/// copies could drift.
+/// the same stop button and the same progress plumbing work here.
 #[tauri::command]
 async fn convert_file(
     app: AppHandle,
@@ -554,17 +585,23 @@ async fn convert_file(
     if target.needs_audio() && !info.has_audio {
         return Err(format!("{} has no sound in it.", info.name));
     }
+    if !target.accepts(info.kind, info.has_audio) {
+        return Err(format!("{} can't become a {}.", info.name, target.label()));
+    }
 
-    // Never write over the file being read: converting "song.mp3" to MP3, or
-    // an MP4 to MP4, would otherwise truncate the source ffmpeg is still
-    // decoding. The MP4 case is the common one — re-encoding a video that
-    // will not play is most of why this target exists.
-    let desired = convert::default_dest(&source, target);
-    let dest = if desired == source {
-        unique_path(&source.with_extension("").with_extension(target.extension()))
-    } else {
-        unique_path(&desired)
-    };
+    // The id is a UUID from the UI; anything else is not used as a folder name.
+    if id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("That conversion id is not valid.".into());
+    }
+    let folder = convert_workspace(&app)
+        .ok_or("There's no folder to convert into.")?
+        .join(&id);
+    std::fs::create_dir_all(&folder).map_err(|_| "Couldn't make room for the converted file.".to_string())?;
+    let file_name = convert::default_dest(&source, target)
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| format!("converted.{}", target.extension()).into());
+    let dest = folder.join(file_name);
 
     let (tx, rx) = tokio::sync::watch::channel(Control::Run);
     {
@@ -604,6 +641,42 @@ async fn convert_file(
             Err(e)
         }
     }
+}
+
+/// The converter's Download button: the converted file goes into the
+/// download folder (asked for the first time, like any download), under a
+/// free name, and leaves the converter's own folder.
+#[tauri::command]
+async fn save_converted(app: AppHandle, path: String) -> Result<Option<String>, String> {
+    let source = PathBuf::from(&path);
+    let workspace = convert_workspace(&app).ok_or("Nothing to save.")?;
+    // Only ever a file this app converted: the path comes from the UI.
+    if !source.starts_with(&workspace) || !source.is_file() {
+        return Err("That converted file is gone. Convert it again.".into());
+    }
+    let Some(dir) = download_folder_or_ask(&app).await? else {
+        return Ok(None);
+    };
+    let name = source.file_name().ok_or("Nothing to save.")?;
+    let dest = unique_path(&dir.join(name));
+    tokio::fs::copy(&source, &dest)
+        .await
+        .map_err(|_| "Couldn't save it to your download folder.".to_string())?;
+    Ok(Some(dest.to_string_lossy().into_owned()))
+}
+
+/// Throws away a converted file nobody downloaded (the converter was cleared,
+/// or a new file was picked).
+#[tauri::command]
+async fn discard_converted(app: AppHandle, path: String) -> Result<(), String> {
+    let source = PathBuf::from(&path);
+    let Some(workspace) = convert_workspace(&app) else {
+        return Ok(());
+    };
+    if let Some(folder) = source.parent().filter(|f| f.starts_with(&workspace) && *f != workspace) {
+        let _ = tokio::fs::remove_dir_all(folder).await;
+    }
+    Ok(())
 }
 
 /// Opens a native save dialog, then downloads straight to the chosen path.
@@ -980,6 +1053,7 @@ pub fn run() {
                 app.handle().path().app_config_dir().ok(),
             );
             settings::init(app.handle().path().app_config_dir().ok());
+            clear_convert_workspace(app.handle());
             fit_window_to_screen(app.handle());
             Ok(())
         })
@@ -988,6 +1062,7 @@ pub fn run() {
             start_download,
             download_folder,
             pick_media_files,
+            pick_media_file,
             probe_files,
             convert_file,
             scan_page_quick,
@@ -1008,6 +1083,8 @@ pub fn run() {
             app_version,
             choose_download_dir,
             forget_download_dir,
+            save_converted,
+            discard_converted,
             tabs::tab_open,
             tabs::tab_close,
             tabs::tab_show,

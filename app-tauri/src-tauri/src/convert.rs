@@ -1,4 +1,5 @@
-//! Converting a file already on disk to MP3 or MP4.
+//! Converting a file already on disk to another format: video, audio or
+//! image, fifteen targets in all.
 //!
 //! Everything else in this app starts from a URL: yt-dlp extracts, downloads
 //! and hands ffmpeg a stream. This path has no network in it at all — the user
@@ -11,10 +12,10 @@
 //! fails with a message saying so, which is a better answer than an extension
 //! allow-list that rejects a working file because nobody thought of `.opus`.
 //!
-//! Two targets, one code path. MP3 throws the picture away and keeps the
-//! sound; MP4 keeps both. They differ only in the arguments handed to ffmpeg
-//! and in what a source without a video stream means — so [`Target`] carries
-//! that difference and everything else below is shared.
+//! Every target shares one code path. They differ in the streams they keep,
+//! the encoders they run, and whether the streams already in the file can be
+//! carried over as they are — so [`Target`] carries those differences and
+//! everything else below is shared.
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -76,73 +77,149 @@ const UNKNOWN_LENGTH_CAP: f64 = 60.0 * 60.0;
 
 /// What the user asked the file to become.
 ///
-/// The only thing that genuinely differs between the two: which streams
-/// survive, which encoders run, and what a source without a picture means. A
-/// silent video is still a perfectly good MP4; a silent anything is a useless
-/// MP3, which is why `needs_audio` is not simply true for both.
+/// Named by what people call the files, not by codec: someone picking "OGG"
+/// wants a .ogg that plays, not a lecture on Vorbis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Target {
-    Mp3,
+    // Video
     Mp4,
+    Mkv,
+    Webm,
+    Mov,
+    Avi,
+    Gif,
+    // Audio
+    Mp3,
+    M4a,
+    Wav,
+    Flac,
+    Ogg,
+    Opus,
+    // Image
+    Png,
+    Jpg,
+    Webp,
+}
+
+/// What a file is, as far as converting it goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    /// Has a moving picture (sound optional).
+    Video,
+    /// Sound only. Cover art in an MP3 or M4A doesn't make it a video.
+    Audio,
+    /// One still picture.
+    Image,
 }
 
 impl Target {
     /// The extension the output carries.
     pub fn extension(self) -> &'static str {
         match self {
-            Target::Mp3 => "mp3",
             Target::Mp4 => "mp4",
+            Target::Mkv => "mkv",
+            Target::Webm => "webm",
+            Target::Mov => "mov",
+            Target::Avi => "avi",
+            Target::Gif => "gif",
+            Target::Mp3 => "mp3",
+            Target::M4a => "m4a",
+            Target::Wav => "wav",
+            Target::Flac => "flac",
+            Target::Ogg => "ogg",
+            Target::Opus => "opus",
+            Target::Png => "png",
+            Target::Jpg => "jpg",
+            Target::Webp => "webp",
         }
     }
 
-    /// Shown on a row, and used in error text. Not a MIME type and not a
-    /// codec — the words someone picking a file would use.
+    /// Shown on a row, and used in error text.
     pub fn label(self) -> &'static str {
         match self {
-            Target::Mp3 => "MP3",
             Target::Mp4 => "MP4",
+            Target::Mkv => "MKV",
+            Target::Webm => "WebM",
+            Target::Mov => "MOV",
+            Target::Avi => "AVI",
+            Target::Gif => "GIF",
+            Target::Mp3 => "MP3",
+            Target::M4a => "M4A",
+            Target::Wav => "WAV",
+            Target::Flac => "FLAC",
+            Target::Ogg => "OGG",
+            Target::Opus => "Opus",
+            Target::Png => "PNG",
+            Target::Jpg => "JPG",
+            Target::Webp => "WebP",
         }
+    }
+
+    /// Video out, with or without sound. GIF is a picture that moves, but
+    /// it has no sound and is made differently, so it is its own case.
+    pub fn is_video(self) -> bool {
+        matches!(self, Target::Mp4 | Target::Mkv | Target::Webm | Target::Mov | Target::Avi)
+    }
+
+    pub fn is_audio(self) -> bool {
+        matches!(
+            self,
+            Target::Mp3 | Target::M4a | Target::Wav | Target::Flac | Target::Ogg | Target::Opus
+        )
+    }
+
+    pub fn is_image(self) -> bool {
+        matches!(self, Target::Png | Target::Jpg | Target::Webp)
     }
 
     /// Whether a source with no audio stream can produce this at all.
     ///
-    /// MP3 from a silent file would be a valid, empty, pointless file, so the
-    /// UI refuses it up front. MP4 from a silent file is just a silent video,
-    /// which is a normal thing to want — a screen recording with the mic off
-    /// converts fine and must not be refused.
+    /// A sound file from a silent source would be a valid, empty, pointless
+    /// file, so it is refused up front. A video from a silent file is just a
+    /// silent video, which is a normal thing to want — a screen recording
+    /// with the mic off converts fine and must not be refused.
     pub fn needs_audio(self) -> bool {
-        matches!(self, Target::Mp3)
+        self.is_audio()
     }
 
-    /// The encoding arguments, between the input and the output path.
+    /// Whether a file of `kind` (with or without sound) can become this.
     ///
-    /// Deliberately not "copy" for MP4. Stream-copying would be instant and
-    /// would also be a lie: the reason someone converts to MP4 is that the
-    /// file they have does not play where they need it to, and copying a VP9
-    /// or AV1 stream into an MP4 container reproduces exactly that problem in
-    /// a new wrapper. H.264 and AAC are what actually play everywhere.
+    /// Sound can become a video — an MP4 with a still picture, which is what
+    /// upload forms that only take video want — but nothing else that needs
+    /// a picture. A still image only becomes another still image.
+    pub fn accepts(self, kind: Kind, has_audio: bool) -> bool {
+        match kind {
+            Kind::Video => !self.is_image() && (!self.needs_audio() || has_audio),
+            Kind::Audio => self.is_audio() || self == Target::Mp4,
+            Kind::Image => self.is_image(),
+        }
+    }
+
+    /// The H.264 targets: the graphics card can encode for these, and an
+    /// H.264 + AAC source can be carried into them without re-encoding.
+    fn is_h264(self) -> bool {
+        matches!(self, Target::Mp4 | Target::Mov | Target::Mkv)
+    }
+
+    /// The encoding arguments for the software path, between the input and
+    /// the output path. Stream selection is added by the caller.
     ///
-    /// `+faststart` moves the index to the front so the file starts playing
-    /// before it has fully downloaded — the difference between a file that
-    /// works on the web and one that only works locally.
-    ///
-    /// `-shortest` only appears when a picture had to be generated: the
-    /// generated one runs forever, so without it the encode never ends.
-    fn ffmpeg_args(self, generated_picture: bool) -> Vec<&'static str> {
+    /// `+faststart` moves an MP4's or MOV's index to the front so it starts
+    /// playing before it has fully downloaded — the difference between a file
+    /// that works on the web and one that only works locally.
+    fn ffmpeg_args(self, generated_picture: bool) -> Vec<String> {
+        let v = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         match self {
-            Target::Mp3 => vec![
-                // -vn drops any video stream: cover art in an MP4 would
-                // otherwise be carried into the MP3 as a video track and some
-                // players choke on it.
-                "-vn",
-                "-codec:a",
-                "libmp3lame",
-                "-b:a",
-                BITRATE,
-            ],
-            Target::Mp4 => {
-                let mut args = vec![
+            Target::Mp3 => v(&["-codec:a", "libmp3lame", "-b:a", BITRATE]),
+            Target::M4a => v(&["-c:a", "aac", "-b:a", VIDEO_AUDIO_BITRATE, "-movflags", "+faststart"]),
+            Target::Wav => v(&["-c:a", "pcm_s16le"]),
+            Target::Flac => v(&["-c:a", "flac"]),
+            Target::Ogg => v(&["-c:a", "libvorbis", "-q:a", "6"]),
+            Target::Opus => v(&["-c:a", "libopus", "-b:a", "160k"]),
+            Target::Mp4 | Target::Mov | Target::Mkv => {
+                let mut args = v(&[
                     "-c:v",
                     "libx264",
                     "-preset",
@@ -154,36 +231,95 @@ impl Target {
                     // and then refuses to play on half the devices people own.
                     "-pix_fmt",
                     "yuv420p",
-                ];
-                args.extend(mp4_tail(generated_picture));
+                ]);
+                args.extend(video_tail(self, generated_picture));
                 args
             }
+            // VP9 at realtime speed: the default VP9 settings take many times
+            // the length of the video, which nobody waits for on a desktop.
+            Target::Webm => {
+                let mut args = v(&[
+                    "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-deadline", "realtime",
+                    "-cpu-used", "8", "-row-mt", "1", "-pix_fmt", "yuv420p", "-c:a", "libopus",
+                    "-b:a", "128k",
+                ]);
+                if generated_picture {
+                    args.push("-shortest".into());
+                }
+                args
+            }
+            // MPEG-4 Part 2 with MP3 sound: what "AVI" means to every player
+            // and TV that still asks for one.
+            Target::Avi => v(&[
+                "-c:v", "mpeg4", "-q:v", "3", "-vtag", "xvid", "-c:a", "libmp3lame", "-b:a", BITRATE,
+            ]),
+            // A palette made from the clip itself, at a size and rate that
+            // keep a GIF a GIF rather than a hundred-megabyte file.
+            Target::Gif => v(&[
+                "-vf",
+                "fps=12,scale='min(640,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4",
+                "-loop",
+                "0",
+            ]),
+            Target::Png => v(&["-c:v", "png", "-frames:v", "1", "-update", "1"]),
+            // JPEG has no transparency; the picture is laid on white first,
+            // or a transparent PNG comes out with a black background.
+            Target::Jpg => v(&[
+                "-vf",
+                "split[a][b];[a]drawbox=c=white:t=fill[bg];[bg][b]overlay=format=auto,format=yuvj444p",
+                "-c:v",
+                "mjpeg",
+                "-q:v",
+                "2",
+                "-frames:v",
+                "1",
+                "-update",
+                "1",
+            ]),
+            Target::Webp => v(&["-c:v", "libwebp", "-quality", "90", "-frames:v", "1"]),
         }
     }
 }
 
-/// Everything in an MP4 conversion after the video encoder: the audio, the
+/// Everything in an H.264 conversion after the video encoder: the audio, the
 /// index at the front, and the stop for a generated picture. Shared by the
 /// software and the graphics-card encoders so the two files differ only in
 /// who compressed the picture.
-fn mp4_tail(generated_picture: bool) -> Vec<&'static str> {
-    let mut args = vec![
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    VIDEO_AUDIO_BITRATE,
-                    "-movflags",
-                    "+faststart",
-                ];
-                if generated_picture {
-                    // Second line of defence. The generated picture is
-                    // normally already bounded with -t by the caller; this
-                    // covers a source whose length nothing could determine,
-                    // where the sound is the only thing that says when the
-                    // file is over.
-                    args.push("-shortest");
-                }
-                args
+fn video_tail(target: Target, generated_picture: bool) -> Vec<String> {
+    let mut args: Vec<String> = ["-c:a", "aac", "-b:a", VIDEO_AUDIO_BITRATE]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    if target != Target::Mkv {
+        args.extend(["-movflags".to_string(), "+faststart".to_string()]);
+    }
+    if generated_picture {
+        // Second line of defence. The generated picture is normally already
+        // bounded with -t by the caller; this covers a source whose length
+        // nothing could determine, where the sound is the only thing that
+        // says when the file is over.
+        args.push("-shortest".into());
+    }
+    args
+}
+
+/// Which streams go into the output. `src` is the input index of the user's
+/// file: 1 when a picture is generated as input 0, otherwise 0.
+///
+/// Explicit, because ffmpeg's own pick is "the best stream of each kind",
+/// and for an MP3 with cover art the best video stream is the cover.
+fn stream_map(target: Target, generated_picture: bool) -> Vec<String> {
+    let s = |a: &[&str]| a.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    if generated_picture {
+        return s(&["-map", "0:v:0", "-map", "1:a:0"]);
+    }
+    if target.is_audio() {
+        s(&["-map", "0:a:0", "-vn"])
+    } else if target == Target::Gif || target.is_image() {
+        s(&["-map", "0:v:0", "-an"])
+    } else {
+        s(&["-map", "0:v:0", "-map", "0:a:0?"])
+    }
 }
 
 /// How one attempt at a conversion encodes, fastest first.
@@ -194,37 +330,55 @@ enum Plan {
     Copy,
     /// H.264 on the graphics card.
     Hardware(&'static str),
-    /// The reference path: libx264 / libmp3lame on the processor.
+    /// The reference path, on the processor.
     Software,
 }
 
 /// Whether `info` can go to `target` without re-encoding.
 ///
-/// MP4: an 8-bit 4:2:0 H.264 picture with AAC or MP3 sound (or none) is
+/// MP4/MOV: an 8-bit 4:2:0 H.264 picture with AAC or MP3 sound (or none) is
 /// exactly what the software path would produce, so re-encoding it would only
 /// cost time and quality. Anything else — VP9, AV1, 10-bit, Opus — is what
 /// someone converts to MP4 to get rid of, and is encoded.
 ///
-/// MP3: an MP3 sound track is lifted out as it is.
+/// MKV holds anything, so a video always tries a copy first. WebM takes VP8,
+/// VP9 or AV1 with Opus or Vorbis. A sound target copies when the sound is
+/// already in that format.
 fn can_copy(target: Target, info: &SourceInfo) -> bool {
+    let audio = info.audio_codec.as_deref();
+    let video = info.video_codec.as_deref();
     match target {
-        Target::Mp4 => {
-            info.video_codec.as_deref() == Some("h264")
+        Target::Mp4 | Target::Mov => {
+            video == Some("h264")
                 && info.video_plays_everywhere
-                && matches!(info.audio_codec.as_deref(), None | Some("aac") | Some("mp3"))
+                && matches!(audio, None | Some("aac") | Some("mp3"))
         }
-        Target::Mp3 => info.audio_codec.as_deref() == Some("mp3"),
+        Target::Mkv => info.kind == Kind::Video,
+        Target::Webm => {
+            matches!(video, Some("vp8") | Some("vp9") | Some("av1"))
+                && matches!(audio, None | Some("opus") | Some("vorbis"))
+        }
+        Target::Mp3 => audio == Some("mp3"),
+        Target::M4a => audio == Some("aac"),
+        Target::Flac => audio == Some("flac"),
+        Target::Ogg => audio == Some("vorbis"),
+        Target::Opus => audio == Some("opus"),
+        Target::Wav => audio == Some("pcm_s16le"),
+        Target::Avi | Target::Gif | Target::Png | Target::Jpg | Target::Webp => false,
     }
 }
 
-fn copy_args(target: Target) -> Vec<&'static str> {
+fn copy_args(target: Target) -> Vec<String> {
+    let s = |a: &[&str]| a.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     match target {
         // The first picture and the first sound only: subtitle and data
         // streams from an MKV have no place in an MP4 and would fail the mux.
-        Target::Mp4 => vec![
+        Target::Mp4 | Target::Mov => s(&[
             "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart",
-        ],
-        Target::Mp3 => vec!["-vn", "-map", "0:a:0", "-c:a", "copy"],
+        ]),
+        // Every sound track: an MKV is where multi-language files live.
+        Target::Mkv | Target::Webm => s(&["-map", "0:v:0", "-map", "0:a?", "-c", "copy"]),
+        _ => s(&["-vn", "-map", "0:a:0", "-c:a", "copy"]),
     }
 }
 
@@ -320,16 +474,17 @@ pub struct SourceInfo {
     /// False when the file carries no audio stream. The UI refuses to queue
     /// these for MP3 rather than letting ffmpeg fail on them later.
     pub has_audio: bool,
-    /// True when there is a picture in the file.
-    ///
-    /// Not a gate, unlike `has_audio`: an MP3 asked to become an MP4 is a
-    /// legitimate thing to do (it produces a black-screen video, which is what
-    /// some upload forms want), so this only drives what the row says about
-    /// what it is offering.
+    /// True when there is a real picture in the file: a video, or an image.
+    /// An MP3's cover art doesn't count; that file is still sound.
     pub has_video: bool,
+    /// Video, sound or a still image: decides which targets are offered.
+    pub kind: Kind,
+    /// The picture's size, when there is one.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
     /// The first real video stream's codec ("h264", "vp9"), not counting
-    /// cover art. Only used to decide whether a conversion can copy.
-    #[serde(skip)]
+    /// cover art. Shown on the file's card, and used to decide whether a
+    /// conversion can copy.
     pub video_codec: Option<String>,
     /// Whether that stream is 8-bit 4:2:0, the pixel format every player
     /// handles. A 10-bit H.264 is still H.264 and still refuses to play on
@@ -337,7 +492,6 @@ pub struct SourceInfo {
     #[serde(skip)]
     pub video_plays_everywhere: bool,
     /// The first audio stream's codec ("aac", "mp3", "opus").
-    #[serde(skip)]
     pub audio_codec: Option<String>,
 }
 
@@ -378,18 +532,58 @@ pub async fn probe(path: &Path) -> Result<SourceInfo, String> {
         return Err(format!("{name} isn't a media file this can read."));
     }
 
+    let has_audio = has_stream(&text, "Audio:");
+    let picture = video_line(&text);
+    let kind = if picture.is_some() && is_still_image(&text) {
+        Kind::Image
+    } else if picture.is_some() {
+        Kind::Video
+    } else if has_audio {
+        Kind::Audio
+    } else {
+        return Err(format!("{name} has no sound or picture to convert."));
+    };
+    let (width, height) = picture.and_then(picture_size).unzip();
+
     Ok(SourceInfo {
         path: path.to_string_lossy().into_owned(),
         name,
         size_bytes,
         duration: parse_duration(&text),
-        has_audio: has_stream(&text, "Audio:"),
-        has_video: has_stream(&text, "Video:"),
+        has_audio,
+        has_video: picture.is_some(),
+        kind,
+        width,
+        height,
         video_codec: stream_codec(&text, "Video:"),
         video_plays_everywhere: video_line(&text)
             .is_some_and(|l| l.contains("yuv420p") && !l.contains("yuv420p10")),
         audio_codec: stream_codec(&text, "Audio:"),
     })
+}
+
+/// A still picture: ffmpeg reads single images through its image "pipes"
+/// (`png_pipe`, `jpeg_pipe`, `webp_pipe`) or the image2 demuxer. An animated
+/// GIF is read by the `gif` demuxer and counts as video.
+fn is_still_image(text: &str) -> bool {
+    text.lines()
+        .find(|l| l.starts_with("Input #0"))
+        .and_then(|l| l.split(',').nth(1))
+        .map(|f| {
+            let f = f.trim();
+            f.ends_with("_pipe") || f == "image2"
+        })
+        .unwrap_or(false)
+}
+
+/// `… yuv420p(tv), 1920x1080 [SAR 1:1 …]` → (1920, 1080).
+fn picture_size(line: &str) -> Option<(u32, u32)> {
+    line.split([',', ' '])
+        .filter_map(|part| {
+            let (w, h) = part.trim().split_once('x')?;
+            Some((w.parse().ok()?, h.parse().ok()?))
+        })
+        .find(|(w, h): &(u32, u32)| *w > 0 && *h > 0)
 }
 
 /// The first video stream line that is a real picture, not an MP3's cover.
@@ -484,9 +678,10 @@ pub fn explain(raw: &str, name: &str, target: Target) -> String {
         // Only an MP3 can fail for want of sound. A silent source makes a
         // perfectly good MP4, so blaming the audio there would send the user
         // looking for a problem that is not the one they have.
-        return match target {
-            Target::Mp3 => format!("{name} has no sound in it."),
-            Target::Mp4 => format!("Nothing in {name} could be converted."),
+        return if target.needs_audio() {
+            format!("{name} has no sound in it.")
+        } else {
+            format!("Nothing in {name} could be converted.")
         };
     }
 
@@ -555,7 +750,7 @@ where
     // which is the exact reason someone converts an audio file to MP4 in the
     // first place. Measured, not assumed: the first version of this shipped
     // that file and called it done.
-    let generated_picture = target == Target::Mp4 && !source_has_video;
+    let generated_picture = target.is_video() && !source_has_video;
 
     // Fastest first; each later plan is the fallback for the one before.
     let mut plans = Vec::new();
@@ -566,7 +761,7 @@ where
             }
         }
     }
-    if target == Target::Mp4 {
+    if target.is_h264() {
         if let Some(encoder) = hardware_encoder().await {
             plans.push(Plan::Hardware(encoder));
         }
@@ -672,14 +867,19 @@ where
         cmd.args(["-i", BLANK_PICTURE]);
     }
 
-    let args: Vec<&str> = match plan {
+    let args: Vec<String> = match plan {
         Plan::Copy => copy_args(target),
         Plan::Hardware(encoder) => {
-            let mut a = hardware_args(encoder).to_vec();
-            a.extend(mp4_tail(generated_picture));
+            let mut a = stream_map(target, generated_picture);
+            a.extend(hardware_args(encoder).iter().map(|s| s.to_string()));
+            a.extend(video_tail(target, generated_picture));
             a
         }
-        Plan::Software => target.ffmpeg_args(generated_picture),
+        Plan::Software => {
+            let mut a = stream_map(target, generated_picture);
+            a.extend(target.ffmpeg_args(generated_picture));
+            a
+        }
     };
 
     cmd.arg("-i")
@@ -702,11 +902,12 @@ where
 
     // Video re-encoding is slow enough that "Converting" alone leaves people
     // wondering whether it is stuck, so the stage says which job is running.
-    let stage = match (plan, target) {
-        (Plan::Copy, _) => "Copying",
-        (Plan::Hardware(_), _) => "Encoding video on the graphics card",
-        (Plan::Software, Target::Mp3) => "Converting",
-        (Plan::Software, Target::Mp4) => "Encoding video",
+    let stage = match plan {
+        Plan::Copy => "Copying",
+        Plan::Hardware(_) => "Encoding video on the graphics card",
+        Plan::Software if target.is_video() => "Encoding video",
+        Plan::Software if target == Target::Gif => "Making the GIF",
+        Plan::Software => "Converting",
     };
     on_progress(0.0, stage, None);
 
@@ -966,6 +1167,7 @@ mod tests {
         match target {
             Target::Mp3 => has_encoder(ffmpeg, "libmp3lame"),
             Target::Mp4 => has_encoder(ffmpeg, "libx264") && has_encoder(ffmpeg, "aac"),
+            _ => true,
         }
     }
 
@@ -977,10 +1179,37 @@ mod tests {
             duration: None,
             has_audio: audio.is_some(),
             has_video: video.is_some(),
+            kind: if video.is_some() { Kind::Video } else { Kind::Audio },
+            width: None,
+            height: None,
             video_codec: video.map(str::to_string),
             video_plays_everywhere: everywhere,
             audio_codec: audio.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn each_kind_of_file_is_offered_what_it_can_become() {
+        use Target::*;
+        assert!(Mp3.accepts(Kind::Video, true));
+        assert!(!Mp3.accepts(Kind::Video, false), "a silent video makes no MP3");
+        assert!(Webm.accepts(Kind::Video, false), "a silent video is still a video");
+        assert!(!Png.accepts(Kind::Video, true));
+        assert!(Mp4.accepts(Kind::Audio, true), "sound can become an MP4 with a picture");
+        assert!(!Gif.accepts(Kind::Audio, true));
+        assert!(!Webm.accepts(Kind::Audio, true));
+        assert!(Jpg.accepts(Kind::Image, false));
+        assert!(!Mp4.accepts(Kind::Image, false));
+    }
+
+    #[test]
+    fn the_file_kind_and_size_come_from_the_banner() {
+        let png = "Input #0, png_pipe, from 'a.png':\n  Stream #0:0: Video: png, rgb24(pc), 200x120, 25 fps";
+        assert!(is_still_image(png));
+        let gif = "Input #0, gif, from 'a.gif':\n  Stream #0:0: Video: gif, bgra, 480x270, 10 fps";
+        assert!(!is_still_image(gif), "an animated GIF is a video");
+        let line = "  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 30 fps";
+        assert_eq!(picture_size(line), Some((1920, 1080)));
     }
 
     #[test]
@@ -1414,6 +1643,74 @@ mod tests {
                 "no tool name: {err}"
             );
 
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// Every target from every kind of source it is offered for, each
+        /// output read back and checked for being the kind of file it claims.
+        #[tokio::test]
+        async fn every_format_converts_and_reads_back() {
+            let Some(_ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            let dir = std::env::temp_dir().join("yt2mp-convert-every");
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+
+            let video = make_fixture(&dir).await.expect("video fixture");
+            let make = |args: &'static [&'static str], name: &str| {
+                let out = dir.join(name);
+                async move {
+                    let mut cmd = crate::ytdlp::base_command(ffmpeg());
+                    cmd.args(["-hide_banner", "-loglevel", "error", "-y"]).args(args).arg(&out);
+                    assert!(cmd.output().await.unwrap().status.success(), "fixture {out:?}");
+                    out
+                }
+            };
+            let audio = make(&["-f", "lavfi", "-i", "sine=frequency=330:duration=3", "-c:a", "flac"], "tone.flac").await;
+            let image = make(&["-f", "lavfi", "-i", "testsrc=s=200x120", "-frames:v", "1", "-update", "1"], "still.png").await;
+
+            let v = probe(&video).await.unwrap();
+            let a = probe(&audio).await.unwrap();
+            let i = probe(&image).await.unwrap();
+            assert_eq!(v.kind, Kind::Video);
+            assert_eq!(a.kind, Kind::Audio);
+            assert_eq!(i.kind, Kind::Image);
+            assert_eq!((i.width, i.height), (Some(200), Some(120)));
+            assert_eq!(v.video_codec.as_deref(), Some("mpeg4"));
+
+            use Target::*;
+            let all = [Mp4, Mkv, Webm, Mov, Avi, Gif, Mp3, M4a, Wav, Flac, Ogg, Opus, Png, Jpg, Webp];
+            let mut done = 0;
+            for (src, info) in [(&video, &v), (&audio, &a), (&image, &i)] {
+                for target in all {
+                    if !target.accepts(info.kind, info.has_audio) {
+                        continue;
+                    }
+                    let dest = dir.join(format!("out-{:?}-{:?}.{}", info.kind, target, target.extension()));
+                    let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+                    convert(src, &dest, target, info.has_video, info.duration, rx, |_, _, _| {})
+                        .await
+                        .unwrap_or_else(|e| panic!("{:?} -> {target:?}: {e}", info.kind));
+                    let out = probe(&dest).await.unwrap_or_else(|e| panic!("{target:?} reads back: {e}"));
+                    let expected = if target.is_audio() {
+                        Kind::Audio
+                    } else if target.is_image() {
+                        Kind::Image
+                    } else {
+                        Kind::Video
+                    };
+                    assert_eq!(out.kind, expected, "{:?} -> {target:?}", info.kind);
+                    if target.is_video() {
+                        assert!(out.has_audio, "{:?} -> {target:?} kept the sound", info.kind);
+                    }
+                    done += 1;
+                }
+            }
+            // 12 from video (all but images), 7 from sound (6 audio + MP4),
+            // 3 from a picture.
+            assert_eq!(done, 22);
             let _ = std::fs::remove_dir_all(&dir);
         }
     }

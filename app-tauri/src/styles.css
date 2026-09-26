@@ -2452,232 +2452,190 @@ button {
   text-transform: uppercase;
 }
 
-/* The two outputs as two choices you can read, not a two-letter toggle:
-   each says what you get. */
-.convert-targets {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.convert-option {
+/* Step 1: the file. Empty, it is a big dashed box that says what to
+   do; once a file is in, it becomes a card describing the file, and
+   the same card takes a drop to swap it. */
+.conv-drop {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
+  align-items: center;
+  gap: 6px;
+  padding: 40px 20px 34px;
+  border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  text-align: left;
-  transition: border-color 0.14s ease, background 0.14s ease, transform 0.12s ease;
+  text-align: center;
+  transition: border-color 0.14s ease, background 0.14s ease;
 }
 
-.convert-option:hover:not(:disabled):not(.is-on) {
-  border-color: var(--border-strong);
-}
-
-.convert-option:active:not(:disabled) {
-  transform: scale(0.99);
-}
-
-.convert-option.is-on {
+.conv-drop.is-over,
+.conv-file.is-over {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
 }
 
-.convert-option:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.convert-option-name {
-  font-size: 0.95rem;
-  font-weight: 650;
-}
-
-.convert-option.is-on .convert-option-name {
+.conv-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
   color: var(--accent);
 }
 
-.convert-option-hint {
-  color: var(--text-3);
-  font-size: 0.78rem;
-  line-height: 1.4;
+.conv-drop-title {
+  font-size: 1.02rem;
+  font-weight: 650;
 }
 
-/* The drop target. Dashed, because that is the one convention everyone
-   reads as "put files here"; it fills with the tab colour while
-   something is being dragged over the window. */
-.convert-drop {
+.conv-drop-hint {
+  color: var(--text-3);
+  font-size: 0.84rem;
+}
+
+.conv-drop-btn {
+  margin-top: 12px;
+}
+
+.conv-file,
+.conv-done,
+.conv-run {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 22px 20px;
-  border: 1.5px dashed var(--border-strong);
+  padding: 14px 16px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   transition: border-color 0.14s ease, background 0.14s ease;
 }
 
-.convert-drop.is-compact {
-  padding: 10px 12px 10px 16px;
-}
-
-.convert-drop.is-over {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
-}
-
-.convert-drop-glyph {
+.conv-file-icon,
+.conv-done-icon {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  color: var(--text-3);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-2);
 }
 
-.convert-drop.is-over .convert-drop-glyph {
-  color: var(--accent);
+.conv-done-icon {
+  background: color-mix(in srgb, var(--ok) 16%, var(--surface));
+  color: var(--ok);
 }
 
-.convert-drop-text {
-  display: flex;
+.conv-file-text {
   flex: 1;
-  flex-direction: column;
-  gap: 4px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.convert-drop-title {
+.conv-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.92rem;
   font-weight: 600;
 }
 
-.convert-drop.is-compact .convert-drop-title {
-  color: var(--text-2);
-  font-size: 0.84rem;
-  font-weight: 500;
-}
-
-.convert-drop-hint {
+.conv-file-meta {
   color: var(--text-3);
-  font-size: 0.8rem;
-  line-height: 1.45;
-}
-
-.convert-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-@media (max-width: 560px) {
-  .convert-targets {
-    grid-template-columns: 1fr;
-  }
-}
-
-.convert-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.convert-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 11px;
-  border-top: 1px solid var(--border);
-  transition: background 0.12s ease;
-}
-
-.convert-item:first-child {
-  border-top: none;
-}
-
-.convert-item:hover {
-  background: var(--surface-2);
-}
-
-/* min-width:0 so a long file name truncates instead of pushing the
-   status column off the row. */
-.convert-meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.convert-name {
-  font-size: 0.87rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Duration and size are figures being compared down a column, so
-   they take the mono face like every other number in the app. */
-.convert-sub {
   font-family: var(--mono);
-  font-size: 0.73rem;
-  color: var(--text-3);
+  font-size: 0.74rem;
   font-variant-numeric: tabular-nums;
 }
 
-.convert-state {
+/* Step 2: the formats, grouped by what comes out. */
+.conv-group {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.conv-group + .conv-group {
+  margin-top: 6px;
+}
+
+.conv-group-title {
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.conv-formats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 8px;
-  flex-shrink: 0;
-  min-width: 168px;
+}
+
+.conv-format {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.12s ease;
+}
+
+.conv-format:hover:not(:disabled):not(.is-on) {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.conv-format:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.conv-format.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.conv-format:disabled:not(.is-on) {
+  opacity: 0.55;
+}
+
+.conv-format-name {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.conv-format.is-on .conv-format-name {
+  color: var(--accent);
+}
+
+.conv-format-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 0.74rem;
+}
+
+.conv-note {
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+
+/* Step 3. */
+.conv-go {
+  display: flex;
   justify-content: flex-end;
 }
 
-.convert-state .dl-track {
-  width: 72px;
-}
-
-.convert-remove {
-  background: none;
-  border: none;
-  color: var(--text-3);
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 2px 4px;
-  transition: color 0.14s ease;
-}
-
-.convert-remove:hover {
-  color: var(--danger);
-}
-
-/* The finished row's own button. Filled rather than outlined like the
-   other row controls: once a file has converted, taking the MP3 somewhere
-   is the only thing left to do with that row, so it should read as the
-   action and not as one option among several. */
-.convert-download-btn {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 5px 12px;
-  font-size: 0.82rem;
-  font-weight: 550;
-  white-space: nowrap;
-  transition: background 0.14s ease;
-}
-
-.convert-download-btn:hover:not(:disabled) {
-  background: var(--accent-press);
-}
-
-.convert-download-btn:disabled {
-  opacity: 0.6;
+.conv-run .convert-progress {
+  min-width: 0;
 }
 
 /* ---------- Find on page ----------
@@ -2803,17 +2761,11 @@ button {
   background: var(--surface);
 }
 
-/* Narrow windows: the status column drops under the file name
+/* Narrow windows: the result's buttons drop under the file name
    rather than squeezing both into nothing. */
 @media (max-width: 560px) {
-  .convert-item {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .convert-state {
-    justify-content: flex-start;
-    min-width: 0;
+  .conv-done {
+    flex-wrap: wrap;
   }
 }
 

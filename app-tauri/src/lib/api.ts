@@ -150,15 +150,19 @@ export interface SourceInfo {
   duration: number | null;
   /** False when there is no audio stream; the UI refuses to queue those for MP3. */
   hasAudio: boolean;
-  /**
-   * True when the file has a picture in it.
-   *
-   * Not a gate, unlike `hasAudio`: an audio file asked to become an MP4 is a
-   * legitimate thing to want, so this only drives what a row says about
-   * itself.
-   */
+  /** True when there is a real picture: a video or an image. Cover art in a
+   *  song does not count. */
   hasVideo: boolean;
+  /** Decides which formats are offered. */
+  kind: FileKind;
+  width: number | null;
+  height: number | null;
+  /** "h264", "vp9", "png"… for the file's card. */
+  videoCodec: string | null;
+  audioCodec: string | null;
 }
+
+export type FileKind = "video" | "audio" | "image";
 
 /**
  * What a converted file should become.
@@ -169,7 +173,22 @@ export interface SourceInfo {
  * format later cannot silently offer a conversion target ffmpeg has no
  * arguments for.
  */
-export type ConvertTarget = "mp3" | "mp4";
+export type ConvertTarget =
+  | "mp4"
+  | "mkv"
+  | "webm"
+  | "mov"
+  | "avi"
+  | "gif"
+  | "mp3"
+  | "m4a"
+  | "wav"
+  | "flac"
+  | "ogg"
+  | "opus"
+  | "png"
+  | "jpg"
+  | "webp";
 
 /// One picked file: convertible, or a named reason it is not.
 ///
@@ -192,13 +211,32 @@ export function pickMediaFiles(): Promise<PickedFile[]> {
   return invoke<PickedFile[]>("pick_media_files");
 }
 
+/** Opens a file picker for one file and probes it. Null when closed. */
+export function pickMediaFile(): Promise<PickedFile | null> {
+  return invoke<PickedFile | null>("pick_media_file");
+}
+
+/**
+ * Puts a converted file in the download folder (asking for one the first
+ * time). Resolves with where it went, or null if no folder was chosen.
+ */
+export function saveConverted(path: string): Promise<string | null> {
+  return invoke<string | null>("save_converted", { path });
+}
+
+/** Throws away a converted file that was never downloaded. */
+export function discardConverted(path: string): Promise<void> {
+  return invoke<void>("discard_converted", { path });
+}
+
 /** Probes files dropped onto the window; folders and the like are skipped. */
 export function probeFiles(paths: string[]): Promise<PickedFile[]> {
   return invoke<PickedFile[]>("probe_files", { paths });
 }
 
 /**
- * Converts one file already on disk, written beside the original.
+ * Converts one file already on disk into the converter's own folder; nothing
+ * reaches the user's files until `saveConverted`.
  *
  * Resolves with the path that was actually written, which is not always the
  * predictable one: converting an MP4 to MP4 cannot overwrite its own source,

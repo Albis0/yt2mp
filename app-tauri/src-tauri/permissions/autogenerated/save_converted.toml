@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-converted"
+description = "Enables the save_converted command without any pre-configured scope."
+commands.allow = ["save_converted"]
+
+[[permission]]
+identifier = "deny-save-converted"
+description = "Denies the save_converted command without any pre-configured scope."
+commands.deny = ["save_converted"]

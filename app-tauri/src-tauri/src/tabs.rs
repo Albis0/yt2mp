@@ -160,21 +160,7 @@ pub async fn tab_open<R: Runtime>(
     let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
         .on_navigation(allowed)
         // window.open, target=_blank and "open in new window" all land here.
-        // A second native window would sit outside the tab strip where it
-        // can't be found again, so it becomes a tab instead.
-        .on_new_window(move |url, _features| {
-            if allowed(&url) {
-                to_app(
-                    &popups,
-                    "tab:popup",
-                    Popup {
-                        from: from.clone(),
-                        url: url.to_string(),
-                    },
-                );
-            }
-            NewWindowResponse::Deny
-        })
+        .on_new_window(move |url, features| new_window(&popups, &from, url, features))
         // Ctrl+wheel and Ctrl +/- zoom a page, as in any browser.
         .zoom_hotkeys_enabled(true)
         .focused(show);
@@ -196,6 +182,84 @@ pub async fn tab_open<R: Runtime>(
         let _ = webview.hide();
     }
     Ok(())
+}
+
+/// Where a new window a page asks for goes.
+///
+/// A link opened in a new window (`target=_blank`, "open in new window", a
+/// bare `window.open(url)`) becomes a tab next to the page that opened it: a
+/// second native window would sit outside the tab strip where it can't be
+/// found again.
+///
+/// A window the page gives a size to is a popup, and a popup is almost always
+/// a sign-in ("Sign in with Google", "Log in with Apple"). Those talk back to
+/// the page that opened them and close themselves when done, which only works
+/// if they really are its popup. Opened as a tab, the sign-in finishes and the
+/// page never hears of it. So a sized window is opened as a small real window,
+/// sharing the tab's WebView2 environment (so it has the same cookies) and its
+/// opener.
+fn new_window<R: Runtime>(
+    app: &AppHandle<R>,
+    from: &str,
+    url: Url,
+    features: tauri::webview::NewWindowFeatures,
+) -> NewWindowResponse<R> {
+    if !allowed(&url) {
+        return NewWindowResponse::Deny;
+    }
+    if features.size().is_some() {
+        match popup(app, from, &url, features) {
+            Ok(window) => return NewWindowResponse::Create { window },
+            // Better a tab than nothing.
+            Err(_) => {}
+        }
+    }
+    to_app(
+        app,
+        "tab:popup",
+        Popup {
+            from: from.to_string(),
+            url: url.to_string(),
+        },
+    );
+    NewWindowResponse::Deny
+}
+
+static POPUPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn popup<R: Runtime>(
+    app: &AppHandle<R>,
+    from: &str,
+    url: &Url,
+    features: tauri::webview::NewWindowFeatures,
+) -> tauri::Result<tauri::WebviewWindow<R>> {
+    let n = POPUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tabs = app.clone();
+    let opener = from.to_string();
+    // The label is outside the capability, like a tab's: the popup is a site
+    // and reaches no app command.
+    tauri::WebviewWindowBuilder::new(app, format!("popup-{n}"), WebviewUrl::External(url.clone()))
+        .window_features(features)
+        .title(url.host_str().unwrap_or("Sign in"))
+        .on_navigation(allowed)
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        })
+        // A popup's own links open as tabs beside the page that opened it.
+        .on_new_window(move |url, _| {
+            if allowed(&url) {
+                to_app(
+                    &tabs,
+                    "tab:popup",
+                    Popup {
+                        from: opener.clone(),
+                        url: url.to_string(),
+                    },
+                );
+            }
+            NewWindowResponse::Deny
+        })
+        .build()
 }
 
 #[tauri::command]
