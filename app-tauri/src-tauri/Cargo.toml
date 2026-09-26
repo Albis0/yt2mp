@@ -17,7 +17,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# "unstable" is what lets one window hold more than one webview: the
+# built-in browser's tabs are child webviews of the main window.
+tauri = { version = "2", features = ["unstable"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 # Self-update: checks a signed manifest on the GitHub release and installs the
@@ -38,6 +40,15 @@ tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "s
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "5"
+# Tab favicons arrive from WebView2 as PNG bytes and go to the UI as data URLs.
+base64 = "0.22"
+
+# The browser's tabs talk to WebView2 directly for what Tauri doesn't surface:
+# same-page address changes, back/forward state, favicons, shortcuts. Same
+# versions wry itself uses, so nothing is compiled twice.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }
 
 [profile.release]
 # Size matters here: the whole point of leaving Electron was the download

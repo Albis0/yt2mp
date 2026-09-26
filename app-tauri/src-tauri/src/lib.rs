@@ -14,6 +14,7 @@ mod platform;
 mod scan;
 mod settings;
 mod spotify;
+mod tabs;
 mod tools;
 mod ytdlp;
 
@@ -971,6 +972,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .manage(Downloads::default())
+        .manage(tabs::Tabs::default())
         .setup(|app| {
             binaries::init(app.handle());
             groq::init(
@@ -1005,7 +1007,13 @@ pub fn run() {
             check_ytdlp,
             app_version,
             choose_download_dir,
-            forget_download_dir
+            forget_download_dir,
+            tabs::tab_open,
+            tabs::tab_close,
+            tabs::tab_show,
+            tabs::tab_bounds,
+            tabs::tab_navigate,
+            tabs::tab_go
         ])
         .run(tauri::generate_context!())
         .expect("error while running yt2mp");

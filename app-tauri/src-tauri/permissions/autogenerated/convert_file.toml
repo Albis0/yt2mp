@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-convert-file"
+description = "Enables the convert_file command without any pre-configured scope."
+commands.allow = ["convert_file"]
+
+[[permission]]
+identifier = "deny-convert-file"
+description = "Denies the convert_file command without any pre-configured scope."
+commands.deny = ["convert_file"]

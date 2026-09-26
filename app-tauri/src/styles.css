@@ -461,6 +461,718 @@ button {
   flex-direction: column;
   overflow-y: auto;
 }
+/* ---------- Browser ----------
+   The tab strip in the title bar, and under it, while a page is in
+   front, a toolbar and the page area a native webview is laid over.
+   Nothing here can draw over a page: the webview is a separate
+   window-level surface, so whatever needs the page's space (the
+   suggestions) asks it to step aside instead. */
+
+.body-away {
+  display: none;
+}
+
+.chrome-drag-min {
+  flex: 0 0 28px;
+}
+
+/* The strip takes the bar's free width and is itself a drag handle
+   between and after the tabs, so the window can still be moved with
+   a row of tabs open. (Sized by the bar, not by its tabs: the tabs are
+   size containers, which have no width of their own to offer.) */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 0 4px 0 7px;
+  overflow: hidden;
+}
+
+.strip-app,
+.strip-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.strip-app {
+  flex-shrink: 0;
+  gap: 7px;
+  padding: 0 11px 0 8px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.strip-app svg {
+  flex-shrink: 0;
+}
+
+.strip-tab {
+  flex: 0 1 200px;
+  min-width: 40px;
+  gap: 7px;
+  padding: 0 5px 0 9px;
+  font-size: 0.8rem;
+  cursor: default;
+  user-select: none;
+  container-type: inline-size;
+}
+
+.strip-app:hover:not(.strip-on),
+.strip-tab:hover:not(.strip-on) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.strip-on {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.strip-tab:focus-visible,
+.strip-app:focus-visible {
+  outline: 2px solid var(--browser-accent);
+  outline-offset: -2px;
+}
+
+.strip-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-3);
+}
+
+.strip-icon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.strip-spin {
+  width: 12px;
+  height: 12px;
+  border: 1.6px solid var(--border-strong);
+  border-top-color: var(--browser-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.strip-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity 0.1s ease, background 0.1s ease;
+}
+
+.strip-tab:hover .strip-close,
+.strip-on .strip-close,
+.strip-close:focus-visible {
+  opacity: 1;
+}
+
+.strip-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* Squeezed tabs keep what identifies them: the icon, and on the tab in
+   front, the way to close it. */
+@container (max-width: 72px) {
+  .strip-title {
+    display: none;
+  }
+  .strip-tab:not(.strip-on) .strip-close {
+    display: none;
+  }
+}
+
+.strip-new {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-3);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.strip-new:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.strip-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--browser-accent);
+  box-shadow: 0 0 0 2px var(--chrome);
+}
+
+/* The browser's own blue, whatever source the app's screen was last
+   on: a YouTube-red focus ring round the address of some other site
+   would say the page belongs to YouTube. */
+:root {
+  --browser-accent: #2563eb;
+}
+
+:root[data-theme="dark"] {
+  --browser-accent: #60a5fa;
+}
+
+.browser {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  height: 46px;
+  padding: 0 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.tool-btn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.tool-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tool-btn:disabled {
+  opacity: 0.32;
+}
+
+.omnibox {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin: 0 6px 0 4px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: var(--surface-2);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.omnibox:hover:not(.omnibox-on) {
+  background: var(--surface-3);
+}
+
+.omnibox-on {
+  background: var(--bg);
+  border-color: var(--browser-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--browser-accent) 18%, transparent);
+}
+
+.omnibox-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+
+.omnibox-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  outline: none;
+}
+
+.omnibox-input::placeholder {
+  color: var(--text-3);
+}
+
+.omnibox-error {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--danger);
+  font-size: 0.75rem;
+}
+
+.browser-dl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: none;
+  color: var(--text-2);
+  font-size: 0.84rem;
+  font-weight: 650;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.browser-dl:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.browser-dl:disabled {
+  opacity: 0.4;
+}
+
+.browser-dl-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+}
+
+.browser-dl-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* On a page that is one video, song or post, the button takes the
+   site's colour and says so, with the site's mark on a white chip so
+   YouTube's red logo doesn't vanish into YouTube's red button. */
+.browser-dl-sure {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  animation: dl-ready 0.28s ease-out;
+}
+
+.browser-dl-sure:hover:not(:disabled) {
+  background: var(--accent-press);
+  color: var(--on-accent);
+}
+
+.browser-dl-sure .browser-dl-icon {
+  --logo-ink: #000000;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.browser-dl-sure .browser-dl-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+@keyframes dl-ready {
+  from {
+    transform: scale(0.94);
+    opacity: 0.6;
+  }
+}
+
+.browser-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.browser-fail {
+  max-width: 460px;
+  margin: 18vh auto 0;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.browser-fail-title {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.browser-fail-body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.88rem;
+}
+
+/* ---------- Suggestions ---------- */
+
+.suggest {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 10px 12px;
+  list-style: none;
+}
+
+.suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  cursor: default;
+}
+
+.suggest-on {
+  background: var(--surface-2);
+}
+
+.suggest-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+
+.suggest-icon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.suggest-main {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.suggest-dim {
+  color: var(--text-3);
+}
+
+.suggest-url {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+
+/* ---------- New tab ---------- */
+
+.ntp {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 11vh 24px 40px;
+}
+
+.ntp-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 50px;
+  padding: 0 20px;
+  border: 1px solid var(--border);
+  border-radius: 25px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.ntp-search:focus-within {
+  border-color: var(--browser-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--browser-accent) 18%, transparent);
+}
+
+.ntp-search-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.ntp-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.98rem;
+  outline: none;
+}
+
+.ntp-search input::placeholder {
+  color: var(--text-3);
+}
+
+.ntp-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.ntp-sites {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 6px;
+}
+
+.ntp-site {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 14px 6px 11px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--text-2);
+  transition: background 0.12s ease;
+}
+
+.ntp-site:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.ntp-site-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.ntp-site:hover .ntp-site-icon {
+  background: var(--surface-3);
+}
+
+.ntp-site-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.ntp-site-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.site-letter {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.ntp-recent-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 10px;
+}
+
+.ntp-recent-head h2 {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ntp-clear {
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+
+.ntp-clear:hover {
+  color: var(--danger);
+}
+
+.ntp-recent ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ntp-row {
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+}
+
+.ntp-row:hover {
+  background: var(--surface-2);
+}
+
+.ntp-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 4px 0 10px;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.ntp-row-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+
+.ntp-row-icon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.ntp-row-icon .site-letter {
+  font-size: 0.75rem;
+}
+
+.ntp-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+
+.ntp-row-host,
+.ntp-row-when {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-size: 0.76rem;
+}
+
+.ntp-row-host {
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ntp-row-when {
+  width: 70px;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ntp-row-remove {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-right: 5px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3);
+  opacity: 0;
+}
+
+.ntp-row:hover .ntp-row-remove,
+.ntp-row-remove:focus-visible {
+  opacity: 1;
+}
+
+.ntp-row-remove:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .browser-dl {
+    padding: 0 10px;
+    font-size: 0;
+    gap: 0;
+  }
+  .ntp-row-host {
+    display: none;
+  }
+}
+
 /* ---------- Window controls ---------- */
 
 .wincontrols {

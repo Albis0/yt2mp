@@ -30,7 +30,48 @@ import FirstRun from "@/components/FirstRun";
 import AppLogo from "@/components/AppLogo";
 import Toaster, { ToneIcon } from "@/components/Toaster";
 import ErrorNote from "@/components/ErrorNote";
+import BrowserStrip from "@/components/BrowserStrip";
+import BrowserView from "@/components/BrowserView";
 import { toolsStatus, type ToolsStatus } from "@/lib/api";
+import { tabForUrl, type DownloadTarget } from "@/lib/sources";
+import {
+  activate as activateTab,
+  closeTab,
+  cycle as cycleTabs,
+  focusAddress,
+  getBrowser,
+  newTab,
+  onTabKey,
+  reopenClosed,
+  startBrowser,
+  useBrowser,
+  type KeyName,
+} from "@/lib/browser";
+import { platform } from "@tauri-apps/plugin-os";
+
+/// The built-in browser runs on WebView2's child webviews, which are
+/// Windows-only for now. Elsewhere the title bar keeps the plain app name.
+const BROWSER = (() => {
+  try {
+    return platform() === "windows";
+  } catch {
+    return false;
+  }
+})();
+
+/// The browser's shortcuts, read from a key press in the app's own window.
+/// A press inside a page is read in Rust (tabs.rs) and arrives as a name.
+function shortcutOf(e: KeyboardEvent): KeyName | null {
+  const k = e.key.toLowerCase();
+  if (e.ctrlKey && e.shiftKey && k === "t") return "reopen";
+  if (e.ctrlKey && k === "t") return "new";
+  if (e.ctrlKey && (k === "w" || k === "f4")) return "close";
+  if ((e.ctrlKey && k === "l") || (e.altKey && k === "d") || k === "f6") return "address";
+  if (e.ctrlKey && k === "tab") return e.shiftKey ? "prev" : "next";
+  if (e.ctrlKey && k === "pageup") return "prev";
+  if (e.ctrlKey && k === "pagedown") return "next";
+  return null;
+}
 import { look } from "@/lib/updater";
 import { offerUpdate } from "@/lib/updateFlow";
 import { toast } from "@/lib/toast";
@@ -130,36 +171,6 @@ const DEGRADED_TABS: Partial<Record<TabId, string>> = {
   // are private or photo-only, which the error on the attempt now says.
 };
 
-/// Which tab a pasted URL belongs to, so pasting an Instagram link while the
-/// YouTube tab is open switches to Instagram instead of silently downloading
-/// under the wrong heading. Mirrors the host matching in src-tauri's
-/// platform.rs — kept deliberately simple here because Rust still has the
-/// authoritative say once the link is submitted.
-function tabForUrl(raw: string): TabId | null {
-  const url = raw.trim();
-  if (/^spotify:/i.test(url)) return "spotify";
-  if (!/^https?:\/\//i.test(url)) return null;
-
-  const host = url
-    .replace(/^https?:\/\//i, "")
-    .split(/[/?#]/)[0]
-    .split("@")
-    .pop()!
-    .split(":")[0]
-    .toLowerCase();
-
-  const on = (domain: string) => host === domain || host.endsWith(`.${domain}`);
-
-  if (["youtube.com", "youtu.be", "youtube-nocookie.com"].some(on)) return "youtube";
-  if (["tiktok.com", "vm.tiktok.com"].some(on)) return "tiktok";
-  if (["instagram.com", "instagr.am"].some(on)) return "instagram";
-  if (["twitter.com", "x.com", "t.co"].some(on)) return "twitter";
-  if (on("twitch.tv")) return "twitch";
-  if (["open.spotify.com", "play.spotify.com", "spotify.link", "spotify.app.link"].some(on))
-    return "spotify";
-  return "other";
-}
-
 export default function App() {
   const [tab, setTab] = useState<TabId>("youtube");
   const [url, setUrl] = useState("");
@@ -186,6 +197,12 @@ export default function App() {
   // "conversion" while they were downloading.
   const [scanBusy, setScanBusy] = useState(false);
   const [playlistBusy, setPlaylistBusy] = useState(false);
+
+  // A web page in front covers the app's own screen, which stays mounted
+  // underneath so a running download or conversion keeps its row.
+  const { tabs: webTabs, active: webActive } = useBrowser();
+  const webTab = webTabs.find((t) => t.id === webActive) ?? null;
+  const browsing = webTab !== null;
 
   // AI is the one tab that isn't a site — it takes free text rather than a URL.
   const mode: Mode = tab === "ai" ? "ai" : "link";
@@ -228,6 +245,32 @@ export default function App() {
     if (theme !== "system") return;
     return onSystemChange(() => applyTheme(resolveTheme("system")));
   }, [theme]);
+
+  // Tab shortcuts, from the app's window and from inside pages.
+  useEffect(() => {
+    if (!BROWSER) return;
+    startBrowser();
+    const run = (key: KeyName, from?: string) => {
+      const { active } = getBrowser();
+      if (key === "new") newTab();
+      else if (key === "reopen") reopenClosed();
+      else if (key === "next") cycleTabs(1);
+      else if (key === "prev") cycleTabs(-1);
+      else if (key === "close") {
+        const id = from ?? active;
+        if (id) closeTab(id);
+      } else if (key === "address" && active) focusAddress();
+    };
+    onTabKey(run);
+    const onKey = (e: KeyboardEvent) => {
+      const key = shortcutOf(e);
+      if (!key) return;
+      e.preventDefault();
+      run(key);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function loadInfo(targetUrl: string, targetMode: Mode) {
     const clean = targetUrl.trim();
@@ -432,6 +475,24 @@ export default function App() {
     loadInfo(item.url, "link");
   }
 
+  /// The browser's Download button: back to the app, to the source the page
+  /// belongs to, with the page's address fetched straight away.
+  function downloadFromPage(target: DownloadTarget) {
+    activateTab(null);
+    setSettingsOpen(false);
+    if (downloadInProgress) {
+      waitForDownload("fetching another link");
+      return;
+    }
+    setTab(target.tab);
+    setUrl(target.url);
+    setError(null);
+    setInfo(null);
+    setPlaylist(null);
+    setDownloads({});
+    loadInfo(target.url, "link");
+  }
+
   function handlePlaylistTrackDownloaded(
     videoId: string,
     trackUrl: string,
@@ -473,12 +534,19 @@ export default function App() {
         <div className="chrome-bar">
           {/* Empty space drags the window. It has to come before the buttons
               so a click on one is never swallowed by the drag handler. */}
-          <div className="chrome-drag" data-tauri-drag-region>
-            <span className="chrome-title">
-              <AppLogo size={18} />
-              yt2mp
-            </span>
-          </div>
+          {BROWSER ? (
+            <>
+              <BrowserStrip />
+              <div className="chrome-drag chrome-drag-min" data-tauri-drag-region />
+            </>
+          ) : (
+            <div className="chrome-drag" data-tauri-drag-region>
+              <span className="chrome-title">
+                <AppLogo size={18} />
+                yt2mp
+              </span>
+            </div>
+          )}
         <button
           type="button"
           className="chrome-btn"
@@ -497,10 +565,18 @@ export default function App() {
         </button>
         <button
           type="button"
-          className={`chrome-btn${settingsOpen ? " chrome-btn-on" : ""}`}
+          className={`chrome-btn${settingsOpen && !browsing ? " chrome-btn-on" : ""}`}
           aria-label="Settings"
           title="Settings"
-          onClick={() => setSettingsOpen((v) => !v)}
+          onClick={() => {
+            // Settings open on the app's screen, which a page would cover.
+            if (browsing) {
+              activateTab(null);
+              setSettingsOpen(true);
+            } else {
+              setSettingsOpen((v) => !v);
+            }
+          }}
         >
           <GearIcon />
           </button>
@@ -510,7 +586,8 @@ export default function App() {
 
       {/* The rail is hidden while the tools are still downloading: it is a
           source picker for a form that cannot run yet. */}
-      <div className="body">
+      {webTab ? <BrowserView tab={webTab} onDownload={downloadFromPage} /> : null}
+      <div className={`body${browsing ? " body-away" : ""}`}>
         {needsTools ? null : (
           <SourceRail active={tab} onSelect={switchTab} degraded={DEGRADED_TABS} />
         )}
@@ -636,7 +713,9 @@ export default function App() {
       )}
         </div>
       </div>
-      <Toaster />
+      {/* Nothing drawn here shows over a page, so toasts wait for the app's
+          screen; the app's tab in the strip says one is there. */}
+      {browsing ? null : <Toaster />}
     </div>
   );
 }

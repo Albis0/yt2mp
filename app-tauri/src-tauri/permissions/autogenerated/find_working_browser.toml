@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-find-working-browser"
+description = "Enables the find_working_browser command without any pre-configured scope."
+commands.allow = ["find_working_browser"]
+
+[[permission]]
+identifier = "deny-find-working-browser"
+description = "Denies the find_working_browser command without any pre-configured scope."
+commands.deny = ["find_working_browser"]

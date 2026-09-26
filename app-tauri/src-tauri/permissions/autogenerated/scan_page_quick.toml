@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scan-page-quick"
+description = "Enables the scan_page_quick command without any pre-configured scope."
+commands.allow = ["scan_page_quick"]
+
+[[permission]]
+identifier = "deny-scan-page-quick"
+description = "Denies the scan_page_quick command without any pre-configured scope."
+commands.deny = ["scan_page_quick"]

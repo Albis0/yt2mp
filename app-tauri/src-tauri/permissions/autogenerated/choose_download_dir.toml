@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-choose-download-dir"
+description = "Enables the choose_download_dir command without any pre-configured scope."
+commands.allow = ["choose_download_dir"]
+
+[[permission]]
+identifier = "deny-choose-download-dir"
+description = "Denies the choose_download_dir command without any pre-configured scope."
+commands.deny = ["choose_download_dir"]

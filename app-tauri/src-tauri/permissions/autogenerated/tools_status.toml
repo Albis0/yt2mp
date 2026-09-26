@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tools-status"
+description = "Enables the tools_status command without any pre-configured scope."
+commands.allow = ["tools_status"]
+
+[[permission]]
+identifier = "deny-tools-status"
+description = "Denies the tools_status command without any pre-configured scope."
+commands.deny = ["tools_status"]
