@@ -578,14 +578,14 @@ async fn convert_file(
         info.has_video,
         duration,
         rx,
-        |percent, stage| {
+        |percent, stage, transfer| {
             let _ = app.emit(
                 "download:progress",
                 ProgressEvent {
                     id: emit_id.clone(),
                     percent,
                     stage: stage.to_string(),
-                    transfer: None,
+                    transfer,
                 },
             );
         },

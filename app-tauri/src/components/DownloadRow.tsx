@@ -56,6 +56,7 @@ export default function DownloadRow({
   const running = state.at === "running";
   const done = state.at === "done";
   const failed = state.at === "failed";
+  const shownSize = done ? (state.bytes ?? size) : failed ? null : size;
 
   // What a click on the row means in each state. Running rows have no row
   // action: a stray click must never cancel a transfer.
@@ -107,6 +108,10 @@ export default function DownloadRow({
       </div>
 
       <div className="dlrow-side">
+        {/* The size stays in the same place in every state, the way it did
+            before the rows were rebuilt: the promised size while idle or
+            running, the file's real size once it is saved. */}
+        {shownSize ? <span className="dlrow-size">{formatBytes(shownSize)}</span> : null}
         {running ? (
           <button
             type="button"
@@ -119,9 +124,6 @@ export default function DownloadRow({
           </button>
         ) : done ? (
           <>
-            {state.bytes ? (
-              <span className="dlrow-size">{formatBytes(state.bytes)}</span>
-            ) : null}
             <span className="dlrow-saved">
               <CheckGlyph />
               Saved
@@ -149,7 +151,6 @@ export default function DownloadRow({
           </>
         ) : (
           <>
-            {size ? <span className="dlrow-size">{formatBytes(size)}</span> : null}
             <span className="dlrow-icon dlrow-go" aria-hidden="true">
               <DownloadGlyph />
             </span>

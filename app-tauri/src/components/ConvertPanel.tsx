@@ -4,6 +4,7 @@ import {
   fileSize,
   formatBytes,
   formatDuration,
+  formatEta,
   onDownloadProgress,
   pickMediaFiles,
   probeFiles,
@@ -13,6 +14,7 @@ import {
   type ConvertTarget,
   type PickedFile,
   type SourceInfo,
+  type Transfer,
 } from "@/lib/api";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { StopGlyph } from "@/components/DownloadRow";
@@ -70,6 +72,9 @@ interface Row {
   id: string | null;
   percent: number;
   stage: string;
+  /// Output written so far and the time left, once the encode has run long
+  /// enough to estimate it.
+  transfer?: Transfer;
   running: boolean;
   done: boolean;
   outputPath: string | null;
@@ -340,7 +345,7 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
     });
 
     const unsubscribe = onDownloadProgress(id, (p) =>
-      patch(row.path, { percent: p.percent, stage: p.stage })
+      patch(row.path, { percent: p.percent, stage: p.stage, transfer: p.transfer })
     );
 
     try {
@@ -585,7 +590,16 @@ export default function ConvertPanel({ onBusyChange }: ConvertPanelProps) {
                         </div>
                         <span className="dlrow-meta">
                           {row.percent > 0
-                            ? `${Math.floor(row.percent)}% · ${row.stage}`
+                            ? [
+                                `${Math.floor(row.percent)}%`,
+                                row.stage,
+                                row.transfer?.downloaded
+                                  ? formatBytes(row.transfer.downloaded)
+                                  : null,
+                                row.transfer?.eta != null ? formatEta(row.transfer.eta) : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
                             : `${row.stage}…`}
                         </span>
                       </div>

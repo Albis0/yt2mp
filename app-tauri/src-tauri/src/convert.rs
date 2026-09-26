@@ -154,6 +154,20 @@ impl Target {
                     // and then refuses to play on half the devices people own.
                     "-pix_fmt",
                     "yuv420p",
+                ];
+                args.extend(mp4_tail(generated_picture));
+                args
+            }
+        }
+    }
+}
+
+/// Everything in an MP4 conversion after the video encoder: the audio, the
+/// index at the front, and the stop for a generated picture. Shared by the
+/// software and the graphics-card encoders so the two files differ only in
+/// who compressed the picture.
+fn mp4_tail(generated_picture: bool) -> Vec<&'static str> {
+    let mut args = vec![
                     "-c:a",
                     "aac",
                     "-b:a",
@@ -170,9 +184,120 @@ impl Target {
                     args.push("-shortest");
                 }
                 args
-            }
+}
+
+/// How one attempt at a conversion encodes, fastest first.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Plan {
+    /// The streams are already what the target needs: moved into the new
+    /// file as they are. Seconds instead of minutes, and no quality lost.
+    Copy,
+    /// H.264 on the graphics card.
+    Hardware(&'static str),
+    /// The reference path: libx264 / libmp3lame on the processor.
+    Software,
+}
+
+/// Whether `info` can go to `target` without re-encoding.
+///
+/// MP4: an 8-bit 4:2:0 H.264 picture with AAC or MP3 sound (or none) is
+/// exactly what the software path would produce, so re-encoding it would only
+/// cost time and quality. Anything else — VP9, AV1, 10-bit, Opus — is what
+/// someone converts to MP4 to get rid of, and is encoded.
+///
+/// MP3: an MP3 sound track is lifted out as it is.
+fn can_copy(target: Target, info: &SourceInfo) -> bool {
+    match target {
+        Target::Mp4 => {
+            info.video_codec.as_deref() == Some("h264")
+                && info.video_plays_everywhere
+                && matches!(info.audio_codec.as_deref(), None | Some("aac") | Some("mp3"))
         }
+        Target::Mp3 => info.audio_codec.as_deref() == Some("mp3"),
     }
+}
+
+fn copy_args(target: Target) -> Vec<&'static str> {
+    match target {
+        // The first picture and the first sound only: subtitle and data
+        // streams from an MKV have no place in an MP4 and would fail the mux.
+        Target::Mp4 => vec![
+            "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart",
+        ],
+        Target::Mp3 => vec!["-vn", "-map", "0:a:0", "-c:a", "copy"],
+    }
+}
+
+/// The graphics-card H.264 encoders, in the order they are tried, with the
+/// settings that give roughly the software path's quality.
+const HARDWARE: &[(&str, &[&str])] = &[
+    (
+        "h264_nvenc",
+        &["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "21", "-b:v", "0", "-pix_fmt", "yuv420p"],
+    ),
+    (
+        "h264_qsv",
+        &["-c:v", "h264_qsv", "-preset", "medium", "-global_quality", "21", "-pix_fmt", "nv12"],
+    ),
+    (
+        "h264_amf",
+        &["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "20", "-qp_p", "22", "-pix_fmt", "yuv420p"],
+    ),
+];
+
+static HARDWARE_FOUND: tokio::sync::OnceCell<Option<&'static str>> =
+    tokio::sync::OnceCell::const_new();
+
+/// Set when a graphics-card encode failed on a real file. The test encode
+/// passing does not promise every file will (odd sizes, driver limits), and
+/// once one has failed the rest of the session goes straight to software.
+static HARDWARE_BROKEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The first graphics-card encoder that actually works here, found once.
+///
+/// Being listed by `ffmpeg -encoders` only means ffmpeg was built with it;
+/// NVENC is listed on a machine with no NVIDIA card at all. So each one also
+/// has to encode half a second of black before it is trusted.
+async fn hardware_encoder() -> Option<&'static str> {
+    if HARDWARE_BROKEN.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    *HARDWARE_FOUND
+        .get_or_init(|| async {
+            let listed = crate::ytdlp::base_command(ffmpeg())
+                .args(["-hide_banner", "-encoders"])
+                .output()
+                .await
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            for (name, args) in HARDWARE {
+                if listed.contains(name) && hardware_works(args).await {
+                    return Some(*name);
+                }
+            }
+            None
+        })
+        .await
+}
+
+async fn hardware_works(args: &[&str]) -> bool {
+    let mut cmd = crate::ytdlp::base_command(ffmpeg());
+    cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+        .arg("color=c=black:s=640x360:r=30:d=0.5")
+        .args(args)
+        .args(["-f", "null", "-"]);
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(15), cmd.output()).await,
+        Ok(Ok(out)) if out.status.success()
+    )
+}
+
+fn hardware_args(name: &str) -> &'static [&'static str] {
+    HARDWARE
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, a)| *a)
+        .unwrap_or(&[])
 }
 
 /// What ffprobe could tell us about a file before converting it.
@@ -202,6 +327,18 @@ pub struct SourceInfo {
     /// some upload forms want), so this only drives what the row says about
     /// what it is offering.
     pub has_video: bool,
+    /// The first real video stream's codec ("h264", "vp9"), not counting
+    /// cover art. Only used to decide whether a conversion can copy.
+    #[serde(skip)]
+    pub video_codec: Option<String>,
+    /// Whether that stream is 8-bit 4:2:0, the pixel format every player
+    /// handles. A 10-bit H.264 is still H.264 and still refuses to play on
+    /// half the devices people own, so it cannot be copied as it is.
+    #[serde(skip)]
+    pub video_plays_everywhere: bool,
+    /// The first audio stream's codec ("aac", "mp3", "opus").
+    #[serde(skip)]
+    pub audio_codec: Option<String>,
 }
 
 /// Reads what ffmpeg thinks of a file.
@@ -248,7 +385,31 @@ pub async fn probe(path: &Path) -> Result<SourceInfo, String> {
         duration: parse_duration(&text),
         has_audio: has_stream(&text, "Audio:"),
         has_video: has_stream(&text, "Video:"),
+        video_codec: stream_codec(&text, "Video:"),
+        video_plays_everywhere: video_line(&text)
+            .is_some_and(|l| l.contains("yuv420p") && !l.contains("yuv420p10")),
+        audio_codec: stream_codec(&text, "Audio:"),
     })
+}
+
+/// The first video stream line that is a real picture, not an MP3's cover.
+fn video_line(text: &str) -> Option<&str> {
+    text.lines()
+        .filter(|l| l.trim_start().starts_with("Stream #"))
+        .find(|l| l.contains("Video:") && !l.contains("(attached pic)"))
+}
+
+/// `Stream #0:0: Video: h264 (High) (avc1 / …)` → `h264`.
+fn stream_codec(text: &str, kind: &str) -> Option<String> {
+    let line = if kind == "Video:" {
+        video_line(text)?
+    } else {
+        text.lines()
+            .filter(|l| l.trim_start().starts_with("Stream #"))
+            .find(|l| l.contains(kind))?
+    };
+    let codec = line.split(kind).nth(1)?.trim_start().split([' ', ',']).next()?;
+    (!codec.is_empty()).then(|| codec.to_ascii_lowercase())
 }
 
 /// True when ffmpeg's banner lists a stream of the given kind.
@@ -379,7 +540,7 @@ pub async fn convert<F>(
     mut on_progress: F,
 ) -> Result<(), String>
 where
-    F: FnMut(f64, &str) + Send,
+    F: FnMut(f64, &str, Option<crate::ytdlp::Transfer>) + Send,
 {
     let name = source
         .file_name()
@@ -396,6 +557,86 @@ where
     // that file and called it done.
     let generated_picture = target == Target::Mp4 && !source_has_video;
 
+    // Fastest first; each later plan is the fallback for the one before.
+    let mut plans = Vec::new();
+    if !generated_picture {
+        if let Ok(info) = probe(source).await {
+            if can_copy(target, &info) {
+                plans.push(Plan::Copy);
+            }
+        }
+    }
+    if target == Target::Mp4 {
+        if let Some(encoder) = hardware_encoder().await {
+            plans.push(Plan::Hardware(encoder));
+        }
+    }
+    plans.push(Plan::Software);
+
+    for (i, plan) in plans.iter().enumerate() {
+        let last = i + 1 == plans.len();
+        match run_plan(
+            *plan,
+            source,
+            dest,
+            target,
+            generated_picture,
+            total_seconds,
+            &name,
+            &mut control,
+            &mut on_progress,
+        )
+        .await
+        {
+            Ok(()) => {
+                let size = std::fs::metadata(dest).ok().map(|m| crate::ytdlp::Transfer {
+                    downloaded: m.len(),
+                    speed: None,
+                    eta: None,
+                });
+                on_progress(100.0, "Done", size);
+                return Ok(());
+            }
+            Err(Attempt::Final(message)) => return Err(message),
+            Err(Attempt::Failed(stderr)) => {
+                // A copy that ffmpeg would not mux, or a card that choked on
+                // this file: the next plan starts from a clean slate.
+                let _ = std::fs::remove_file(dest);
+                if matches!(plan, Plan::Hardware(_)) {
+                    HARDWARE_BROKEN.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                if last {
+                    return Err(explain(&stderr, &name, target));
+                }
+            }
+        }
+    }
+    unreachable!("the software plan is always last")
+}
+
+/// How one attempt ended, when it did not succeed.
+enum Attempt {
+    /// Stopped or timed out: the user's answer, not a reason to try again.
+    Final(String),
+    /// ffmpeg failed; its stderr, for the next plan or the error message.
+    Failed(String),
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_plan<F>(
+    plan: Plan,
+    source: &Path,
+    dest: &Path,
+    target: Target,
+    generated_picture: bool,
+    total_seconds: Option<f64>,
+    name: &str,
+    control: &mut tokio::sync::watch::Receiver<crate::ytdlp::Control>,
+    on_progress: &mut F,
+) -> Result<(), Attempt>
+where
+    F: FnMut(f64, &str, Option<crate::ytdlp::Transfer>) + Send,
+{
     let mut cmd = crate::ytdlp::base_command(ffmpeg());
     cmd.args(["-hide_banner", "-nostdin", "-y"]);
 
@@ -431,9 +672,19 @@ where
         cmd.args(["-i", BLANK_PICTURE]);
     }
 
+    let args: Vec<&str> = match plan {
+        Plan::Copy => copy_args(target),
+        Plan::Hardware(encoder) => {
+            let mut a = hardware_args(encoder).to_vec();
+            a.extend(mp4_tail(generated_picture));
+            a
+        }
+        Plan::Software => target.ffmpeg_args(generated_picture),
+    };
+
     cmd.arg("-i")
         .arg(source)
-        .args(target.ffmpeg_args(generated_picture))
+        .args(args)
         // Machine-readable progress on stdout, so stderr stays purely the
         // error channel and the two never have to be untangled.
         .args(["-progress", "pipe:1", "-loglevel", "error"])
@@ -441,23 +692,30 @@ where
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("Could not start the converter ({e})."))?;
+        .map_err(|e| Attempt::Final(format!("Could not start the converter ({e}).")))?;
 
-    let stdout = child.stdout.take().ok_or("Could not read the converter's output")?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| Attempt::Final("Could not read the converter's output".into()))?;
     let mut reader = BufReader::new(stdout).lines();
 
     // Video re-encoding is slow enough that "Converting" alone leaves people
     // wondering whether it is stuck, so the stage says which job is running.
-    let stage = match target {
-        Target::Mp3 => "Converting",
-        Target::Mp4 => "Encoding video",
+    let stage = match (plan, target) {
+        (Plan::Copy, _) => "Copying",
+        (Plan::Hardware(_), _) => "Encoding video on the graphics card",
+        (Plan::Software, Target::Mp3) => "Converting",
+        (Plan::Software, Target::Mp4) => "Encoding video",
     };
-    on_progress(0.0, stage);
+    on_progress(0.0, stage, None);
 
     let deadline = tokio::time::sleep(CONVERT_TIMEOUT);
     tokio::pin!(deadline);
 
+    let started = std::time::Instant::now();
     let mut last_percent = 0.0f64;
+    let mut written = 0u64;
 
     loop {
         tokio::select! {
@@ -468,16 +726,25 @@ where
                 let requested = *control.borrow();
                 if requested == crate::ytdlp::Control::Stop {
                     let _ = child.kill().await;
-                    return Err("Conversion stopped".into());
+                    return Err(Attempt::Final("Conversion stopped".into()));
                 }
             }
             _ = &mut deadline => {
                 let _ = child.kill().await;
-                return Err(format!("Converting {name} took too long."));
+                return Err(Attempt::Final(format!("Converting {name} took too long.")));
             }
             line = reader.next_line() => {
                 match line {
                     Ok(Some(line)) => {
+                        // ffmpeg reports the output's size so far; it rides
+                        // along with the next time update.
+                        if let Some(bytes) = line
+                            .strip_prefix("total_size=")
+                            .and_then(|v| v.trim().parse::<u64>().ok())
+                        {
+                            written = bytes;
+                            continue;
+                        }
                         if let (Some(done), Some(total)) =
                             (parse_progress_time(&line), total_seconds)
                         {
@@ -486,12 +753,13 @@ where
                                 // the process actually exits, not when ffmpeg
                                 // reports the last timestamp.
                                 last_percent = ((done / total) * 100.0).clamp(0.0, 99.0);
-                                on_progress(last_percent, stage);
+                                let eta = time_left(started.elapsed().as_secs_f64(), last_percent);
+                                on_progress(last_percent, stage, transfer(written, eta));
                             }
                         } else if line.starts_with("out_time=") {
                             // No duration to divide by — keep the stage
                             // moving so the row does not look stalled.
-                            on_progress(last_percent, stage);
+                            on_progress(last_percent, stage, transfer(written, None));
                         }
                     }
                     Ok(None) => break,
@@ -504,7 +772,7 @@ where
     let status = child
         .wait()
         .await
-        .map_err(|e| format!("The converter stopped unexpectedly ({e})."))?;
+        .map_err(|e| Attempt::Final(format!("The converter stopped unexpectedly ({e}).")))?;
 
     if !status.success() {
         let mut stderr = String::new();
@@ -514,11 +782,25 @@ where
             let _ = err.read_to_end(&mut buf).await;
             stderr = String::from_utf8_lossy(&buf).into_owned();
         }
-        return Err(explain(&stderr, &name, target));
+        return Err(Attempt::Failed(stderr));
     }
-
-    on_progress(100.0, "Done");
     Ok(())
+}
+
+fn transfer(written: u64, eta: Option<u64>) -> Option<crate::ytdlp::Transfer> {
+    (written > 0 || eta.is_some()).then_some(crate::ytdlp::Transfer {
+        downloaded: written,
+        speed: None,
+        eta,
+    })
+}
+
+/// Seconds left, from how long the first part took. Not offered until there
+/// is enough to go on: the first second of an encode includes starting up,
+/// and a guess made from it swings wildly.
+fn time_left(elapsed: f64, percent: f64) -> Option<u64> {
+    (elapsed >= 2.0 && percent >= 1.0)
+        .then(|| (elapsed * (100.0 - percent) / percent).round() as u64)
 }
 
 /// The path a source file should become: same folder, same name, new
@@ -687,8 +969,101 @@ mod tests {
         }
     }
 
+    fn info(video: Option<&str>, everywhere: bool, audio: Option<&str>) -> SourceInfo {
+        SourceInfo {
+            path: String::new(),
+            name: String::new(),
+            size_bytes: None,
+            duration: None,
+            has_audio: audio.is_some(),
+            has_video: video.is_some(),
+            video_codec: video.map(str::to_string),
+            video_plays_everywhere: everywhere,
+            audio_codec: audio.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn only_what_already_plays_everywhere_is_copied() {
+        assert!(can_copy(Target::Mp4, &info(Some("h264"), true, Some("aac"))));
+        assert!(can_copy(Target::Mp4, &info(Some("h264"), true, None)));
+        // What people convert to MP4 to get rid of.
+        assert!(!can_copy(Target::Mp4, &info(Some("vp9"), true, Some("opus"))));
+        assert!(!can_copy(Target::Mp4, &info(Some("h264"), false, Some("aac"))));
+        assert!(!can_copy(Target::Mp4, &info(Some("h264"), true, Some("opus"))));
+        assert!(can_copy(Target::Mp3, &info(None, false, Some("mp3"))));
+        assert!(!can_copy(Target::Mp3, &info(None, false, Some("aac"))));
+    }
+
+    #[test]
+    fn codecs_are_read_and_cover_art_is_not_a_picture() {
+        let banner = "  Stream #0:0: Audio: mp3 (mp3float), 44100 Hz, stereo, fltp, 320 kb/s
+                        Stream #0:1: Video: mjpeg (Baseline), yuvj420p, 600x600 (attached pic)
+";
+        assert_eq!(stream_codec(banner, "Audio:").as_deref(), Some("mp3"));
+        assert_eq!(stream_codec(banner, "Video:"), None);
+
+        let video = "  Stream #0:0(und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709), 1920x1080
+                       Stream #0:1(und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo
+";
+        assert_eq!(stream_codec(video, "Video:").as_deref(), Some("h264"));
+        assert!(video_line(video).is_some_and(|l| l.contains("yuv420p")));
+    }
+
+    #[test]
+    fn time_left_waits_for_enough_to_go_on() {
+        assert_eq!(time_left(1.0, 50.0), None);
+        assert_eq!(time_left(10.0, 0.5), None);
+        assert_eq!(time_left(10.0, 25.0), Some(30));
+    }
+
     mod with_real_ffmpeg {
         use super::*;
+
+        /// An H.264 + AAC MKV becomes an MP4 by copying, not encoding: the
+        /// stage says so, and the result still has both streams.
+        #[tokio::test]
+        async fn a_file_that_already_plays_everywhere_is_copied() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            if !can_encode(&ff, Target::Mp4) {
+                eprintln!("skipping: this ffmpeg has no libx264");
+                return;
+            }
+            let dir = std::env::temp_dir().join("yt2mp-convert-copy");
+            let _ = std::fs::create_dir_all(&dir);
+            let source = dir.join("clip.mkv");
+            let made = crate::ytdlp::base_command(ffmpeg())
+                .args(["-hide_banner", "-loglevel", "error", "-y"])
+                .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=3"])
+                .args(["-f", "lavfi", "-i", "color=c=blue:s=320x240:d=3"])
+                .args(["-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"])
+                .arg(&source)
+                .output()
+                .await
+                .expect("ffmpeg runs");
+            assert!(made.status.success(), "the fixture builds");
+
+            let src = probe(&source).await.unwrap();
+            let dest = default_dest(&source, Target::Mp4);
+            let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+            let mut stages: Vec<String> = Vec::new();
+            convert(&source, &dest, Target::Mp4, src.has_video, src.duration, rx, |_, s, _| {
+                if stages.last().map(String::as_str) != Some(s) {
+                    stages.push(s.to_string());
+                }
+            })
+            .await
+            .expect("the copy succeeds");
+
+            assert_eq!(stages.first().map(String::as_str), Some("Copying"), "{stages:?}");
+            let out = probe(&dest).await.unwrap();
+            assert!(out.has_video && out.has_audio);
+            assert_eq!(out.video_codec.as_deref(), Some("h264"));
+            let _ = std::fs::remove_dir_all(&dir);
+        }
 
         /// Builds a five-second video with a tone in it, so the fixture
         /// exercises the same "video in, audio out" path the tab is for.
@@ -754,7 +1129,7 @@ mod tests {
                 info.has_video,
                 info.duration,
                 rx,
-                |p, _| seen.push(p),
+                |p, _, _| seen.push(p),
             )
             .await
             .expect("the conversion succeeds");
@@ -815,7 +1190,7 @@ mod tests {
                 info.has_video,
                 info.duration,
                 rx,
-                |p, _| seen.push(p),
+                |p, _, _| seen.push(p),
             )
             .await
             .expect("the conversion succeeds");
@@ -873,7 +1248,7 @@ mod tests {
                 info.has_video,
                 info.duration,
                 rx,
-                |_, _| {},
+                |_, _, _| {},
             )
             .await
             .expect("a silent source still converts to video");
@@ -930,7 +1305,7 @@ mod tests {
                 info.has_video,
                 info.duration,
                 rx,
-                |_, _| {},
+                |_, _, _| {},
             )
             .await
             .expect("an audio file converts to video");
@@ -998,7 +1373,7 @@ mod tests {
             // one rather than generating an endless picture — on the Linux
             // ffmpeg, -shortest does not stop that, and this test failing at
             // 31 seconds is how that was found.
-            convert(&source, &dest, Target::Mp4, info.has_video, None, rx, |_, _| {})
+            convert(&source, &dest, Target::Mp4, info.has_video, None, rx, |_, _, _| {})
                 .await
                 .expect("it converts without being told the length");
 

@@ -505,6 +505,11 @@ export default function PlaylistView({
                           key={f}
                           label={f === "mp3" ? "MP3" : "MP4"}
                           tags={f === "mp3" ? ["192 kbps"] : ["Best"]}
+                          size={
+                            f === "mp3"
+                              ? (track.info?.audioEstimatedBytes ?? null)
+                              : (track.info?.qualities[0]?.estimatedBytes ?? null)
+                          }
                           state={rowState(track.download, f)}
                           onStart={() => download(entry.id, entry.url, f)}
                           onCancel={() => track.download && stopDownload(track.download.id)}
