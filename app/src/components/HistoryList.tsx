@@ -28,11 +28,8 @@ export default function HistoryList({
   if (history.length === 0) {
     return (
       <section className="history">
-        <div className="history-head">
-          <h3>History</h3>
-        </div>
         <p className="history-empty">
-          Your downloads show up here. Click one to grab it again.
+          Nothing here yet. Your downloads show up in this tab.
         </p>
       </section>
     );
@@ -41,7 +38,7 @@ export default function HistoryList({
   return (
     <section className="history">
       <div className="history-head">
-        <h3>History</h3>
+        <h3>{history.length} saved</h3>
         <button type="button" className="history-clear" onClick={onClear}>
           Clear all
         </button>

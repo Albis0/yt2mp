@@ -23,7 +23,7 @@ import {
 /// Both belong in the same rail because from the user's point of view they are
 /// just other ways to start, and a separate control would mean competing mode
 /// switches on one screen.
-export type TabId = Platform | "ai" | "convert" | "scan";
+export type TabId = Platform | "ai" | "convert" | "scan" | "history";
 
 interface TabDef {
   id: TabId;
@@ -103,6 +103,17 @@ function ScanIcon() {
   );
 }
 
+/// A clock face: what you did before. Not a site and not a way to start, so
+/// it sits last, apart from the tools above it.
+function HistoryIcon() {
+  return (
+    <Tile color="#D97706">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </Tile>
+  );
+}
+
 /// Order matters: the sites people reach for most sit at the top. "Any link"
 /// is near the end because it is the catch-all, and AI search sits beside it
 /// since both are "I don't have a specific site in mind" entry points.
@@ -119,6 +130,7 @@ export const TABS: TabDef[] = [
   { id: "ai", label: "AI search", short: "AI", icon: SparkIcon },
   { id: "convert", label: "Convert", short: "Convert", icon: ConvertIcon },
   { id: "scan", label: "Find on page", short: "Find", icon: ScanIcon },
+  { id: "history", label: "History", short: "History", icon: HistoryIcon },
 ];
 
 interface SourceRailProps {

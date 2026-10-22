@@ -122,6 +122,7 @@ const TAB_LEADS: Record<TabId, string> = {
   ai: "Describe what you're after and yt2mp finds it on YouTube.",
   convert: "Turn a video, song or picture into another format.",
   scan: "Paste a page address to find the videos on it.",
+  history: "Everything you downloaded, newest first. Click one to fetch it again.",
 };
 
 /// Per-tab copy. The placeholder shows the shape of link that tab expects,
@@ -141,6 +142,8 @@ const TAB_PLACEHOLDERS: Record<TabId, string> = {
   convert: "",
   // Likewise: the scan tab carries its own input, with its own placeholder.
   scan: "",
+  // And the history tab is a list, not an entry field.
+  history: "",
 };
 
 /// Tabs with a caveat worth stating before the user hits it. Empty string
@@ -511,16 +514,14 @@ export default function App() {
   // chrome stays, because the window still needs to be movable and closable.
   const needsTools = tools !== null && !tools.ready;
 
-  // Nothing fetched and nothing in history: the screen is otherwise a bare
-  // input in a black field, so it gets a heading naming the active source and
-  // a line saying what that source takes. Once there is a result or a history
-  // list on screen the page has its own subject and the heading would just be
-  // a second one competing with it.
+  // Nothing fetched: the screen is otherwise a bare input in a black field,
+  // so it gets a heading naming the active source and a line saying what that
+  // source takes. Once there is a result on screen the page has its own
+  // subject and the heading would just be a second one competing with it.
   // The converter is never "bare": its own list is the subject of the screen
   // from the first file on, and centring it would move the whole list every
   // time a file was added.
-  const bare =
-    tab !== "convert" && tab !== "scan" && !info && !playlist && history.length === 0;
+  const bare = tab !== "convert" && tab !== "scan" && tab !== "history" && !info && !playlist;
   const tabLabel = TABS.find((t) => t.id === tab)?.label ?? "yt2mp";
 
   return (
@@ -619,7 +620,7 @@ export default function App() {
               is not centred like the empty state, and without it the tab opens
               on a bare "Choose files" button that never says what the tab is
               for. */}
-          {bare || tab === "convert" || tab === "scan" ? (
+          {bare || tab === "convert" || tab === "scan" || tab === "history" ? (
             <div className="entry-head">
               <h1 className="entry-title">{tabLabel}</h1>
               <p className="entry-lead">{TAB_LEADS[tab]}</p>
@@ -633,6 +634,13 @@ export default function App() {
             <ConvertPanel onBusyChange={setConverting} />
           ) : tab === "scan" ? (
             <ScanPanel onBusyChange={setScanBusy} />
+          ) : tab === "history" ? (
+            <HistoryList
+              history={history}
+              onReplay={replayHistory}
+              onRemove={(id) => setHistory(removeHistory(id))}
+              onClear={() => setHistory(clearHistory())}
+            />
           ) : (
           <form className="download-form" onSubmit={handleSubmit}>
             <input
@@ -696,19 +704,6 @@ export default function App() {
             onBusyChange={setPlaylistBusy}
           />
         ) : null}
-
-        {/* History replays a link through the download path, which the
-            converter has no equivalent of — its files are already on disk and
-            its list is right above. Showing it here would offer a "fetch
-            again" button that jumps the user to a different tab. */}
-        {tab === "convert" ? null : (
-          <HistoryList
-            history={history}
-            onReplay={replayHistory}
-            onRemove={(id) => setHistory(removeHistory(id))}
-            onClear={() => setHistory(clearHistory())}
-          />
-        )}
       </main>
       )}
         </div>

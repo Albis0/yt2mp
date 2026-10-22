@@ -203,6 +203,8 @@ button {
    far enough in lightness from the converter's green to tell apart. Deeper
    than its tile (#0891b2) for the same reason as the green. */
 .page-scan { --accent: #0e7490; --accent-press: #155e75; }
+/* Amber: the only warm tone left in the rail, and it reads as "the past". */
+.page-history { --accent: #b45309; --accent-press: #92400e; }
 
 :root[data-theme="dark"] .page-youtube { --accent: #ff4d67; --accent-press: #ff7186; }
 :root[data-theme="dark"] .page-tiktok { --accent: #25dbd3; --accent-press: #5ae7e1; }
@@ -214,6 +216,7 @@ button {
 :root[data-theme="dark"] .page-ai { --accent: #e879f9; --accent-press: #f0abfc; }
 :root[data-theme="dark"] .page-convert { --accent: #4ade80; --accent-press: #86efac; }
 :root[data-theme="dark"] .page-scan { --accent: #22d3ee; --accent-press: #67e8f9; }
+:root[data-theme="dark"] .page-history { --accent: #fbbf24; --accent-press: #fcd34d; }
 
 /* ---------- Window ---------- */
 
@@ -2285,33 +2288,6 @@ button {
   font-size: 0.85rem;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
-}
-
-/* On a first-open window the empty history is the loudest thing on
-   screen — a heading and a dashed box drawn around nothing, sitting
-   right under the one field the user is meant to look at. Keep the
-   message, drop the frame and the label, so the entry field stays the
-   only thing asking for attention. */
-.app-shell-empty .history-head {
-  display: none;
-}
-
-/* Aligned to the entry column rather than centred in the shell. Centred, it
-   sat off to the right of a narrower form above it and read as a stray
-   caption belonging to nothing. Left-aligned under the field, at the same
-   width, it reads as the answer to "what happens after I fetch". */
-.app-shell-empty .history {
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-}
-
-.app-shell-empty .history-empty {
-  border: none;
-  padding: 0;
-  text-align: left;
-  color: var(--text-3);
-  font-size: 0.82rem;
 }
 
 .history-list {

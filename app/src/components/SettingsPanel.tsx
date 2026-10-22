@@ -30,22 +30,56 @@ const THEME_OPTIONS: { id: ThemePref; label: string }[] = [
   { id: "dark", label: "Dark" },
 ];
 
-/// The panel's three pages.
+/// The panel's pages.
 ///
-/// One scrolling column was the previous shape, and it did not fit: the card
-/// ran past the bottom of the window, so the last paragraph was always cut in
-/// half and a scrollbar sat down the right edge of a settings dialog. Three
-/// short pages fit without scrolling at any window size this app supports, and
-/// each page holds one subject, so nothing has to be skimmed past.
-type PageId = "general" | "updates" | "accounts";
+/// One scrolling column was the first shape, and it did not fit: the card ran
+/// past the bottom of the window, so the last paragraph was always cut in half
+/// and a scrollbar sat down the right edge of a settings dialog. Short pages
+/// fit without scrolling at any window size this app supports, and each page
+/// holds one subject, so nothing has to be skimmed past. "General" used to
+/// hold the theme, the folder and the version together; it is now three pages
+/// so each setting is found by what it is, not by where it was left.
+type PageId = "appearance" | "downloads" | "accounts" | "updates" | "about";
 
 const PAGES: { id: PageId; label: string; icon: () => React.ReactElement }[] = [
-  { id: "general", label: "General", icon: GeneralIcon },
-  { id: "updates", label: "Updates", icon: UpdatesIcon },
+  { id: "appearance", label: "Appearance", icon: AppearanceIcon },
+  { id: "downloads", label: "Downloads", icon: DownloadsIcon },
   { id: "accounts", label: "Accounts", icon: AccountsIcon },
+  { id: "updates", label: "Updates", icon: UpdatesIcon },
+  { id: "about", label: "About", icon: AboutIcon },
 ];
 
-function GeneralIcon() {
+function DownloadsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.5 7.2A1.7 1.7 0 0 1 5.2 5.5h4l1.8 2.2h7.8a1.7 1.7 0 0 1 1.7 1.7v8.4a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"
+      />
+    </svg>
+  );
+}
+
+function AboutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        d="M12 11v5M12 8v.01"
+      />
+    </svg>
+  );
+}
+
+function AppearanceIcon() {
   return (
     <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
       <circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
@@ -118,7 +152,7 @@ export default function SettingsPanel({
    *  both wait until it is done, the same as the update banner does. */
   busy: boolean;
 }) {
-  const [page, setPage] = useState<PageId>("general");
+  const [page, setPage] = useState<PageId>("appearance");
   const [browsers, setBrowsers] = useState<Browser[]>([]);
   const [choice, setChoice] = useState<string | null>(null);
   const [choiceLabel, setChoiceLabel] = useState<string | null>(null);
@@ -390,7 +424,7 @@ export default function SettingsPanel({
 
         <div className="prefs-main">
           <div className="prefs-body" role="tabpanel">
-            {page === "general" ? (
+            {page === "appearance" ? (
               <>
                 <div className="prefs-field">
                   <div className="prefs-field-text">
@@ -414,6 +448,11 @@ export default function SettingsPanel({
                   </div>
                 </div>
 
+              </>
+            ) : null}
+
+            {page === "downloads" ? (
+              <>
                 {/* Downloads save here without a dialog. The first download
                     asks for it; this is where it changes afterwards. */}
                 <div className="prefs-field">
@@ -435,6 +474,11 @@ export default function SettingsPanel({
                   </div>
                 </div>
 
+              </>
+            ) : null}
+
+            {page === "about" ? (
+              <>
                 <div className="prefs-field">
                   <div className="prefs-field-text">
                     <span className="prefs-field-name">Source code</span>
