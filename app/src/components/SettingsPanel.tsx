@@ -26,6 +26,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { GitHubLogo } from "@/components/BrandLogos";
 import { TABS } from "@/components/SourceRail";
 import { clearHistory } from "@/lib/history";
+import { clearBrowsingData } from "@/lib/browser";
 import { loadPrefs, resetPrefs, savePrefs, type Prefs, type SearchEngine } from "@/lib/prefs";
 
 const REPO = "Albis0/yt2mp";
@@ -295,6 +296,7 @@ export default function SettingsPanel({
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [historyCleared, setHistoryCleared] = useState(false);
+  const [browsingCleared, setBrowsingCleared] = useState(false);
 
   function setPref(change: Partial<Prefs>) {
     setPrefs(savePrefs(change));
@@ -876,6 +878,43 @@ export default function SettingsPanel({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Recent pages on a new tab</span>
+                    <span className="prefs-field-hint">
+                      The list under the shortcuts. Off keeps the page to the search field and
+                      the sites.
+                    </span>
+                  </div>
+                  <Toggle
+                    on={prefs.startHistory}
+                    onChange={(v) => setPref({ startHistory: v })}
+                    label="Recent pages on a new tab"
+                  />
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Clear browsing history</span>
+                    <span className="prefs-field-hint">
+                      {browsingCleared
+                        ? "Cleared."
+                        : "Forgets the pages you visited and the suggestions made from them. Starred sites stay."}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={browsingCleared}
+                    onClick={() => {
+                      clearBrowsingData();
+                      setBrowsingCleared(true);
+                    }}
+                  >
+                    Clear
+                  </button>
                 </div>
               </>
             ) : null}

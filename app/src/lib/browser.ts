@@ -40,18 +40,22 @@ interface State {
   tabs: Tab[];
   /// null while the app's own screen is in front.
   active: string | null;
+  /// Sites starred in the address bar, shown first on a new tab.
+  pins: string[];
 }
 
 const TABS_KEY = "yt2mp.browser.tabs.v1";
 const ICONS_KEY = "yt2mp.browser.icons.v1";
 const ICONS_MAX = 80;
 const HISTORY_KEY = "yt2mp.browser.history.v1";
+const PINS_KEY = "yt2mp.browser.pins.v1";
+const PINS_MAX = 12;
 const HISTORY_MAX = 3000;
 /// A remembered favicon larger than this is dropped rather than stored:
 /// localStorage is small, and the icon comes back on the first visit anyway.
 const ICON_MAX = 12_000;
 
-let state: State = { tabs: restoreTabs(), active: null };
+let state: State = { tabs: restoreTabs(), active: null, pins: restorePins() };
 /// Recently closed tabs, most recent last, for Ctrl+Shift+T.
 const closed: { url: string; title: string }[] = [];
 const listeners = new Set<() => void>();
@@ -121,6 +125,41 @@ function saveTabs() {
   }
 }
 
+function restorePins(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((p) => typeof p === "string").slice(0, PINS_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+/// The site a page belongs to, as a home page address: a star pins the
+/// site, not the one page.
+const originOf = (url: string) => {
+  try {
+    return new URL(url).origin + "/";
+  } catch {
+    return "";
+  }
+};
+
+export const isPinned = (url: string) => state.pins.includes(originOf(url));
+
+export function togglePin(url: string) {
+  const site = originOf(url);
+  if (!site || !/^https?:/i.test(url)) return;
+  const pins = state.pins.includes(site)
+    ? state.pins.filter((p) => p !== site)
+    : [...state.pins, site].slice(-PINS_MAX);
+  set({ pins });
+  try {
+    localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+  } catch {
+    // Starred sites last this session if storage is full.
+  }
+}
+
 export function loadVisits(): Visit[] {
   try {
     const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
@@ -162,6 +201,19 @@ export function forgetVisit(url: string) {
 
 export function clearVisits() {
   saveVisits([]);
+}
+
+/// Pages visited and the icons kept for them. Starred sites are a choice,
+/// not a trace, so they stay.
+export function clearBrowsingData() {
+  saveVisits([]);
+  icons = {};
+  try {
+    localStorage.removeItem(ICONS_KEY);
+  } catch {
+    // Nothing stored that could be removed.
+  }
+  set({});
 }
 
 /// Each site's icon, kept so the new tab page and the suggestions can show
@@ -229,6 +281,15 @@ const ENGINES: Record<SearchEngine, string> = {
   duckduckgo: "https://duckduckgo.com/?q=",
   bing: "https://www.bing.com/search?q=",
 };
+
+const ENGINE_NAMES: Record<SearchEngine, string> = {
+  google: "Google",
+  duckduckgo: "DuckDuckGo",
+  bing: "Bing",
+};
+
+/// The name of the engine chosen in Settings, for the words around the bar.
+export const engineName = () => ENGINE_NAMES[loadPrefs().searchEngine];
 
 /// The address a search for the typed words goes to, on the engine chosen in
 /// Settings.

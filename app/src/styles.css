@@ -485,7 +485,7 @@ button {
    size containers, which have no width of their own to offer.) */
 .strip {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 2px;
   min-width: 0;
   flex: 1 1 0;
@@ -507,6 +507,7 @@ button {
 }
 
 .strip-app {
+  align-self: center;
   flex-shrink: 0;
   gap: 7px;
   padding: 0 11px 0 8px;
@@ -520,8 +521,10 @@ button {
 }
 
 .strip-tab {
-  flex: 0 1 200px;
+  flex: 0 1 220px;
   min-width: 40px;
+  height: 28px;
+  margin-bottom: 3px;
   gap: 7px;
   padding: 0 5px 0 9px;
   font-size: 0.8rem;
@@ -540,6 +543,20 @@ button {
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
+}
+
+/* The page in front joins the toolbar under it, the way a browser's tab
+   does: same surface, rounded on top, no line between. The title bar's own
+   rule steps aside while it is there. */
+.strip-tab.strip-on {
+  height: 34px;
+  margin-bottom: 0;
+  border-color: transparent;
+  border-radius: 10px 10px 0 0;
+}
+
+.chrome:has(.strip-tab.strip-on) {
+  border-bottom-color: transparent;
 }
 
 .strip-tab:focus-visible,
@@ -617,6 +634,7 @@ button {
 }
 
 .strip-new {
+  align-self: center;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -744,6 +762,33 @@ button {
 
 .omnibox-input::placeholder {
   color: var(--text-3);
+}
+
+.omnibox-star {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.omnibox-star:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.omnibox-star-on {
+  color: #d99a00;
+}
+
+.omnibox-star-on:hover {
+  color: #d99a00;
 }
 
 .omnibox-error {
@@ -922,20 +967,36 @@ button {
 .ntp {
   display: flex;
   flex-direction: column;
-  gap: 30px;
-  max-width: 700px;
+  gap: 28px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: 11vh 24px 40px;
+  padding: 9vh 24px 40px;
+}
+
+.ntp-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 2px;
+}
+
+.ntp-name {
+  color: var(--text);
+  font-size: 2.7rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .ntp-search {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 50px;
-  padding: 0 20px;
+  height: 54px;
+  padding: 0 22px;
   border: 1px solid var(--border);
-  border-radius: 25px;
+  border-radius: 27px;
   background: var(--surface);
   box-shadow: var(--shadow);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
@@ -969,7 +1030,7 @@ button {
 }
 
 .ntp-hint {
-  margin: 0;
+  margin: -8px 0 0;
   color: var(--text-3);
   font-size: 0.86rem;
   line-height: 1.55;
@@ -978,8 +1039,14 @@ button {
 
 .ntp-sites {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px 6px;
+}
+
+@media (min-width: 760px) {
+  .ntp-sites {
+    grid-template-columns: repeat(8, 1fr);
+  }
 }
 
 .ntp-site {
@@ -1004,10 +1071,15 @@ button {
 .ntp-site-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--surface-2);
+}
+
+.ntp-site-icon svg {
+  width: 24px;
+  height: 24px;
 }
 
 .ntp-site:hover .ntp-site-icon {

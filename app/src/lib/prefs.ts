@@ -19,6 +19,8 @@ export interface Prefs {
   checkOnLaunch: boolean;
   /** What the browser's address bar searches with. */
   searchEngine: SearchEngine;
+  /** Show the recent pages under the shortcuts on a new tab. */
+  startHistory: boolean;
 }
 
 const DEFAULTS: Prefs = {
@@ -28,6 +30,7 @@ const DEFAULTS: Prefs = {
   openWhenDone: false,
   checkOnLaunch: true,
   searchEngine: "google",
+  startHistory: true,
 };
 
 const KEY = "yt2mp.prefs.v1";

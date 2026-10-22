@@ -3,9 +3,11 @@ import {
   clearVisits,
   coverPage,
   forgetVisit,
+  engineName,
   go,
   hostOf,
   iconFor,
+  isPinned,
   loadVisits,
   navigate,
   onFocusAddress,
@@ -14,8 +16,10 @@ import {
   shownAddress,
   suggest,
   toAddress,
+  togglePin,
   topSites,
   isSearchUrl,
+  useBrowser,
   type Tab,
   type Visit,
 } from "@/lib/browser";
@@ -29,7 +33,9 @@ import {
   XLogo,
   YouTubeLogo,
 } from "@/components/BrandLogos";
+import AppLogo from "@/components/AppLogo";
 import { GlobeIcon } from "@/components/BrowserStrip";
+import { loadPrefs } from "@/lib/prefs";
 
 const LOGOS: Partial<Record<TabId, () => React.ReactElement>> = {
   youtube: YouTubeLogo,
@@ -111,6 +117,9 @@ export default function BrowserView({ tab, onDownload }: Props) {
   const TargetLogo = target?.sure ? LOGOS[target.tab] : undefined;
   const targetLabel = target ? (TABS.find((t) => t.id === target.tab)?.label ?? "Link") : "";
   const secure = tab.url.startsWith("https://");
+  useBrowser();
+  const starrable = /^https?:\/\//i.test(tab.url);
+  const starred = starrable && isPinned(tab.url);
 
   return (
     <div className="browser">
@@ -150,7 +159,7 @@ export default function BrowserView({ tab, onDownload }: Props) {
             ref={inputRef}
             className="omnibox-input"
             value={draft ?? (tab.url ? shownAddress(tab.url) : "")}
-            placeholder="Search Google or type an address"
+            placeholder={`Search ${engineName()} or type an address`}
             spellCheck={false}
             autoComplete="off"
             aria-label="Address and search bar"
@@ -183,6 +192,28 @@ export default function BrowserView({ tab, onDownload }: Props) {
             <span className="omnibox-error" title={tab.error}>
               {tab.error}
             </span>
+          ) : null}
+          {starrable && draft === null ? (
+            <button
+              type="button"
+              className={`omnibox-star${starred ? " omnibox-star-on" : ""}`}
+              aria-label={starred ? "Remove from the start page" : "Add to the start page"}
+              aria-pressed={starred}
+              title={starred ? "Remove from the start page" : "Add to the start page"}
+              // Before the field's blur, which would otherwise swallow the click.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => togglePin(tab.url)}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                <path
+                  d="M12 3.4l2.5 5.3 5.8.7-4.3 4 1.1 5.7L12 16.2 6.9 19.1 8 13.4l-4.3-4 5.8-.7z"
+                  fill={starred ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
           ) : null}
         </form>
 
@@ -285,7 +316,7 @@ function Suggestions({
             </span>
             {row.kind === "search" ? (
               <span className="suggest-main">
-                {row.title} <span className="suggest-dim">— Google search</span>
+                {row.title} <span className="suggest-dim">— {engineName()} search</span>
               </span>
             ) : query ? (
               <span className="suggest-main">
@@ -306,15 +337,57 @@ function Suggestions({
   );
 }
 
-/// What an empty tab shows: a search field, the sites visited most, and
-/// the latest history with a way to remove it.
+/// Where a tab starts: the name, one search field, and a row of sites to go
+/// to. Starred sites come first, then the most visited, then the places this
+/// app is for until there is enough history to fill the row.
+const STARTERS: { url: string; label: string; logo: () => React.ReactElement }[] = [
+  { url: "https://www.youtube.com/", label: "YouTube", logo: YouTubeLogo },
+  { url: "https://open.spotify.com/", label: "Spotify", logo: SpotifyLogo },
+  { url: "https://www.tiktok.com/", label: "TikTok", logo: TikTokLogo },
+  { url: "https://www.instagram.com/", label: "Instagram", logo: InstagramLogo },
+  { url: "https://x.com/", label: "X", logo: XLogo },
+  { url: "https://www.twitch.tv/", label: "Twitch", logo: TwitchLogo },
+];
+
+const TILES = 8;
+
+interface Tile {
+  url: string;
+  label: string;
+  logo?: () => React.ReactElement;
+}
+
+function tiles(pins: string[]): Tile[] {
+  const out: Tile[] = [];
+  const seen = new Set<string>();
+  const add = (tile: Tile) => {
+    const host = hostOf(tile.url);
+    if (!host || seen.has(host) || out.length >= TILES) return;
+    seen.add(host);
+    out.push(tile);
+  };
+  for (const url of pins) {
+    const starter = STARTERS.find((s) => hostOf(s.url) === hostOf(url));
+    add({ url, label: starter?.label ?? hostOf(url).replace(/\.(com|org|net|io)$/, ""), logo: starter?.logo });
+  }
+  for (const site of topSites(TILES)) add({ url: site.url, label: hostOf(site.url).replace(/\.(com|org|net|io)$/, "") });
+  for (const s of STARTERS) add(s);
+  return out;
+}
+
 function NewTab({ onGo }: { onGo: (value: string) => void }) {
   const [value, setValue] = useState("");
   const [, refresh] = useState(0);
-  const sites = topSites();
-  const recent = loadVisits().slice(0, 12);
+  const { pins } = useBrowser();
+  const shortcuts = tiles(pins);
+  const recent = loadPrefs().startHistory ? loadVisits().slice(0, 8) : [];
   return (
     <div className="ntp">
+      <div className="ntp-brand">
+        <AppLogo size={46} />
+        <span className="ntp-name">yt2mp</span>
+      </div>
+
       <form
         className="ntp-search"
         onSubmit={(e) => {
@@ -328,16 +401,17 @@ function NewTab({ onGo }: { onGo: (value: string) => void }) {
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Search Google or type an address"
+          placeholder={`Search ${engineName()} or type an address`}
           spellCheck={false}
           autoComplete="off"
-          aria-label="Search Google or type an address"
+          aria-label={`Search ${engineName()} or type an address`}
         />
       </form>
 
-      {sites.length ? (
-        <div className="ntp-sites">
-          {sites.map((site) => (
+      <div className="ntp-sites">
+        {shortcuts.map((site) => {
+          const Logo = site.logo;
+          return (
             <button
               key={site.url}
               type="button"
@@ -346,23 +420,22 @@ function NewTab({ onGo }: { onGo: (value: string) => void }) {
               onClick={() => onGo(site.url)}
             >
               <span className="ntp-site-icon" aria-hidden="true">
-                <SiteMark url={site.url} />
+                {Logo ? <Logo /> : <SiteMark url={site.url} />}
               </span>
-              <span className="ntp-site-name">{hostOf(site.url)}</span>
+              <span className="ntp-site-name">{site.label}</span>
             </button>
-          ))}
-        </div>
-      ) : (
-        <p className="ntp-hint">
-          Open YouTube, Spotify, TikTok or any site here. On a video, song or post, press
-          Download and yt2mp takes it from there.
-        </p>
-      )}
+          );
+        })}
+      </div>
+
+      <p className="ntp-hint">
+        On a video, song or post, press Download and yt2mp takes it from there.
+      </p>
 
       {recent.length ? (
         <section className="ntp-recent">
           <div className="ntp-recent-head">
-            <h2>History</h2>
+            <h2>Recent</h2>
             <button
               type="button"
               className="ntp-clear"
@@ -410,7 +483,7 @@ function RecentRow({
           {query ? <SearchIcon /> : <SiteMark url={visit.url} />}
         </span>
         <span className="ntp-row-title">{query ?? (visit.title || shownAddress(visit.url))}</span>
-        <span className="ntp-row-host">{query ? "Google" : hostOf(visit.url)}</span>
+        <span className="ntp-row-host">{query ? engineName() : hostOf(visit.url)}</span>
         <span className="ntp-row-when">{ago(visit.last)}</span>
       </button>
       <button
