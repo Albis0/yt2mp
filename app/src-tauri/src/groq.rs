@@ -6,10 +6,12 @@
 //! it is wrapped. The key file is read from the resource directory in a
 //! packaged app, or the crate directory in dev.
 
+use crate::quota::{self, Access, Use};
 use serde_json::json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
+use tauri::Emitter;
 
 static KEYS: OnceLock<Vec<String>> = OnceLock::new();
 static CURSOR: AtomicUsize = AtomicUsize::new(0);
@@ -19,6 +21,57 @@ static CURSOR: AtomicUsize = AtomicUsize::new(0);
 /// and the other way round.
 static VERIFY_KEYS: OnceLock<Vec<String>> = OnceLock::new();
 static VERIFY_CURSOR: AtomicUsize = AtomicUsize::new(0);
+
+/// The person's own key has no rotation to do, but `complete` wants a cursor.
+static OWN_CURSOR: AtomicUsize = AtomicUsize::new(0);
+
+static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// Lets this module tell the window when an allowance runs out.
+pub fn set_app(handle: tauri::AppHandle) {
+    let _ = APP.set(handle);
+}
+
+/// Tells the window, once per window of 24 hours, that a daily allowance is
+/// spent and what the app does instead.
+fn notice(kind: Use) {
+    if let Some(app) = APP.get() {
+        let _ = app.emit(
+            "ai:limit",
+            match kind {
+                Use::Search => "search",
+                Use::Verify => "verify",
+            },
+        );
+    }
+}
+
+/// Runs one request under the allowance: the person's own key if they have
+/// one, otherwise the shared keys with a use set aside. `Err("limit")` means
+/// the allowance is spent and nothing was sent.
+async fn metered(
+    kind: Use,
+    shared: &[String],
+    cursor: &AtomicUsize,
+    body: &serde_json::Value,
+) -> Result<String, String> {
+    match quota::reserve(kind) {
+        Access::Own(key) => complete(&[key], &OWN_CURSOR, body).await,
+        Access::Shared => {
+            let answer = complete(shared, cursor, body).await;
+            if answer.is_err() {
+                quota::refund(kind);
+            }
+            answer
+        }
+        Access::Spent { first } => {
+            if first {
+                notice(kind);
+            }
+            Err("limit".into())
+        }
+    }
+}
 
 /// Without a timeout, a single unresponsive key can hang the whole chain —
 /// several stuck keys in a row would mean minutes of silent "Fetching…"
@@ -125,7 +178,35 @@ fn verify_keys() -> &'static [String] {
 
 /// Whether Spotify matches can be checked by the model at all.
 pub fn can_verify() -> bool {
-    !verify_keys().is_empty()
+    quota::own_key().is_some() || !verify_keys().is_empty()
+}
+
+/// Sends the smallest possible request with a key, so a mistyped or revoked
+/// key is caught when it is saved and not on the next search.
+pub async fn check_key(key: &str) -> Result<(), String> {
+    let body = json!({
+        "model": "llama-3.1-8b-instant",
+        "messages": [{ "role": "user", "content": "hi" }],
+        "max_tokens": 1
+    });
+    let client = reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let res = client
+        .post("https://api.groq.com/openai/v1/chat/completions")
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| "Could not reach Groq. Check your connection and try again.".to_string())?;
+    match res.status().as_u16() {
+        200..=299 => Ok(()),
+        401 | 403 => Err("Groq rejected that key. Check that you copied all of it.".into()),
+        // A valid key that is simply busy is still a valid key.
+        429 => Ok(()),
+        s => Err(format!("Groq answered with an error ({s}). Try again in a moment.")),
+    }
 }
 
 async fn call_groq(input: &str) -> Result<String, String> {
@@ -141,7 +222,7 @@ async fn call_groq(input: &str) -> Result<String, String> {
         "temperature": 0.2,
         "max_tokens": 60
     });
-    complete(keys(), &CURSOR, &body).await
+    metered(Use::Search, keys(), &CURSOR, &body).await
 }
 
 /// Sends one chat request, rotating through `keys` until one answers.
@@ -273,7 +354,7 @@ pub async fn verify_match(track: &str, candidates: &[String]) -> Result<Verdict,
         "response_format": { "type": "json_object" }
     });
 
-    let text = complete(verify_keys(), &VERIFY_CURSOR, &body).await?;
+    let text = metered(Use::Verify, verify_keys(), &VERIFY_CURSOR, &body).await?;
     parse_verdict(&text, candidates.len())
 }
 

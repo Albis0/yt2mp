@@ -377,6 +377,69 @@ export async function forgetDownloadDir(): Promise<Settings> {
   return toSettings(await invoke<RawSettings>("forget_download_dir"));
 }
 
+/// What the AI features have used, and whether the person has a key of their
+/// own (which lifts the allowance).
+export interface AiUsage {
+  limit: number;
+  searchUsed: number;
+  verifyUsed: number;
+  /** Seconds until the counters start again; 0 when none is running. */
+  resetsIn: number;
+  ownKey: boolean;
+  /** The tail of the saved key, e.g. "…a1b2". */
+  keyHint: string | null;
+}
+
+interface RawAiUsage {
+  limit: number;
+  search_used: number;
+  verify_used: number;
+  resets_in: number;
+  own_key: boolean;
+  key_hint: string | null;
+}
+
+function toAiUsage(raw: RawAiUsage): AiUsage {
+  return {
+    limit: raw.limit,
+    searchUsed: raw.search_used,
+    verifyUsed: raw.verify_used,
+    resetsIn: raw.resets_in,
+    ownKey: raw.own_key,
+    keyHint: raw.key_hint,
+  };
+}
+
+export async function aiUsage(): Promise<AiUsage> {
+  return toAiUsage(await invoke<RawAiUsage>("ai_usage"));
+}
+
+/// Saves the person's own Groq key (checked against Groq first), or forgets it
+/// when given null.
+export async function setGroqKey(key: string | null): Promise<AiUsage> {
+  return toAiUsage(await invoke<RawAiUsage>("set_groq_key", { key }));
+}
+
+/// Fires when a daily allowance runs out, once per 24 hours for each of the
+/// two uses: the AI search, and the check of Spotify matches.
+export function onAiLimit(callback: (kind: "search" | "verify") => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let cancelled = false;
+
+  listen<"search" | "verify">("ai:limit", (e) => callback(e.payload)).then((fn) => {
+    if (cancelled) {
+      fn();
+      return;
+    }
+    unlisten = fn;
+  });
+
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
 /// A browser installed on this machine.
 export interface Browser {
   /** Display name, e.g. "Zen". */

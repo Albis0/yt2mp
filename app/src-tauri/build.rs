@@ -18,6 +18,8 @@ const COMMANDS: &[&str] = &[
     "reveal_file",
     "get_settings",
     "save_settings",
+    "ai_usage",
+    "set_groq_key",
     "detected_browsers",
     "browser_label",
     "find_working_browser",

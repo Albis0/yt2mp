@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ai-usage"
+description = "Enables the ai_usage command without any pre-configured scope."
+commands.allow = ["ai_usage"]
+
+[[permission]]
+identifier = "deny-ai-usage"
+description = "Denies the ai_usage command without any pre-configured scope."
+commands.deny = ["ai_usage"]

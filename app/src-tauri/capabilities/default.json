@@ -46,6 +46,9 @@
         },
         {
           "url": "https://github.com/*"
+        },
+        {
+          "url": "https://console.groq.com/*"
         }
       ]
     },
@@ -63,6 +66,8 @@
     "allow-reveal-file",
     "allow-get-settings",
     "allow-save-settings",
+    "allow-ai-usage",
+    "allow-set-groq-key",
     "allow-detected-browsers",
     "allow-browser-label",
     "allow-find-working-browser",

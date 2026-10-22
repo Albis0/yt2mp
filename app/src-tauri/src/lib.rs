@@ -10,6 +10,7 @@ mod browsers;
 mod cache_node;
 mod convert;
 mod groq;
+mod quota;
 mod platform;
 mod scan;
 mod settings;
@@ -886,6 +887,25 @@ fn save_settings(next: settings::Settings) -> Result<settings::Settings, String>
     settings::update(|s| s.cookies_from = next.cookies_from)
 }
 
+/// What the AI features have used today, for the settings screen.
+#[tauri::command]
+fn ai_usage() -> quota::Usage {
+    quota::usage()
+}
+
+/// Saves the person's own Groq key after checking it works, or forgets it
+/// when `key` is empty. With a key of their own, the daily allowance no longer
+/// applies.
+#[tauri::command]
+async fn set_groq_key(key: Option<String>) -> Result<quota::Usage, String> {
+    let key = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
+    if let Some(k) = &key {
+        groq::check_key(k).await?;
+    }
+    quota::set_own_key(key);
+    Ok(quota::usage())
+}
+
 /// Browsers found on this machine, forks included.
 #[tauri::command]
 fn detected_browsers() -> Vec<browsers::Browser> {
@@ -1038,6 +1058,8 @@ pub fn run() {
                 app.handle().path().app_config_dir().ok(),
             );
             settings::init(app.handle().path().app_config_dir().ok());
+            quota::init(app.handle().path().app_config_dir().ok());
+            groq::set_app(app.handle().clone());
             clear_convert_workspace(app.handle());
             fit_window_to_screen(app.handle());
             Ok(())
@@ -1057,6 +1079,8 @@ pub fn run() {
             reveal_file,
             get_settings,
             save_settings,
+            ai_usage,
+            set_groq_key,
             detected_browsers,
             browser_label,
             find_working_browser,

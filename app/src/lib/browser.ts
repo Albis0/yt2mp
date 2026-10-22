@@ -10,6 +10,7 @@ import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { loadPrefs, type SearchEngine } from "./prefs";
 
 export interface Tab {
   id: string;
@@ -223,7 +224,21 @@ export function newTab() {
 
 // ---------- addresses ----------
 
-export const SEARCH = "https://www.google.com/search?q=";
+const ENGINES: Record<SearchEngine, string> = {
+  google: "https://www.google.com/search?q=",
+  duckduckgo: "https://duckduckgo.com/?q=",
+  bing: "https://www.bing.com/search?q=",
+};
+
+/// The address a search for the typed words goes to, on the engine chosen in
+/// Settings.
+export const searchUrl = (words: string) =>
+  ENGINES[loadPrefs().searchEngine] + encodeURIComponent(words);
+
+/// Whether an address is a search page of one of the engines, whichever is
+/// chosen now: a search made last week on another engine is still a search.
+export const isSearchUrl = (url: string) =>
+  Object.values(ENGINES).some((base) => url.startsWith(base));
 
 /// What typing into the address bar means: an address if it looks like one,
 /// otherwise a Google search for it.
@@ -231,19 +246,22 @@ export function toAddress(input: string): string | null {
   const text = input.trim();
   if (!text) return null;
   if (/^(https?|file|about):/i.test(text)) return text;
-  if (/\s/.test(text)) return SEARCH + encodeURIComponent(text);
+  if (/\s/.test(text)) return searchUrl(text);
   if (/^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(\/.*)?$/i.test(text)) return `http://${text}`;
   // A dot followed by a plausible top-level domain, before any path.
   if (/^[\w-]+(\.[\w-]+)*\.[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(text)) return `https://${text}`;
-  return SEARCH + encodeURIComponent(text);
+  return searchUrl(text);
 }
 
-/// The query of a Google search page, so history can show a past search as
-/// the words that were searched rather than as a long address.
+/// The query of a search page, so history can show a past search as the words
+/// that were searched rather than as a long address.
 export function searchQuery(url: string): string | null {
   try {
     const u = new URL(url);
-    if (!/(^|\.)google\.[a-z.]+$/.test(u.hostname) || u.pathname !== "/search") return null;
+    const google = /(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/search";
+    const duck = u.hostname === "duckduckgo.com" && u.pathname === "/";
+    const bing = u.hostname.endsWith("bing.com") && u.pathname === "/search";
+    if (!google && !duck && !bing) return null;
     return u.searchParams.get("q");
   } catch {
     return null;

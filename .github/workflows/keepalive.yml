@@ -1,0 +1,20 @@
+# Render's free plan puts a web service to sleep after 15 minutes without a
+# request, and the next visitor then waits about a minute for it to wake. A
+# request every few minutes keeps it up. GitHub runs scheduled jobs when it
+# has room, so a run can be late by a few minutes; every 5 leaves slack.
+name: Keep the site awake
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ask the site for its home page
+        run: curl -sS --max-time 90 --retry 2 -o /dev/null -w "%{http_code}\n" https://yt2mp.onrender.com/ || true

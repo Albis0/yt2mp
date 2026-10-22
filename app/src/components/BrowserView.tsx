@@ -15,7 +15,7 @@ import {
   suggest,
   toAddress,
   topSites,
-  SEARCH,
+  isSearchUrl,
   type Tab,
   type Visit,
 } from "@/lib/browser";
@@ -236,7 +236,7 @@ interface Row {
 function suggestRows(draft: string): Row[] {
   const text = draft.trim();
   const address = toAddress(text) ?? "";
-  const first: Row = address.startsWith(SEARCH)
+  const first: Row = isSearchUrl(address)
     ? { url: address, title: text, kind: "search" }
     : { url: address, title: address.replace(/^https?:\/\//, ""), kind: "go" };
   const past = suggest(text)

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   fetchInfo,
+  onAiLimit,
   onDownloadProgress,
+  revealFile,
   startDownload,
   stopDownload,
   type DownloadFormat,
@@ -74,6 +76,7 @@ function shortcutOf(e: KeyboardEvent): KeyName | null {
 }
 import { look } from "@/lib/updater";
 import { offerUpdate } from "@/lib/updateFlow";
+import { loadPrefs } from "@/lib/prefs";
 import { toast } from "@/lib/toast";
 import {
   apply as applyTheme,
@@ -175,7 +178,7 @@ const DEGRADED_TABS: Partial<Record<TabId, string>> = {
 };
 
 export default function App() {
-  const [tab, setTab] = useState<TabId>("youtube");
+  const [tab, setTab] = useState<TabId>(() => loadPrefs().startTab);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingPhrase, setLoadingPhrase] = useState(0);
@@ -229,6 +232,7 @@ export default function App() {
   // mount: opening the app should never wait on the network, and someone who
   // launched it to grab one video will be done before this ever fires.
   useEffect(() => {
+    if (!loadPrefs().checkOnLaunch) return;
     const timer = setTimeout(() => {
       look()
         .then((found) => {
@@ -238,6 +242,29 @@ export default function App() {
     }, 4000);
     return () => clearTimeout(timer);
   }, []);
+
+  // The shared AI keys give each install a small daily allowance. When it
+  // runs out the feature keeps working without the model, so say so once,
+  // instead of leaving the person to wonder why results got worse.
+  useEffect(
+    () =>
+      onAiLimit((kind) =>
+        toast({
+          id: `ai-${kind}`,
+          tone: "warn",
+          sticky: true,
+          title:
+            kind === "search"
+              ? "Daily AI search limit reached"
+              : "Spotify matches are not being checked by AI",
+          body:
+            kind === "search"
+              ? "Searching with your exact words instead. Add your own key in Settings, AI, for no limit."
+              : "Today's AI checks are used up, so songs are matched without them and a few may be the wrong version. Add your own key in Settings, AI, for no limit.",
+        })
+      ),
+    []
+  );
 
   // Paint the resolved theme, and keep following the OS while the preference
   // is "system" — someone whose desktop switches to dark at sunset should see
@@ -427,6 +454,7 @@ export default function App() {
         title: info.title,
       });
       setDownloads((d) => ({ ...d, [key]: { ...d[key], done: true, filePath } }));
+      if (loadPrefs().openWhenDone) revealFile(filePath).catch(() => {});
       setHistory(
         addHistory({
           videoId: info.id,
@@ -596,7 +624,11 @@ export default function App() {
         <div className="body-main">
       {settingsOpen ? (
         <SettingsPanel
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            // The history's size and contents are set in there.
+            setHistory(loadHistory());
+          }}
           theme={theme}
           onThemeChange={setTheme}
           busy={downloadInProgress}

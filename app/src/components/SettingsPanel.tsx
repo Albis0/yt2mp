@@ -10,6 +10,9 @@ import {
   saveSettings,
   type Browser,
   type ProbeStep,
+  aiUsage,
+  setGroqKey,
+  type AiUsage,
   appVersion,
   toolsStatus,
   updateYtdlp,
@@ -21,6 +24,9 @@ import { reason, toast } from "@/lib/toast";
 import type { ThemePref } from "@/lib/theme";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { GitHubLogo } from "@/components/BrandLogos";
+import { TABS } from "@/components/SourceRail";
+import { clearHistory } from "@/lib/history";
+import { loadPrefs, resetPrefs, savePrefs, type Prefs, type SearchEngine } from "@/lib/prefs";
 
 const REPO = "Albis0/yt2mp";
 
@@ -39,12 +45,23 @@ const THEME_OPTIONS: { id: ThemePref; label: string }[] = [
 /// holds one subject, so nothing has to be skimmed past. "General" used to
 /// hold the theme, the folder and the version together; it is now three pages
 /// so each setting is found by what it is, not by where it was left.
-type PageId = "appearance" | "downloads" | "accounts" | "updates" | "about";
+type PageId =
+  | "appearance"
+  | "downloads"
+  | "history"
+  | "accounts"
+  | "ai"
+  | "browser"
+  | "updates"
+  | "about";
 
 const PAGES: { id: PageId; label: string; icon: () => React.ReactElement }[] = [
   { id: "appearance", label: "Appearance", icon: AppearanceIcon },
   { id: "downloads", label: "Downloads", icon: DownloadsIcon },
+  { id: "history", label: "History", icon: HistoryPageIcon },
   { id: "accounts", label: "Accounts", icon: AccountsIcon },
+  { id: "ai", label: "AI", icon: AiIcon },
+  { id: "browser", label: "Browser", icon: BrowserIcon },
   { id: "updates", label: "Updates", icon: UpdatesIcon },
   { id: "about", label: "About", icon: AboutIcon },
 ];
@@ -63,6 +80,103 @@ function DownloadsIcon() {
     </svg>
   );
 }
+
+function HistoryPageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 7.6V12l3 2"
+      />
+    </svg>
+  );
+}
+
+function AiIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"
+      />
+    </svg>
+  );
+}
+
+function BrowserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        d="M3.8 12h16.4M12 3.6c2.4 2.3 3.6 5.1 3.6 8.4s-1.2 6.1-3.6 8.4c-2.4-2.3-3.6-5.1-3.6-8.4S9.6 5.9 12 3.6z"
+      />
+    </svg>
+  );
+}
+
+/// On and off as two buttons, the way the theme is chosen: both states are
+/// always in view, which a bare switch does not give.
+function Toggle({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+}) {
+  return (
+    <div className="theme-switch" role="group" aria-label={label}>
+      <button
+        type="button"
+        className={`theme-opt${on ? " theme-opt-on" : ""}`}
+        aria-pressed={on}
+        onClick={() => onChange(true)}
+      >
+        On
+      </button>
+      <button
+        type="button"
+        className={`theme-opt${on ? "" : " theme-opt-on"}`}
+        aria-pressed={!on}
+        onClick={() => onChange(false)}
+      >
+        Off
+      </button>
+    </div>
+  );
+}
+
+/// "5 h 12 min", "40 min": how long until the daily counters start again.
+function timeLeft(secs: number): string {
+  const mins = Math.max(1, Math.ceil(secs / 60));
+  const h = Math.floor(mins / 60);
+  return h > 0 ? `${h} h ${mins % 60} min` : `${mins} min`;
+}
+
+const ENGINES: { id: SearchEngine; label: string }[] = [
+  { id: "google", label: "Google" },
+  { id: "duckduckgo", label: "DuckDuckGo" },
+  { id: "bing", label: "Bing" },
+];
+
+const KEEP_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "Off" },
+  { value: 25, label: "25" },
+  { value: 50, label: "50" },
+  { value: 100, label: "100" },
+];
 
 function AboutIcon() {
   return (
@@ -176,8 +290,45 @@ export default function SettingsPanel({
 
   const [downloadDir, setDownloadDir] = useState<string | null>(null);
 
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [usage, setUsage] = useState<AiUsage | null>(null);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [historyCleared, setHistoryCleared] = useState(false);
+
+  function setPref(change: Partial<Prefs>) {
+    setPrefs(savePrefs(change));
+  }
+
+  /// Checks the key with Groq before keeping it, so a typo is caught here and
+  /// not on the next search.
+  async function saveKey() {
+    setKeyBusy(true);
+    try {
+      setUsage(await setGroqKey(keyDraft));
+      setKeyDraft("");
+      toast({ tone: "ok", title: "Key saved", body: "AI now runs on your key, with no daily limit." });
+    } catch (err) {
+      toast({ tone: "error", title: "That key did not work", body: reason(err, "Try again.") });
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function removeKey() {
+    setKeyBusy(true);
+    try {
+      setUsage(await setGroqKey(null));
+    } catch (err) {
+      toast({ tone: "error", title: "Could not remove the key", body: reason(err, "Try again.") });
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
   useEffect(() => {
     appVersion().then(setVersion).catch(() => {});
+    aiUsage().then(setUsage).catch(() => {});
     toolsStatus()
       .then((s) => setYtdlp(s.ytdlpVersion))
       .catch(() => {});
@@ -448,6 +599,24 @@ export default function SettingsPanel({
                   </div>
                 </div>
 
+                <div className="prefs-field prefs-field-stack">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Open on</span>
+                    <span className="prefs-field-hint">The tab you land on when yt2mp starts.</span>
+                  </div>
+                  <div className="chips">
+                    {TABS.filter((tab) => tab.id !== "history").map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={`chip${prefs.startTab === tab.id ? " chip-on" : ""}`}
+                        onClick={() => setPref({ startTab: tab.id })}
+                      >
+                        {tab.short}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </>
             ) : null}
 
@@ -474,6 +643,17 @@ export default function SettingsPanel({
                   </div>
                 </div>
 
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Show the file when done</span>
+                    <span className="prefs-field-hint">Opens its folder with the file selected.</span>
+                  </div>
+                  <Toggle
+                    on={prefs.openWhenDone}
+                    onChange={(v) => setPref({ openWhenDone: v })}
+                    label="Show the file when done"
+                  />
+                </div>
               </>
             ) : null}
 
@@ -506,11 +686,216 @@ export default function SettingsPanel({
                   </div>
                   <span className="prefs-value num">{version ?? "…"}</span>
                 </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Reset preferences</span>
+                    <span className="prefs-field-hint">
+                      Back to how yt2mp came. Your history and theme stay.
+                    </span>
+                  </div>
+                  <button type="button" className="btn" onClick={() => setPrefs(resetPrefs())}>
+                    Reset
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {page === "history" ? (
+              <>
+                <div className="prefs-field prefs-field-stack">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Keep the last</span>
+                    <span className="prefs-field-hint">
+                      Downloads remembered in the History tab. Off remembers nothing.
+                    </span>
+                  </div>
+                  <div className="chips">
+                    {KEEP_OPTIONS.map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        className={`chip${prefs.historyKeep === o.value ? " chip-on" : ""}`}
+                        onClick={() => setPref({ historyKeep: o.value })}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Pictures</span>
+                    <span className="prefs-field-hint">Show each video's picture in the list.</span>
+                  </div>
+                  <Toggle
+                    on={prefs.historyThumbs}
+                    onChange={(v) => setPref({ historyThumbs: v })}
+                    label="Pictures in history"
+                  />
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Clear history</span>
+                    <span className="prefs-field-hint">
+                      {historyCleared ? "Cleared." : "Removes every saved download from the list."}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={historyCleared}
+                    onClick={() => {
+                      clearHistory();
+                      setHistoryCleared(true);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {page === "ai" ? (
+              <>
+                <p className="prefs-intro">
+                  AI search and the check of Spotify matches share a small daily allowance. A
+                  Groq key of your own removes the limit.
+                </p>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">AI search</span>
+                    <span className="prefs-field-hint">
+                      {usage?.ownKey
+                        ? "No limit, on your key."
+                        : usage && usage.resetsIn > 0
+                          ? `Starts again in ${timeLeft(usage.resetsIn)}.`
+                          : "Resets every 24 hours."}
+                    </span>
+                  </div>
+                  <span className="prefs-value num">
+                    {usage?.ownKey ? "∞" : usage ? `${usage.searchUsed} / ${usage.limit}` : "…"}
+                  </span>
+                </div>
+
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Spotify check</span>
+                    <span className="prefs-field-hint">
+                      {usage?.ownKey
+                        ? "No limit, on your key."
+                        : "Past the limit, songs are matched without the check."}
+                    </span>
+                  </div>
+                  <span className="prefs-value num">
+                    {usage?.ownKey ? "∞" : usage ? `${usage.verifyUsed} / ${usage.limit}` : "…"}
+                  </span>
+                </div>
+
+                <div className="prefs-field prefs-field-stack">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Your Groq key</span>
+                    <span className="prefs-field-hint">
+                      {usage?.ownKey ? (
+                        <>
+                          Using your key <strong>{usage.keyHint}</strong>
+                        </>
+                      ) : (
+                        <>
+                          Free at console.groq.com. It stays on this computer and is only sent to
+                          Groq.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  {usage?.ownKey ? (
+                    <div className="prefs-input-row">
+                      <button type="button" className="btn" onClick={removeKey} disabled={keyBusy}>
+                        Remove key
+                      </button>
+                    </div>
+                  ) : (
+                    <form
+                      className="prefs-input-row"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (keyDraft.trim()) saveKey();
+                      }}
+                    >
+                      <input
+                        type="password"
+                        className="prefs-input"
+                        placeholder="gsk_…"
+                        value={keyDraft}
+                        onChange={(e) => setKeyDraft(e.target.value)}
+                        spellCheck={false}
+                        autoComplete="off"
+                        aria-label="Groq API key"
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={keyBusy || !keyDraft.trim()}
+                      >
+                        {keyBusy ? "Checking…" : "Save"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => openUrl("https://console.groq.com/keys")}
+                      >
+                        Get a key
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {page === "browser" ? (
+              <>
+                <div className="prefs-field prefs-field-stack">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Search engine</span>
+                    <span className="prefs-field-hint">
+                      What the address bar searches with when you type words.
+                    </span>
+                  </div>
+                  <div className="chips">
+                    {ENGINES.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        className={`chip${prefs.searchEngine === e.id ? " chip-on" : ""}`}
+                        onClick={() => setPref({ searchEngine: e.id })}
+                      >
+                        {e.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </>
             ) : null}
 
             {page === "updates" ? (
               <>
+                <div className="prefs-field">
+                  <div className="prefs-field-text">
+                    <span className="prefs-field-name">Check when yt2mp starts</span>
+                    <span className="prefs-field-hint">
+                      A few seconds after launch, never before the window is usable.
+                    </span>
+                  </div>
+                  <Toggle
+                    on={prefs.checkOnLaunch}
+                    onChange={(v) => setPref({ checkOnLaunch: v })}
+                    label="Check for updates when yt2mp starts"
+                  />
+                </div>
+
                 {/* Two rows of one shape: what it is, what version, one
                     control. Both check before they download. */}
                 <div className="prefs-field">

@@ -1,5 +1,6 @@
 import { PLATFORM_LABELS } from "@/lib/api";
 import type { HistoryItem } from "@/lib/history";
+import { loadPrefs } from "@/lib/prefs";
 
 interface HistoryListProps {
   history: HistoryItem[];
@@ -25,6 +26,8 @@ export default function HistoryList({
   onRemove,
   onClear,
 }: HistoryListProps) {
+  const thumbs = loadPrefs().historyThumbs;
+
   if (history.length === 0) {
     return (
       <section className="history">
@@ -52,9 +55,11 @@ export default function HistoryList({
               onClick={() => onReplay(item)}
               title="Fetch again"
             >
-              <span className="history-thumb">
-                {item.thumbnail ? <img src={item.thumbnail} alt="" /> : null}
-              </span>
+              {thumbs ? (
+                <span className="history-thumb">
+                  {item.thumbnail ? <img src={item.thumbnail} alt="" /> : null}
+                </span>
+              ) : null}
               <span className="history-text">
                 <span className="history-title">{item.title}</span>
                 <span className="history-sub">

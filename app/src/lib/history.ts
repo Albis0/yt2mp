@@ -3,6 +3,7 @@
 // plus what's needed to display it (title, thumbnail).
 
 import type { Platform } from "./api";
+import { loadPrefs } from "./prefs";
 
 export interface HistoryItem {
   id: string; // unique per download event
@@ -18,7 +19,6 @@ export interface HistoryItem {
 }
 
 const KEY = "yt2mp.history.v1";
-const MAX = 100;
 
 export function loadHistory(): HistoryItem[] {
   try {
@@ -33,7 +33,10 @@ export function loadHistory(): HistoryItem[] {
 
 function save(items: HistoryItem[]) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(items.slice(0, MAX)));
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify(items.slice(0, loadPrefs().historyKeep))
+    );
   } catch {
     // storage full or unavailable — history is best-effort
   }

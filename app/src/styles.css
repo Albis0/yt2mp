@@ -3341,7 +3341,7 @@ button {
      the frame growing to chase it.
      Capped against the viewport so a 768px laptop can still see the whole
      dialog. */
-  height: min(390px, calc(100vh - 48px));
+  height: min(430px, calc(100vh - 48px));
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3363,6 +3363,7 @@ button {
   flex-direction: column;
   gap: 2px;
   flex-shrink: 0;
+  overflow-y: auto;
   width: 152px;
   padding: 14px 10px;
   background: var(--surface-2);
@@ -3450,6 +3451,28 @@ button {
 }
 
 /* For a control too wide to sit beside its label — the browser chips. */
+.prefs-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.prefs-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.prefs-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .prefs-field-stack {
   flex-direction: column;
   align-items: stretch;
