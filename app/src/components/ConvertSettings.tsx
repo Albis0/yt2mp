@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ConvertOptions, ConvertTarget, VideoCodec } from "@/lib/api";
 import { CODEC_LABELS, isAnimation, isAudio, isImage, isVideo, videoCodecs } from "@/lib/formats";
 
@@ -301,6 +301,14 @@ function TimeInput({
 }) {
   const [text, setText] = useState(value != null ? clock(value) : "");
   const [bad, setBad] = useState(false);
+  // "Reset everything" empties the value from outside; the box must follow.
+  useEffect(() => {
+    if (value === null && parseClock(text) !== null) {
+      setText("");
+      setBad(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <input
       className={`conv-input${bad ? " is-bad" : ""}`}

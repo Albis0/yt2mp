@@ -927,14 +927,22 @@ fn build_args(
         } else {
             if let Some(ch) = opts.channels {
                 push(&mut after, &["-ac", &ch.to_string()]);
-            } else if matches!(target, Target::Mpg | Target::Mp2) {
-                // MP2 has no layout for surround; five channels in fail.
+            } else if matches!(target, Target::Mpg | Target::Mp2)
+                || (encoder == "wmav2" && info.audio_channels.is_some_and(|c| c > 2))
+            {
+                // MP2 and WMA have no layout for surround; five channels in fail.
                 push(&mut after, &["-ac", "2"]);
             }
             match opts.sample_rate {
                 Some(rate) => push(&mut after, &["-ar", &rate.to_string()]),
                 // Opus only runs at 48 kHz; WMA and AC3 at the usual rates.
                 None if encoder == "libopus" => push(&mut after, &["-ar", "48000"]),
+                // Vorbis and WMA refuse the 96 and 192 kHz of studio files.
+                None if matches!(encoder, "libvorbis" | "wmav2")
+                    && info.audio_rate.is_some_and(|r| r > 48000) =>
+                {
+                    push(&mut after, &["-ar", "48000"])
+                }
                 None => {}
             }
         }
@@ -995,6 +1003,12 @@ pub struct SourceInfo {
     pub video_plays_everywhere: bool,
     /// The first audio stream's codec ("aac", "mp3", "opus").
     pub audio_codec: Option<String>,
+    /// That stream's sample rate and channel count. Some encoders refuse
+    /// what a film or a studio recording carries (WMA: 5.1, 96 kHz).
+    #[serde(skip)]
+    pub audio_rate: Option<u32>,
+    #[serde(skip)]
+    pub audio_channels: Option<u8>,
 }
 
 /// Reads what ffmpeg thinks of a file.
@@ -1068,6 +1082,35 @@ pub async fn probe(path: &Path) -> Result<SourceInfo, String> {
         video_plays_everywhere: video_line(&text)
             .is_some_and(|l| l.contains("yuv420p") && !l.contains("yuv420p10")),
         audio_codec: stream_codec(&text, "Audio:"),
+        audio_rate: audio_rate(&text),
+        audio_channels: audio_channels(&text),
+    })
+}
+
+fn audio_line(text: &str) -> Option<&str> {
+    text.lines()
+        .filter(|l| l.trim_start().starts_with("Stream #"))
+        .find(|l| l.contains("Audio:"))
+}
+
+/// `Audio: aac (LC), 48000 Hz, 5.1, fltp` → `48000`.
+fn audio_rate(text: &str) -> Option<u32> {
+    let line = audio_line(text)?;
+    let before = line.split(" Hz").next().filter(|_| line.contains(" Hz"))?;
+    before.rsplit([' ', ',']).next()?.parse().ok()
+}
+
+/// `Audio: aac (LC), 48000 Hz, 5.1, fltp` → `6`.
+fn audio_channels(text: &str) -> Option<u8> {
+    let line = audio_line(text)?;
+    line.split(',').map(str::trim).find_map(|part| match part {
+        "mono" => Some(1),
+        "stereo" => Some(2),
+        _ => match part.split_once('.') {
+            // "5.1", "7.1": the main channels plus the low-frequency one.
+            Some((a, b)) if b.len() == 1 => Some(a.parse::<u8>().ok()? + b.parse::<u8>().ok()?),
+            _ => part.strip_suffix(" channels")?.parse().ok(),
+        },
     })
 }
 
@@ -1739,6 +1782,8 @@ mod tests {
             video_codec: video.map(str::to_string),
             video_plays_everywhere: everywhere,
             audio_codec: audio.map(str::to_string),
+            audio_rate: None,
+            audio_channels: None,
         }
     }
 
@@ -1816,6 +1861,19 @@ mod tests {
 ";
         assert_eq!(stream_codec(video, "Video:").as_deref(), Some("h264"));
         assert!(video_line(video).is_some_and(|l| l.contains("yuv420p")));
+    }
+
+    #[test]
+    fn the_sounds_rate_and_layout_are_read_from_the_banner() {
+        let five_one = "  Stream #0:1(und): Audio: aac (LC), 48000 Hz, 5.1, fltp, 384 kb/s";
+        assert_eq!(audio_rate(five_one), Some(48000));
+        assert_eq!(audio_channels(five_one), Some(6));
+        let wav = "  Stream #0:0: Audio: pcm_s24le ([1][0][0][0] / 0x0001), 96000 Hz, stereo, s32, 4608 kb/s";
+        assert_eq!(audio_rate(wav), Some(96000));
+        assert_eq!(audio_channels(wav), Some(2));
+        let mono = "  Stream #0:0: Audio: mp3, 22050 Hz, mono, fltp, 64 kb/s";
+        assert_eq!(audio_channels(mono), Some(1));
+        assert_eq!(audio_rate("no streams here"), None);
     }
 
     #[test]
@@ -2250,6 +2308,71 @@ mod tests {
                 "no tool name: {err}"
             );
 
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        /// A film's 5.1 and a studio's 96 kHz go to the encoders that cannot
+        /// take them (WMA, Vorbis) without the user touching a setting.
+        #[tokio::test]
+        async fn surround_and_studio_sound_still_become_wma_and_ogg() {
+            let Some(ff) = test_ffmpeg() else {
+                eprintln!("skipping: no ffmpeg on this machine");
+                return;
+            };
+            let dir = std::env::temp_dir().join("yt2mp-convert-hires");
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            let source = dir.join("film.mkv");
+            let made = std::process::Command::new(&ff)
+                .args(["-y", "-loglevel", "error"])
+                .args([
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=duration=1:size=160x120:rate=10",
+                ])
+                .args(["-f", "lavfi", "-i", "sine=duration=1:sample_rate=96000"])
+                .args([
+                    "-filter_complex",
+                    "[1:a]pan=5.1|c0=c0|c1=c0|c2=c0|c3=c0|c4=c0|c5=c0[a]",
+                ])
+                .args([
+                    "-map", "0:v", "-map", "[a]", "-c:v", "libx264", "-c:a", "aac",
+                ])
+                .arg(&source)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !made {
+                eprintln!("skipping: this ffmpeg cannot make the fixture");
+                return;
+            }
+            let info = probe(&source).await.unwrap();
+            assert_eq!(info.audio_channels, Some(6));
+            assert_eq!(info.audio_rate, Some(96000));
+
+            for (target, name) in [
+                (Target::Wmv, "a.wmv"),
+                (Target::Wma, "b.wma"),
+                (Target::Ogg, "c.ogg"),
+            ] {
+                if !can_encode(&ff, target) {
+                    continue;
+                }
+                let (_tx, rx) = tokio::sync::watch::channel(crate::ytdlp::Control::Run);
+                convert(
+                    &source,
+                    &dir.join(name),
+                    target,
+                    &Options::default(),
+                    None,
+                    rx,
+                    |_, _, _| {},
+                )
+                .await
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+                assert!(probe(&dir.join(name)).await.unwrap().has_audio, "{name}");
+            }
             let _ = std::fs::remove_dir_all(&dir);
         }
 
