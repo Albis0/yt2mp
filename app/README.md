@@ -127,11 +127,26 @@ AI search needs Groq API keys, which are **never committed to source**. Create
 
 ```
 GROQ_KEYS=gsk_xxx,gsk_yyy,gsk_zzz
+GROQ_VERIFY_KEYS=gsk_aaa,gsk_bbb
 ```
 
-Comma-separated — if one key is rate-limited (429) or rejected (401), the app
-rotates to the next. If `GROQ_KEYS` is missing or every key fails, AI search
-falls back to searching your raw text directly instead of breaking.
+Comma-separated: if one key is rate-limited (429) or rejected (401), the app
+rotates to the next. `GROQ_VERIFY_KEYS` is a separate set used only to check
+Spotify matches, so a busy evening of playlist downloads cannot use up the AI
+search's limit; without it the check shares `GROQ_KEYS`. If `GROQ_KEYS` is
+missing or every key fails, AI search falls back to searching your raw text
+directly instead of breaking.
+
+In a release build the same two lines are written into the bundle by
+`release.yml` from the repository secrets `GROQ_KEYS` and `GROQ_VERIFY_KEYS`.
+
+**Daily allowance.** Each install gets 5 AI searches and, counted apart, 5
+Spotify checks per rolling 24 hours (`src-tauri/src/quota.rs`; the counter is
+`ai.json` in the app's config folder). Past it, search uses the typed words as
+they are and Spotify matches on score alone, and the window shows a warning once.
+A person who saves their own Groq key in **Settings → AI** is not counted at all.
+The counter lives on the user's machine, so it keeps an honest install honest and
+does not stop a determined one.
 
 ## Finding videos on a page
 
