@@ -1,48 +1,35 @@
 /* ============================================================
-   yt2mp — landing page
+   yt2mp landing page
 
-   Same design system as the app (app/src/styles.css):
-   one neutral ramp, colour spent only where it carries meaning,
-   and every number set in tabular mono figures.
+   Direction: Apple product pages. A deep near-black ground, big
+   quiet type, generous space, and the product's own screenshots
+   as the only imagery. No accent colour: the app's colours come
+   from the screenshots and the site brands, never from the page.
 
-   The page's job is narrow: convince someone this is worth
-   installing, then hand them the right download. So the product
-   itself is the hero — a real screenshot of the window, not an
-   illustration of one — and the copy underneath answers the
-   questions that actually stop people installing: how big, why
-   that big, does it phone home, does it work on Linux.
+   One theme (dark), one shape rule: pills for buttons, 20px for
+   cards, 14px for app windows.
    ============================================================ */
 
 :root {
   color-scheme: dark;
 
-  --sans: var(--font-inter), -apple-system, "Segoe UI", system-ui, sans-serif;
-  --mono: var(--font-plex-mono), ui-monospace, Consolas, monospace;
+  --sans: var(--font-geist), -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: var(--font-geist-mono), ui-monospace, Consolas, monospace;
 
-  /* The app's dark palette, verbatim. */
-  --bg: #131316;
-  --chrome: #0e0e11;
-  --surface: #1a1a1e;
-  --surface-2: #212127;
-  --surface-3: #292930;
-  --border: #2c2c33;
-  --border-strong: #3d3d46;
-  --text: #f2f2f3;
-  --text-2: #a9abb2;
-  --text-3: #7c7f87;
+  --bg: #0a0a0b;
+  --card: #131315;
+  --card-2: #18181b;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --text: #f5f5f4;
+  --text-2: #a1a1a6;
+  --text-3: #6e6e73;
 
-  --accent: #5b8dff;
-  --accent-press: #7ba3ff;
-  --on-accent: #15161a;
-  --ok: #4ac48a;
-  --warn: #e0a94a;
+  --radius-card: 20px;
+  --radius-window: 14px;
 
-  --radius: 7px;
-  --radius-lg: 12px;
-
-  /* Column width. Wide enough for a 1127px screenshot to sit at
-     its own scale without being blown up. */
   --col: 1080px;
+  --nav-h: 56px;
 }
 
 *,
@@ -54,514 +41,507 @@
 }
 
 html {
-  height: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-h) + 16px);
 }
 
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
-  min-height: 100%;
+  min-height: 100dvh;
   color: var(--text);
   background: var(--bg);
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 17px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 a {
-  color: var(--accent);
+  color: inherit;
   text-decoration: none;
 }
 
-a:hover {
-  color: var(--accent-press);
+p a,
+.get-foot a {
+  color: var(--text);
   text-decoration: underline;
+  text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-  border-radius: 3px;
+p a:hover,
+.get-foot a:hover {
+  text-decoration-color: var(--text);
 }
 
 img {
-  max-width: 100%;
   display: block;
+  max-width: 100%;
+  height: auto;
 }
 
-/* Tabular figures wherever a number appears. */
-.num {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
-
-/* ---------- Mobile ---------- */
-
-.mobile-block {
-  display: none;
-}
-
-/* ---------- Shell ---------- */
 
 .wrap {
   width: 100%;
-  max-width: var(--col);
+  max-width: calc(var(--col) + 48px);
   margin: 0 auto;
-  padding: 0 28px;
+  padding: 0 24px;
 }
 
-@media (max-width: 760px) {
-  .desktop-only {
-    display: none;
-  }
-
-  .mobile-block {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 32px;
-  }
-
-  .mobile-block-inner {
-    max-width: 330px;
-    text-align: center;
-  }
-
-  .mobile-block-inner img {
-    margin: 0 auto 20px;
-    border-radius: 10px;
-  }
-
-  .mobile-block-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-
-  .mobile-block-text {
-    margin-top: 10px;
-    color: var(--text-2);
-    font-size: 0.95rem;
-  }
-
-  .mobile-block-link {
-    display: inline-block;
-    margin-top: 20px;
-    font-weight: 600;
-    font-size: 0.95rem;
-  }
-}
-
-/* ---------- Topbar ---------- */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 60px;
-  border-bottom: 1px solid var(--border);
-}
-
-.topbar-id {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.topbar-name {
-  font-weight: 600;
-  font-size: 0.95rem;
-  letter-spacing: -0.01em;
-}
-
-.topbar-version {
-  font-family: var(--mono);
-  font-size: 0.78rem;
+.dim {
   color: var(--text-3);
 }
 
-.topbar-links {
-  display: flex;
-  gap: 22px;
-  font-size: 0.88rem;
+/* ---------- Buttons: pills, one label per intent ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 48px;
+  padding: 0 26px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
-.topbar-links a {
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-solid {
+  background: var(--text);
+  color: #0a0a0b;
+}
+
+.btn-solid:hover {
+  background: #fff;
+}
+
+.btn-outline {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.btn-outline:hover {
+  border-color: var(--text);
+}
+
+.btn-quiet {
   color: var(--text-2);
 }
 
-.topbar-links a:hover {
+.btn-quiet:hover {
   color: var(--text);
-  text-decoration: none;
 }
 
-/* ---------- Hero ----------
-   Type first, product second. The headline states what the thing
-   does in one line; the screenshot immediately proves it. */
+.btn-small {
+  height: 34px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+/* ---------- Navigation ---------- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: var(--nav-h);
+  background: rgba(10, 10, 11, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-in {
+  height: 100%;
+  max-width: calc(var(--col) + 48px);
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.nav-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.nav-links {
+  display: flex;
+  gap: 28px;
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.nav-links a:hover {
+  color: var(--text);
+}
+
+/* ---------- Hero ---------- */
 
 .hero {
-  padding: 76px 0 0;
+  padding-top: clamp(56px, 9vw, 112px);
   text-align: center;
 }
 
 .hero-title {
-  font-size: clamp(2.2rem, 5.2vw, 3.6rem);
+  font-size: clamp(2.9rem, 8.4vw, 6.4rem);
   font-weight: 600;
-  line-height: 1.08;
-  letter-spacing: -0.035em;
-}
-
-/* The one coloured word on the page above the fold. It names the
-   output, which is the thing people came for. */
-.hero-em {
-  color: var(--accent);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
 }
 
 .hero-dek {
-  margin: 20px auto 0;
-  max-width: 56ch;
+  max-width: 40ch;
+  margin: 28px auto 0;
+  font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+  line-height: 1.4;
+  letter-spacing: -0.015em;
   color: var(--text-2);
-  font-size: 1.06rem;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin-top: 30px;
-}
-
-.btn {
-  display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 12px 22px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: 0.95rem;
-  font-weight: 600;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  gap: 8px 20px;
+  margin-top: 36px;
 }
 
-.btn-primary {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.btn-primary:hover {
-  background: var(--accent-press);
-  color: var(--on-accent);
-  text-decoration: none;
-}
-
-.btn-ghost {
-  border-color: var(--border-strong);
-  background: var(--surface);
-  color: var(--text-2);
-}
-
-.btn-ghost:hover {
-  border-color: var(--text-3);
-  color: var(--text);
-  text-decoration: none;
-}
-
-.hero-meta {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.78rem;
-  color: var(--text-3);
-}
-
-.dot {
-  opacity: 0.45;
-}
-
-/* ---------- Product shot ----------
-   The screenshot is the hero image, so it gets a real frame and a
-   soft ground behind it rather than floating flat on the page. */
-
-/* Two screenshots side by side. They are tall windows, so shown at full
-   width one would eat the whole fold on its own; a pair at half width
-   reads as "here is the app" in a single glance and lets the dark and
-   light themes be compared without scrolling between them. */
-.shots {
-  margin-top: 52px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  align-items: start;
-}
-
-.shot {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+.hero-shot {
+  position: relative;
+  max-width: 1000px;
+  margin: clamp(48px, 7vw, 88px) auto 0;
+  max-height: clamp(300px, 56vw, 620px);
   overflow: hidden;
-  background: var(--chrome);
-  box-shadow: 0 40px 80px -40px rgba(0, 0, 0, 0.9);
+  /* The window rises out of the page rather than ending in a hard edge. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 68%, transparent 100%);
 }
 
-/* A shot outside the pair still needs its own top margin, and is capped
-   narrower than the text column so it does not tower over the prose.
-   This one is a crop of the format table rather than a whole window, so
-   it gets a flat frame and no drop shadow — a window shadow around a
-   fragment of a window reads as a mistake. */
-.shot-inline {
-  margin-top: 32px;
-  max-width: 720px;
-  box-shadow: none;
-  background: transparent;
+/* App window: a real screenshot in a hairline frame. */
+.window {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-window);
+  overflow: hidden;
+  background: #0e0d0c;
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
 }
 
-.shot img {
-  display: block;
+.window img {
   width: 100%;
-  height: auto;
 }
 
-/* Below roughly the width where two windows stay legible, stack them. */
-@media (max-width: 860px) {
-  .shots {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
-
-.shot-caption {
-  margin-top: 12px;
-  text-align: center;
-  color: var(--text-3);
-  font-size: 0.82rem;
-}
-
-/* ---------- Sections ---------- */
+/* ---------- Bands ---------- */
 
 .band {
-  padding: 84px 0 0;
+  padding-top: clamp(88px, 13vw, 176px);
 }
 
 .band-title {
-  font-size: 1.6rem;
+  max-width: 18ch;
+  font-size: clamp(2.2rem, 5.6vw, 4.2rem);
   font-weight: 600;
-  letter-spacing: -0.025em;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.band-title-small {
+  font-size: clamp(1.6rem, 3.4vw, 2.2rem);
+  letter-spacing: -0.03em;
 }
 
 .band-dek {
-  margin-top: 10px;
-  max-width: 62ch;
+  max-width: 56ch;
+  margin-top: 24px;
+  font-size: clamp(1.05rem, 1.8vw, 1.25rem);
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   color: var(--text-2);
-  font-size: 1rem;
 }
 
-/* ---------- Tab list ----------
-   Seven rows, one per tab in the app, in the same order. A row
-   per site rather than a grid of cards: it is a list of what is
-   supported, and a list should look like one. */
+/* ---------- Sites ---------- */
 
 .sites {
-  margin-top: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.site-row {
+  list-style: none;
   display: grid;
-  grid-template-columns: 150px 1fr auto;
-  gap: 20px;
-  align-items: center;
-  padding: 15px 20px;
-  border-top: 1px solid var(--border);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 48px 24px;
+  margin-top: 64px;
 }
 
-.site-row:first-child {
-  border-top: none;
+.site {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-2);
+  transition: color 180ms ease;
+}
+
+.site svg {
+  margin-bottom: 12px;
+}
+
+.site:hover {
+  color: var(--text);
 }
 
 .site-name {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-
-/* Each site's mark takes its own colour, exactly as the app's tab
-   icons do — the only place brand colour appears on the page. */
-.site-icon {
-  display: inline-flex;
-  flex-shrink: 0;
-}
-
-.site-youtube { color: #ff4d67; }
-.site-tiktok { color: #25dbd3; }
-.site-instagram { color: #ff5fa2; }
-.site-twitter { color: #9fb0c4; }
-.site-twitch { color: #a87bff; }
-.site-other { color: #5b8dff; }
-.site-ai { color: #e3b45c; }
-
-.site-what {
-  color: var(--text-2);
-  font-size: 0.9rem;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
 }
 
 .site-note {
-  font-family: var(--mono);
-  font-size: 0.74rem;
+  font-size: 14px;
   color: var(--text-3);
-  white-space: nowrap;
 }
 
-.site-note-warn {
-  color: var(--warn);
+/* ---------- Convert ---------- */
+
+.convert-shot {
+  margin-top: 56px;
 }
 
-/* ---------- Two-up ---------- */
+.formats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px 48px;
+  margin-top: 56px;
+}
 
-.pair {
+.format-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.format-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.format-list {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 0.01em;
+  color: var(--text-3);
+  white-space: pre-wrap;
+  word-spacing: 0.15em;
+}
+
+/* ---------- Numbers ---------- */
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  text-align: center;
+}
+
+.number {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.number-big {
+  font-size: clamp(3.4rem, 10vw, 7.5rem);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.number-what {
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
+  color: var(--text-2);
+}
+
+/* ---------- Bento ---------- */
+
+.bento {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-top: 56px;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.tile svg {
+  margin-bottom: 8px;
+}
+
+.tile-title {
+  font-size: clamp(1.35rem, 2.4vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.tile-text {
+  max-width: 46ch;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.tile-icons {
+  display: flex;
+  gap: 22px;
+  margin-top: auto;
+  padding-top: 24px;
+  color: var(--text-3);
+}
+
+.tile-note {
+  padding-top: 4px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+/* Four tiles, four sizes: a wide one, two narrow, a wide one. */
+.tile-browser {
+  grid-column: span 4;
+  min-height: 280px;
+  background:
+    linear-gradient(180deg, transparent 40%, rgba(255, 255, 255, 0.035) 100%),
+    var(--card);
+}
+
+.tile-spotify {
+  grid-column: span 2;
+  background: linear-gradient(160deg, rgba(30, 215, 96, 0.14), transparent 62%), var(--card);
+}
+
+.tile-spotify svg {
+  color: #1ed760;
+}
+
+.tile-ai {
+  grid-column: span 2;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), transparent 62%), var(--card-2);
+}
+
+.tile-fresh {
+  grid-column: span 4;
+  background: var(--card);
+}
+
+/* ---------- Statement ---------- */
+
+.private {
+  text-align: center;
+}
+
+.private-text {
+  max-width: 24em;
+  margin: 0 auto;
+  font-size: clamp(1.9rem, 4.6vw, 3.3rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+/* ---------- Download ---------- */
+
+.get {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  margin-top: 28px;
+  margin-top: 56px;
 }
 
-.card {
-  padding: 24px 26px 26px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.card-wide {
-  grid-column: 1 / -1;
-}
-
-.card-title {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.card-text {
-  margin-top: 10px;
-  color: var(--text-2);
-  font-size: 0.92rem;
-}
-
-.card-text a {
-  font-weight: 500;
-}
-
-/* ---------- Size bar ----------
-   Proportion is the point of this section, so it is drawn to
-   scale. Reading it off a bar takes no effort; reading it off a
-   table does. */
-
-.sizebar {
-  display: flex;
-  width: 100%;
-  height: 34px;
-  margin: 18px 0 14px;
-  border-radius: var(--radius);
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.seg {
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.seg-ffmpeg { background: var(--accent); color: var(--on-accent); }
-.seg-ytdlp { background: var(--surface-3); color: var(--text); }
-.seg-quickjs { background: var(--surface-2); color: var(--text-2); }
-.seg-app { background: var(--ok); color: var(--on-accent); }
-
-.sizekey {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-}
-
-.sizekey-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.78rem;
-  color: var(--text-2);
-}
-
-.swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-/* ---------- Spec table ---------- */
-
-.spec {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 6px;
-  font-size: 0.9rem;
-}
-
-.spec tr + tr {
-  border-top: 1px solid var(--border);
-}
-
-.spec th,
-.spec td {
-  padding: 11px 0;
-  text-align: left;
-  vertical-align: top;
-  font-weight: 400;
-}
-
-.spec th {
-  width: 34%;
-  padding-right: 16px;
-  color: var(--text);
-  font-weight: 500;
-}
-
-.spec td {
-  color: var(--text-2);
-}
-
-/* ---------- Commands and hashes ---------- */
-
-.cmd-list {
-  margin-top: 16px;
+.get-card {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.get-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+}
+
+.get-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.get-text {
+  max-width: 40ch;
+  font-size: 16px;
+  color: var(--text-2);
+}
+
+.get-meta {
+  margin-top: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.get-foot {
+  margin-top: 28px;
+  font-size: 15px;
+  color: var(--text-3);
+}
+
+.cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
 }
 
 .cmd {
@@ -569,120 +549,233 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 9px 9px 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
+  padding: 10px 10px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .cmd-text {
   font-family: var(--mono);
-  font-size: 0.79rem;
-  color: var(--text);
-  word-break: break-all;
-}
-
-.cmd-text::before {
-  content: "$ ";
-  color: var(--text-3);
+  font-size: 13px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
 }
 
 .cmd-copy {
-  flex-shrink: 0;
-  padding: 5px 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   background: transparent;
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: 0.72rem;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
   cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease;
+  transition: color 160ms ease, border-color 160ms ease;
 }
 
 .cmd-copy:hover {
   color: var(--text);
-  border-color: var(--text-3);
+  border-color: var(--text);
+}
+
+/* ---------- Small print ---------- */
+
+.details {
+  margin-top: 32px;
+  border-top: 1px solid var(--line);
+}
+
+.details details {
+  border-bottom: 1px solid var(--line);
+}
+
+.details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  cursor: pointer;
+  list-style: none;
+}
+
+.details summary::-webkit-details-marker {
+  display: none;
+}
+
+.details summary::after {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-right: 1.5px solid var(--text-2);
+  border-bottom: 1.5px solid var(--text-2);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.details details[open] summary::after {
+  transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 64ch;
+  padding: 0 0 26px;
+  font-size: 16px;
+  color: var(--text-2);
+}
+
+.inline-code,
+.hash {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--text);
 }
 
 .hash {
-  margin-top: 16px;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font-family: var(--mono);
-  font-size: 0.73rem;
-}
-
-.hash-label {
-  flex-shrink: 0;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.hash-value {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
   color: var(--text-2);
-  word-break: break-all;
-}
-
-.inline-code {
-  font-family: var(--mono);
-  font-size: 0.86em;
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  white-space: nowrap;
 }
 
 /* ---------- Footer ---------- */
 
-.site-footer {
-  margin-top: 90px;
-  padding: 26px 0 44px;
-  border-top: 1px solid var(--border);
+.foot {
+  margin-top: clamp(88px, 12vw, 160px);
+  border-top: 1px solid var(--line);
+}
+
+.foot-in {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  font-size: 0.85rem;
+  justify-content: space-between;
+  gap: 12px 32px;
+  padding-top: 28px;
+  padding-bottom: 40px;
+  font-size: 14px;
   color: var(--text-3);
 }
 
-.site-footer a {
-  color: var(--text-2);
+.foot-links {
+  display: flex;
+  gap: 24px;
 }
 
-.site-footer a:hover {
+.foot-links a:hover {
   color: var(--text);
-  text-decoration: none;
 }
 
-/* ---------- Responsive ---------- */
+/* ---------- Motion (only when the visitor allows it) ---------- */
 
-@media (max-width: 900px) and (min-width: 761px) {
-  .pair {
+@media (prefers-reduced-motion: no-preference) {
+  .hero-title,
+  .hero-dek,
+  .hero-actions,
+  .hero-shot {
+    animation: rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .hero-dek {
+    animation-delay: 90ms;
+  }
+
+  .hero-actions {
+    animation-delay: 170ms;
+  }
+
+  .hero-shot {
+    animation-delay: 260ms;
+    animation-duration: 1200ms;
+  }
+
+  [data-reveal] {
+    transition: opacity 800ms cubic-bezier(0.16, 1, 0.3, 1), transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-reveal="hidden"] {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  [data-reveal="shown"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .nav {
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 860px) {
+  .nav-links {
+    display: none;
+  }
+
+  .nav-in {
+    justify-content: space-between;
+  }
+
+  .sites {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 40px 20px;
+    margin-top: 48px;
+  }
+
+  .formats {
     grid-template-columns: 1fr;
   }
 
-  .site-row {
-    grid-template-columns: 130px 1fr;
+  .numbers {
+    grid-template-columns: 1fr;
+    gap: 56px;
   }
 
-  .site-note {
-    grid-column: 2;
+  .bento {
+    grid-template-columns: 1fr;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  .tile-browser,
+  .tile-spotify,
+  .tile-ai,
+  .tile-fresh {
+    grid-column: auto;
+    min-height: 0;
+  }
+
+  .get {
+    grid-template-columns: 1fr;
+  }
+
+  .get-card {
+    padding: 28px;
+  }
+
+  .tile {
+    padding: 26px;
   }
 }

@@ -1,34 +1,34 @@
 import type {Metadata} from "next";
-import {IBM_Plex_Mono, Inter} from "next/font/google";
+import {Geist, Geist_Mono} from "next/font/google";
 import {SITE_URL} from "@/lib/site";
 import "./globals.css";
 
-// Inter for the interface and IBM Plex Mono for figures — the same pairing
-// the app itself ships, so the page and the product read as one thing.
-const inter = Inter({
-    variable: "--font-inter",
+// Geist for the page and Geist Mono for figures. The app's own screenshots
+// carry the product's typography; the page around them stays out of the way.
+const geist = Geist({
+    variable: "--font-geist",
     subsets: ["latin"],
     weight: ["400", "500", "600"],
 });
 
-const plexMono = IBM_Plex_Mono({
-    variable: "--font-plex-mono",
+const geistMono = Geist_Mono({
+    variable: "--font-geist-mono",
     subsets: ["latin"],
-    weight: ["400", "500", "600", "700"],
+    weight: ["400", "500"],
 });
 
 // YouTube stays first in both: it is the highest-volume term by a wide margin
 // and the page's existing ranking rests on it. The other sites are additions,
 // not a replacement.
-const TITLE = "yt2mp — YouTube, TikTok & Instagram to MP3/MP4 Downloader";
+const TITLE = "yt2mp - YouTube, TikTok & Instagram to MP3/MP4 Downloader and Converter";
 const DESCRIPTION =
-    "Free, open-source desktop app that downloads YouTube, TikTok, Instagram, X and Twitch video as MP3 or MP4. Runs locally on your own machine — no server, no account, no ads, no upload. Windows and Linux. GPL-3.0.";
+    "Free, open-source desktop app that downloads YouTube, Spotify, TikTok, Instagram, X and Twitch as MP3 or MP4, then converts files to 34 formats. Runs on your own machine: no account, no ads, no upload. Windows and Linux. GPL-3.0.";
 
 export const metadata: Metadata = {
     metadataBase: new URL(SITE_URL),
     title: {
         default: TITLE,
-        template: "%s — yt2mp",
+        template: "%s - yt2mp",
     },
     description: DESCRIPTION,
     applicationName: "yt2mp",
@@ -38,10 +38,12 @@ export const metadata: Metadata = {
         "YouTube downloader",
         "YouTube MP3 converter",
         "download YouTube video",
+        "Spotify playlist downloader",
         "TikTok video downloader",
         "Instagram reel downloader",
         "Twitch VOD downloader",
         "X video downloader",
+        "video converter",
         "Windows YouTube downloader",
         "offline YouTube downloader",
         "open source YouTube downloader",
@@ -73,7 +75,7 @@ export const metadata: Metadata = {
                 url: "/og.png",
                 width: 1200,
                 height: 630,
-                alt: "yt2mp — download YouTube, TikTok and Instagram video as MP3 or MP4",
+                alt: "yt2mp: download YouTube, TikTok and Instagram video as MP3 or MP4, and convert files",
             },
         ],
     },
@@ -105,7 +107,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+        <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
             <body>{children}</body>
         </html>
     );

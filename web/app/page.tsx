@@ -1,10 +1,11 @@
 import Image from "next/image";
 import CopyCommand from "@/components/CopyCommand";
+import Reveal from "@/components/Reveal";
 import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
 // rich result, plus an FAQPage built from the questions the page already
-// answers — both feed Google rich results and AI Overviews.
+// answers. Both feed Google rich results and AI Overviews.
 const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -17,7 +18,7 @@ const jsonLd = {
             softwareRequirements: "Windows 10/11 (x64) or a Linux x64 distribution",
             ...(INSTALLER_SIZE ? {fileSize: INSTALLER_SIZE} : {}),
             inLanguage: "en",
-            description: "Free, open-source desktop app that downloads video and audio from YouTube, TikTok, Instagram, X and Twitch as MP3 or MP4. Runs locally — no server, no account, no ads.",
+            description: "Free, open-source desktop app that downloads video and audio from YouTube, Spotify, TikTok, Instagram, X and Twitch as MP3 or MP4, and converts files to 34 formats. Runs locally with no server, no account and no ads.",
             url: SITE_URL,
             downloadUrl: GITHUB_URL,
             installUrl: GITHUB_URL,
@@ -44,7 +45,7 @@ const jsonLd = {
                     name: "Does yt2mp work offline or send my data anywhere?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "Downloads run entirely on your own machine and talk only to the site you are downloading from — there is no server component. The optional AI search feature is the one exception: it sends your search text to Groq's API to turn it into a search query.",
+                        text: "Downloads and conversions run entirely on your own machine and talk only to the site you are downloading from. There is no server component. The optional AI search feature is the one exception: it sends your search text to an AI service to turn it into a search query.",
                     },
                 },
                 {
@@ -52,15 +53,15 @@ const jsonLd = {
                     name: "Which sites does yt2mp support?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "YouTube, TikTok, Instagram, X (Twitter) and Twitch each have their own tab, an 'Any link' tab accepts anything else yt-dlp supports — roughly 1750 sites — and an AI search tab finds a video on YouTube from a description instead of a link. Instagram and TikTok hide most posts from logged-out visitors, so yt2mp can borrow the login from a browser you are already signed into.",
+                        text: "YouTube, Spotify (songs and playlists are matched on YouTube Music), TikTok, Instagram, X (Twitter) and Twitch each have their own tab. A Link tab accepts anything else yt-dlp supports, roughly 1750 sites, and an AI search tab finds a video on YouTube from a description. Instagram and TikTok hide most posts from logged-out visitors, so yt2mp can borrow the login from a browser you are already signed into.",
                     },
                 },
                 {
                     "@type": "Question",
-                    name: "What formats can yt2mp download?",
+                    name: "What can yt2mp convert?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "MP3 (best available audio re-encoded at 192 kbps) and MP4 (best available video, with a quality picker for the resolutions the source offers). It also supports playlists, and downloads over 1 GB can be paused and resumed.",
+                        text: "Videos, songs and pictures you already have, in 34 formats: MP4, MKV, WebM, MOV and more for video, MP3, M4A, FLAC, WAV and more for audio, and PNG, JPG, WebP, AVIF and more for pictures. Many files can be queued at once, and quality, size, trimming and sound options are available.",
                     },
                 },
                 {
@@ -80,16 +81,17 @@ function LinuxIcon() {
     return (
         <svg viewBox="0 0 24 24" width="15" height="18" aria-hidden="true">
             <path
-                fill="#000"
+                fill="currentColor"
                 d="M12.005 0C9.27 0 8.165 2.527 8.165 4.5c0 1.34.34 2.06.34 3.4 0 .9-.74 1.62-1.49 2.85-.86 1.4-1.83 3.02-1.83 5.02 0 .77.2 1.45.2 2.05 0 .67-.5 1.07-.95 1.6-.5.6-.98 1.2-.98 2.06 0 1.18 1.07 1.74 2.4 2.02 1.2.25 2.6.5 3.86.5h4.55c1.27 0 2.66-.25 3.86-.5 1.33-.28 2.4-.84 2.4-2.02 0-.86-.48-1.46-.98-2.06-.45-.53-.95-.93-.95-1.6 0-.6.2-1.28.2-2.05 0-2-.97-3.62-1.83-5.02-.75-1.23-1.49-1.95-1.49-2.85 0-1.34.34-2.06.34-3.4C15.845 2.527 14.74 0 12.005 0z"
             />
-            <ellipse cx="9.6" cy="6.5" rx="1.5" ry="1.9" fill="#fff" />
-            <ellipse cx="14.4" cy="6.5" rx="1.5" ry="1.9" fill="#fff" />
-            <circle cx="9.9" cy="6.8" r="0.85" fill="#000" />
-            <circle cx="14.1" cy="6.8" r="0.85" fill="#000" />
-            <path fill="#f4b400" d="M12 7.4c-1.1 0-2.5 1.1-2.5 1.9 0 .6 1.3 1.1 2.5 1.1s2.5-.5 2.5-1.1c0-.8-1.4-1.9-2.5-1.9z" />
-            <path fill="#fff" d="M12 11.2c-2.4 0-4 3.6-4 6.6 0 2.7 1.8 4.4 4 4.4s4-1.7 4-4.4c0-3-1.6-6.6-4-6.6z" />
-            <path fill="#f4b400" d="M6.3 20.6c-.7 1.2-1.9 1.6-1.8 2.4.1.7 1.1.6 1.9.5.8-.1 1.4-.5 1.4-1.1 0-.8-.9-3-1.5-1.8zm11.4 0c.7 1.2 1.9 1.6 1.8 2.4-.1.7-1.1.6-1.9.5-.8-.1-1.4-.5-1.4-1.1 0-.8.9-3 1.5-1.8z" />
+        </svg>
+    );
+}
+
+function WindowsIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 5.5 10.5 4.4v7.1H3V5.5zm8.5-1.2L21 3v8.5h-9.5V4.3zM3 12.5h7.5v7.1L3 18.5v-6zm8.5 0H21V21l-9.5-1.3v-7.2z" />
         </svg>
     );
 }
@@ -102,396 +104,376 @@ function GitHubIcon() {
     );
 }
 
-function DownloadIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3v12" />
-            <path d="m7 11 5 5 5-5" />
-            <path d="M4 20h16" />
-        </svg>
-    );
-}
-
-// The seven tabs, in the order the app shows them. Icons are the same
-// silhouettes the app draws, so the page and the product agree.
+// The tabs the app shows down its left side, with the same silhouettes the
+// app draws, so the page and the product agree.
 const SITE_ROWS = [
     {
         id: "youtube",
         name: "YouTube",
-        what: "Videos, Shorts and full playlists",
-        note: "",
+        note: "Videos, Shorts, playlists",
         path: "M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z",
+    },
+    {
+        id: "spotify",
+        name: "Spotify",
+        note: "Songs and playlists",
+        path: "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z",
     },
     {
         id: "tiktok",
         name: "TikTok",
-        what: "Posts, photo carousels and sounds",
-        note: "broken upstream",
-        warn: true,
+        note: "Posts and photo carousels",
         path: "M16.6 5.8a4.8 4.8 0 0 1-1-2.8h-3.3v13.2a2.9 2.9 0 1 1-2-2.8v-3.3a6.2 6.2 0 1 0 5.3 6.1V9.4a8 8 0 0 0 4.7 1.5V7.6a4.8 4.8 0 0 1-3.7-1.8z",
     },
     {
         id: "instagram",
         name: "Instagram",
-        what: "Reels, posts and IGTV",
-        note: "sign-in needed",
+        note: "Reels, posts and IGTV",
         path: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4 1.3-.1 1.7-.1 4.8-.1zm0 3.1a6.7 6.7 0 1 0 0 13.4 6.7 6.7 0 0 0 0-13.4zm0 11a4.3 4.3 0 1 1 0-8.6 4.3 4.3 0 0 1 0 8.6zm6.9-11.3a1.6 1.6 0 1 1-3.1 0 1.6 1.6 0 0 1 3.1 0z",
     },
     {
         id: "twitter",
         name: "X",
-        what: "Video from any public post",
-        note: "",
+        note: "Video from any public post",
         path: "M18.2 2.3h3.4l-7.4 8.5 8.7 11.5h-6.8l-5.3-7-6.1 7H1.3l7.9-9.1L.9 2.3h7l4.8 6.4 5.5-6.4zm-1.2 18h1.9L7.1 4.2H5.1L17 20.3z",
     },
     {
         id: "twitch",
         name: "Twitch",
-        what: "Clips, VODs and highlights",
-        note: "",
+        note: "Clips, VODs, highlights",
         path: "M4.3 1.7 1.7 6v14.6h5V24h2.8l2.9-3.4h4.3l5.4-5.4V1.7H4.3zm15.9 12.2-3.1 3.1h-4.9l-2.7 2.7v-2.7H5.3V3.6h14.9v10.3zm-4.1-6.7v5.4h-2V7.2h2zm-5.4 0v5.4h-2V7.2h2z",
     },
     {
         id: "other",
         name: "Any link",
-        what: "The catch-all tab for everything else",
-        note: "~1,750 sites",
+        note: "About 1,750 more sites",
         path: "M10.6 13.4a1 1 0 0 1 0-1.4l1.4-1.4a1 1 0 0 1 1.4 1.4l-1.4 1.4a1 1 0 0 1-1.4 0zm-2.8 5.7a4 4 0 0 1 0-5.7l2.8-2.8 1.4 1.4-2.8 2.9a2 2 0 0 0 2.8 2.8l2.9-2.8 1.4 1.4-2.8 2.8a4 4 0 0 1-5.7 0zm8.5-8.5-1.4-1.4 2.8-2.9a2 2 0 0 0-2.8-2.8l-2.9 2.8-1.4-1.4 2.8-2.8a4 4 0 0 1 5.7 5.7l-2.8 2.8z",
     },
     {
         id: "ai",
         name: "AI search",
-        what: "Describe a video instead of finding its link",
-        note: "YouTube only",
+        note: "Describe it, find it",
         path: "M12 2l2.2 6.1L20.4 10l-6.2 2.2L12 18.4 9.8 12.2 3.6 10l6.2-1.9L12 2zm6.6 12.2l1 2.7 2.8 1-2.8 1-1 2.8-1-2.8-2.7-1 2.7-1 1-2.7z",
     },
 ];
+
+const FORMATS = {
+    Video: ["MP4", "MKV", "WebM", "MOV", "AVI", "TS", "MPEG", "WMV", "FLV", "3GP", "OGV"],
+    Audio: ["MP3", "M4A", "WAV", "FLAC", "ALAC", "Opus", "OGG", "AAC", "WMA", "AIFF", "AC3", "MP2", "AMR"],
+    Picture: ["PNG", "JPG", "WebP", "AVIF", "BMP", "TIFF", "ICO"],
+    Animation: ["GIF", "Animated WebP", "APNG"],
+};
 
 export default function Home() {
     return (
         <div className="page">
             <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(jsonLd)}} />
 
-            <div className="mobile-block">
-                <div className="mobile-block-inner">
-                    <Image src="/icon.png" alt="" width={44} height={44} />
-                    <p className="mobile-block-title">yt2mp is a desktop app</p>
-                    <p className="mobile-block-text">
-                        It installs and runs on a Windows 10/11 or Linux desktop — there&apos;s nothing to open here on a phone. Open this page on your computer when you&apos;re ready to install it,
-                        or read the source below.
-                    </p>
-                    <a className="mobile-block-link" href={REPO_URL}>
-                        View the repository on GitHub →
+            <header className="nav">
+                <div className="nav-in">
+                    <a className="nav-id" href="#top" aria-label="yt2mp, back to the top">
+                        <Image src="/icon.png" alt="" width={24} height={24} />
+                        <span>yt2mp</span>
+                    </a>
+                    <nav className="nav-links" aria-label="Page">
+                        <a href="#sites">Sites</a>
+                        <a href="#convert">Convert</a>
+                        <a href="#more">More</a>
+                        <a href={REPO_URL} target="_blank" rel="noreferrer">
+                            Source
+                        </a>
+                    </nav>
+                    <a className="btn btn-solid btn-small" href="#download">
+                        Download
                     </a>
                 </div>
-            </div>
+            </header>
 
-            <div className="desktop-only">
-                <header className="wrap">
-                    <div className="topbar">
-                        <div className="topbar-id">
-                            <Image src="/icon.png" alt="" width={22} height={22} />
-                            <span className="topbar-name">yt2mp</span>
-                            <span className="topbar-version">v{VERSION}</span>
-                        </div>
-                        <nav className="topbar-links">
-                            <a href={REPO_URL} target="_blank" rel="noreferrer">
-                                source
-                            </a>
-                            <a href={ISSUES_URL} target="_blank" rel="noreferrer">
-                                issues
-                            </a>
-                            <a href={LICENSE_URL} target="_blank" rel="noreferrer">
-                                license
-                            </a>
-                        </nav>
+            <main id="top">
+                <section className="hero wrap">
+                    <h1 className="hero-title">
+                        Paste a link.
+                        <br />
+                        <span className="dim">Keep the file.</span>
+                    </h1>
+                    <p className="hero-dek">Download from YouTube, Spotify, TikTok, Instagram, X and Twitch, then convert to 34 formats. Free, on your own PC.</p>
+                    <div className="hero-actions">
+                        <a className="btn btn-solid" href="#download">
+                            Download
+                        </a>
+                        <a className="btn btn-quiet" href={REPO_URL} target="_blank" rel="noreferrer">
+                            <GitHubIcon />
+                            Source on GitHub
+                        </a>
                     </div>
-                </header>
 
-                <main>
-                    <section className="wrap hero">
-                        <h1 className="hero-title">
-                            Paste a link.
-                            <br />
-                            Get <span className="hero-em">MP3</span> or <span className="hero-em">MP4</span>.
-                        </h1>
-                        <p className="hero-dek">
-                            A desktop downloader for YouTube, TikTok, Instagram, X and Twitch. It runs on your own machine — no account, no upload, no ads, and nothing to configure.
-                        </p>
-
-                        <div className="hero-actions">
-                            <a className="btn btn-primary" href={GITHUB_URL}>
-                                <DownloadIcon />
-                                Download for Windows
-                            </a>
-                            <a className="btn btn-ghost" href={LINUX_URL}>
-                                <LinuxIcon />
-                                Linux AppImage
-                            </a>
-                            <a className="btn btn-ghost" href={REPO_URL} target="_blank" rel="noreferrer">
-                                <GitHubIcon />
-                                Source
-                            </a>
+                    <div className="hero-shot">
+                        <div className="window">
+                            <Image
+                                src="/shots/app-youtube.webp"
+                                alt="The yt2mp window with a YouTube video fetched: the MP3 option at 9.8 MB and video qualities from 2160p at 1.3 GB down to 720p, each with its size"
+                                width={2250}
+                                height={1900}
+                                sizes="(max-width: 1100px) 100vw, 1000px"
+                                priority
+                            />
                         </div>
+                    </div>
+                </section>
 
-                        <p className="hero-meta">
-                            <span>{INSTALLER_NAME}</span>
-                            {INSTALLER_SIZE ? (
-                                <>
-                                    <span className="dot">·</span>
-                                    <span>{INSTALLER_SIZE}</span>
-                                </>
-                            ) : null}
-                            <span className="dot">·</span>
-                            <span>Windows 10/11</span>
-                            <span className="dot">·</span>
-                            <span>GPL-3.0</span>
-                        </p>
-
-                        {/* Both themes, side by side and at a size that keeps
-                            the whole result card legible without letting one
-                            screenshot own the fold. */}
-                        <div className="shots">
-                            <figure className="shot">
-                                <Image
-                                    src="/shots/app-dark.png"
-                                    alt="The yt2mp window in dark theme with a YouTube video fetched, showing the MP3 button and video qualities from 2160p to 720p with their file sizes"
-                                    width={900}
-                                    height={1076}
-                                    sizes="(max-width: 900px) 100vw, 430px"
-                                    priority
-                                />
-                            </figure>
-                            <figure className="shot">
-                                <Image
-                                    src="/shots/app-light.png"
-                                    alt="The same window in light theme, showing the identical layout on a light background"
-                                    width={900}
-                                    height={1076}
-                                    sizes="(max-width: 900px) 100vw, 430px"
-                                />
-                            </figure>
-                        </div>
-                        <p className="shot-caption">The same screen in both themes. Dark by default; light is one click away.</p>
-                    </section>
-
-                    <section className="wrap band">
-                        <h2 className="band-title">A tab per site</h2>
-                        <p className="band-dek">
-                            Each site sits in the rail down the left, with the link format it expects, so you always know what the app is about to do. Sites that are having trouble are marked before you paste anything.
-                        </p>
-
-                        <div className="sites">
+                <section id="sites" className="band wrap">
+                    <Reveal>
+                        <h2 className="band-title">
+                            One window for <span className="dim">every site you save from.</span>
+                        </h2>
+                    </Reveal>
+                    <Reveal delay={80}>
+                        <ul className="sites">
                             {SITE_ROWS.map((s) => (
-                                <div className="site-row" key={s.id}>
-                                    <span className={`site-name site-${s.id}`}>
-                                        <span className="site-icon">
-                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                                                <path d={s.path} />
-                                            </svg>
-                                        </span>
-                                        {s.name}
-                                    </span>
-                                    <span className="site-what">{s.what}</span>
-                                    <span className={`site-note${s.warn ? " site-note-warn" : ""}`}>{s.note}</span>
+                                <li className="site" key={s.id}>
+                                    <svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true">
+                                        <path d={s.path} />
+                                    </svg>
+                                    <span className="site-name">{s.name}</span>
+                                    <span className="site-note">{s.note}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Reveal>
+                    <Reveal delay={120}>
+                        <p className="band-dek">
+                            Each site has its own tab, so you always know what the app is about to do. Every quality shows its exact size before you pick one, so a 4K download never surprises you.
+                        </p>
+                    </Reveal>
+                </section>
+
+                <section id="convert" className="band wrap">
+                    <Reveal>
+                        <h2 className="band-title">
+                            Then turn it into <span className="dim">anything else.</span>
+                        </h2>
+                        <p className="band-dek">
+                            Drop in videos, songs or pictures from anywhere and pick what they should become. A whole folder converts in one go, and every file keeps its own format choice.
+                        </p>
+                    </Reveal>
+                    <Reveal delay={80} className="convert-shot">
+                        <div className="window">
+                            <Image
+                                src="/shots/app-convert.webp"
+                                alt="The Convert tab after three files were converted: an MKV, an M4A and a JPG, each ready to download"
+                                width={2250}
+                                height={1000}
+                                sizes="(max-width: 1100px) 100vw, 1000px"
+                            />
+                        </div>
+                    </Reveal>
+                    <Reveal delay={120}>
+                        <div className="formats" aria-label="Formats yt2mp converts to">
+                            {Object.entries(FORMATS).map(([group, list]) => (
+                                <div className="format-group" key={group}>
+                                    <span className="format-title">{group}</span>
+                                    <span className="format-list">{list.join("  ")}</span>
                                 </div>
                             ))}
                         </div>
-                    </section>
+                    </Reveal>
+                </section>
 
-                    <section className="wrap band">
-                        <h2 className="band-title">Pick the file you actually want</h2>
-                        <p className="band-dek">
-                            The quality list shows the exact size of every option before you commit to one, so a 4K download never surprises you. Large downloads can be paused and resumed.
+                <section className="band wrap numbers" aria-label="In numbers">
+                    <Reveal className="number">
+                        <span className="number-big">34</span>
+                        <span className="number-what">formats to convert to</span>
+                    </Reveal>
+                    <Reveal delay={80} className="number">
+                        <span className="number-big">1,750</span>
+                        <span className="number-what">sites it can read</span>
+                    </Reveal>
+                    <Reveal delay={160} className="number">
+                        <span className="number-big">0</span>
+                        <span className="number-what">accounts, ads or uploads</span>
+                    </Reveal>
+                </section>
+
+                <section id="more" className="band wrap">
+                    <Reveal>
+                        <h2 className="band-title">
+                            And a few things <span className="dim">you did not expect.</span>
+                        </h2>
+                    </Reveal>
+                    <div className="bento">
+                        <Reveal className="tile tile-browser">
+                            <h3 className="tile-title">A browser built in</h3>
+                            <p className="tile-text">
+                                Tabs, history and a saved sign-in, right in the title bar. Browse YouTube or TikTok inside the app, press Download on the page you like, and the link lands in the right tab.
+                            </p>
+                            <div className="tile-icons" aria-hidden="true">
+                                {[0, 2, 3, 4, 5].map((i) => (
+                                    <svg key={i} viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                                        <path d={SITE_ROWS[i].path} />
+                                    </svg>
+                                ))}
+                            </div>
+                            <p className="tile-note">Windows only for now</p>
+                        </Reveal>
+                        <Reveal delay={80} className="tile tile-spotify">
+                            <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true">
+                                <path d={SITE_ROWS[1].path} />
+                            </svg>
+                            <h3 className="tile-title">Spotify, matched</h3>
+                            <p className="tile-text">Paste a song or a whole playlist. Each track is found on YouTube Music and saved as MP3.</p>
+                        </Reveal>
+                        <Reveal delay={80} className="tile tile-ai">
+                            <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true">
+                                <path d={SITE_ROWS[7].path} />
+                            </svg>
+                            <h3 className="tile-title">Describe it, find it</h3>
+                            <p className="tile-text">Forgot the title? Write what you remember and it finds the video on YouTube.</p>
+                        </Reveal>
+                        <Reveal delay={160} className="tile tile-fresh">
+                            <h3 className="tile-title">It repairs itself</h3>
+                            <p className="tile-text">
+                                Sites change and break downloaders all the time. yt2mp updates itself, and can update the part that reads the sites on its own, so a site that stopped working usually starts again without waiting for a new release.
+                            </p>
+                        </Reveal>
+                    </div>
+                </section>
+
+                <section className="band wrap private">
+                    <Reveal>
+                        <p className="private-text">
+                            It runs on your computer. <span className="dim">Nothing is uploaded, nothing is tracked, and there is no account to make. Downloads go straight from the site to your disk.</span>
                         </p>
-                        <div className="shot shot-inline">
-                            <Image
-                                src="/shots/app-formats.png"
-                                alt="The format list: MP3 at 3.3 MB, then video options from 2160p at 345.3 MB down to 720p at 25.2 MB, each with its size"
-                                width={1508}
-                                height={572}
-                                sizes="(max-width: 760px) 100vw, 720px"
-                            />
-                        </div>
-                    </section>
+                    </Reveal>
+                </section>
 
-                    <section className="wrap band">
-                        <h2 className="band-title">It keeps itself current</h2>
-                        <p className="band-dek">
-                            Sites change and break downloaders constantly. yt2mp updates itself, and can update the part that reads the sites on its own — so a site that stopped working usually starts again without waiting for a new release. Both check before they download anything.
-                        </p>
-                        <div className="shot shot-inline">
-                            <Image
-                                src="/shots/app-settings.png"
-                                alt="The settings window: a sidebar with General, Updates and Accounts, showing yt2mp at version 0.7.4 and yt-dlp at 2026.07.04, each with its own Check button"
-                                width={1240}
-                                height={780}
-                                sizes="(max-width: 760px) 100vw, 620px"
-                            />
-                        </div>
-                    </section>
-
-                    <section className="wrap band">
-                        <h2 className="band-title">The details</h2>
-
-                        <div className="pair">
-                            <div className="card">
-                                <h3 className="card-title">Why it runs on your machine</h3>
-                                <p className="card-text">
-                                    This used to be a web app. Two things broke under real use: YouTube blocks downloads from shared cloud IP ranges, and a free 512&nbsp;MB instance gets OOM-killed the
-                                    moment two people download at once.
-                                </p>
-                                <p className="card-text">
-                                    Both problems belong to the server, so the server is gone. Downloads now run from your own connection — which also lets sites that need a login use the browser
-                                    session you already have.
-                                </p>
+                <section id="download" className="band wrap">
+                    <Reveal>
+                        <h2 className="band-title">
+                            Get yt2mp. <span className="dim">It is free.</span>
+                        </h2>
+                    </Reveal>
+                    <div className="get">
+                        <Reveal className="get-card">
+                            <div className="get-head">
+                                <WindowsIcon />
+                                <h3 className="get-title">Windows</h3>
                             </div>
-
-                            <div className="card">
-                                <h3 className="card-title">Signing in to Instagram and TikTok</h3>
-                                <p className="card-text">
-                                    Both hide most posts from logged-out visitors. yt2mp never asks for your password — it borrows the session from a browser you are already signed into. Press one
-                                    button and it tries each installed browser, then keeps the one that works.
-                                </p>
-                                <p className="card-text">
-                                    Firefox, Chrome, Edge, Brave, Opera, Vivaldi and the forks (Zen, LibreWolf, Waterfox, Floorp, Opera&nbsp;GX, Arc) are recognised. A session is only ever sent to the
-                                    site it came from.
-                                </p>
+                            <p className="get-text">Windows 10 and 11, 64-bit. One installer with everything inside, no setup step and nothing to fetch on first launch.</p>
+                            <a className="btn btn-solid" href={GITHUB_URL}>
+                                Download for Windows
+                            </a>
+                            <p className="get-meta">
+                                {INSTALLER_NAME}
+                                {INSTALLER_SIZE ? ` (${INSTALLER_SIZE})` : ""}
+                            </p>
+                        </Reveal>
+                        <Reveal delay={80} className="get-card">
+                            <div className="get-head">
+                                <LinuxIcon />
+                                <h3 className="get-title">Linux</h3>
                             </div>
-
-                            <div className="card">
-                                <h3 className="card-title">Everything in one installer</h3>
-                                <p className="card-text">
-                                    Install it and it works — there is no setup step, no second download, and no internet needed the first time you open it. The tools that do the actual work — ffmpeg,
-                                    yt-dlp and a small JavaScript runtime — are already inside, which is most of the {INSTALLER_SIZE}.
-                                </p>
-                                <div className="sizebar">
-                                    <div className="seg seg-app" style={{flexGrow: 5}}>
-                                        app
-                                    </div>
-                                    <div className="seg seg-ffmpeg" style={{flexGrow: 98}}>
-                                        ffmpeg
-                                    </div>
-                                    <div className="seg seg-ytdlp" style={{flexGrow: 17}}>
-                                        yt-dlp
-                                    </div>
-                                    <div className="seg seg-quickjs" style={{flexGrow: 2}} />
-                                </div>
-                                <div className="sizekey">
-                                    <span className="sizekey-item">
-                                        <span className="swatch seg-app" />
-                                        app 5 MB
-                                    </span>
-                                    <span className="sizekey-item">
-                                        <span className="swatch seg-ffmpeg" />
-                                        ffmpeg 98 MB
-                                    </span>
-                                    <span className="sizekey-item">
-                                        <span className="swatch seg-ytdlp" />
-                                        yt-dlp 17 MB
-                                    </span>
-                                    <span className="sizekey-item">
-                                        <span className="swatch seg-quickjs" />
-                                        QuickJS 2 MB
-                                    </span>
-                                </div>
-                                <p className="card-text">
-                                    That is 123&nbsp;MB installed, compressed to a {INSTALLER_SIZE} download. ffmpeg is most of it, and it is the part that turns a video into an MP3.
-                                </p>
-                                <p className="card-text">
-                                    It still draws its window with the WebView already in your OS rather than carrying a second copy of Chromium, so it stays well under the old Electron build&apos;s
-                                    ~215&nbsp;MB. And yt-dlp can be updated on its own from inside the app — which is how a site that suddenly stops working starts working again, without waiting for
-                                    a new release.
-                                </p>
+                            <p className="get-text">A portable AppImage, 64-bit. Download it, mark it executable, run it. Nothing to install.</p>
+                            <a className="btn btn-outline" href={LINUX_URL}>
+                                Download the AppImage
+                            </a>
+                            <div className="cmd-list">
+                                <CopyCommand command={`chmod +x ${APPIMAGE_NAME}`} />
+                                <CopyCommand command={`./${APPIMAGE_NAME}`} />
                             </div>
+                        </Reveal>
+                    </div>
+                    <p className="get-foot">
+                        Version {VERSION}. GPL-3.0, <a href={REPO_URL}>read every line of it</a>.
+                    </p>
+                </section>
 
-                            <div className="card">
-                                <h3 className="card-title">Updates and signing</h3>
-                                <p className="card-text">
-                                    yt2mp checks for a new version when it starts and tells you if one exists. It never installs anything without asking, and it will not interrupt a download that is
-                                    already running. Every update is cryptographically signed — the app refuses anything that does not carry a valid signature.
-                                </p>
-                                <p className="card-text">
-                                    The installer itself is unsigned, so Windows SmartScreen warns the first time you run it. That is a missing code-signing certificate, not a detected threat.
-                                    {INSTALLER_SHA256 ? (
-                                        <>
-                                            {" "}
-                                            To check the file you downloaded, run <code className="inline-code">Get-FileHash {INSTALLER_NAME}</code> and compare it with the hash below.
-                                        </>
-                                    ) : null}
+                <section className="band wrap">
+                    <Reveal>
+                        <h2 className="band-title band-title-small">The small print</h2>
+                    </Reveal>
+                    <Reveal delay={60} className="details">
+                        <details>
+                            <summary>Why Windows warns you on the first run</summary>
+                            <div className="detail-body">
+                                <p>
+                                    The installer is not signed with a paid code-signing certificate, so Windows SmartScreen shows a warning the first time. That is a missing certificate, not a detected threat.
+                                    Updates inside the app are different: every one is cryptographically signed, and the app refuses anything that is not.
                                 </p>
                                 {INSTALLER_SHA256 ? (
-                                    <div className="hash">
-                                        <span className="hash-label">sha256</span>
-                                        <code className="hash-value">{INSTALLER_SHA256}</code>
-                                    </div>
+                                    <p>
+                                        To check the file you downloaded, run <code className="inline-code">Get-FileHash {INSTALLER_NAME}</code> and compare it with this hash:
+                                        <code className="hash">{INSTALLER_SHA256}</code>
+                                    </p>
                                 ) : null}
-                                <table className="spec">
-                                    <tbody>
-                                        <tr>
-                                            <th scope="row">Platform</th>
-                                            <td>Windows 10/11 (x64) · Linux x64</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">Built with</th>
-                                            <td>Rust and Tauri</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">Dependencies</th>
-                                            <td>none — all included</td>
-                                        </tr>
-                                        <tr>
-                                            <th scope="row">Network</th>
-                                            <td>only the site you download from</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
-
-                            <div className="card card-wide">
-                                <h3 className="card-title">Running it on Linux</h3>
-                                <p className="card-text">
-                                    The Linux build is a portable AppImage — nothing to install. Download it, mark it executable, run it. yt-dlp and ffmpeg are inside it, same as on Windows.
+                        </details>
+                        <details>
+                            <summary>Signing in to Instagram and TikTok</summary>
+                            <div className="detail-body">
+                                <p>
+                                    Both sites hide most posts from logged-out visitors. yt2mp never asks for your password. It borrows the session from a browser you are already signed into: press one button
+                                    and it tries each installed browser, then keeps the one that works.
                                 </p>
-                                <div className="cmd-list">
-                                    <CopyCommand command={`chmod +x ${APPIMAGE_NAME}`} />
-                                    <CopyCommand command={`./${APPIMAGE_NAME}`} />
-                                </div>
-                                <p className="card-text">
-                                    If it won&apos;t start, your distro may be missing FUSE — install it (<code className="inline-code">sudo apt install libfuse2</code>) or run with{" "}
-                                    <code className="inline-code">--appimage-extract-and-run</code>. Built and tested on x64.
+                                <p>
+                                    Firefox, Chrome, Edge, Brave, Opera, Vivaldi and the forks (Zen, LibreWolf, Waterfox, Floorp, Opera GX, Arc) are recognised. A session is only ever sent to the site it came from.
                                 </p>
                             </div>
-
-                            <div className="card card-wide">
-                                <h3 className="card-title">Before you download</h3>
-                                <p className="card-text">
-                                    Free software, provided as-is, no warranty. You are responsible for what you download with it — keep it to content you have the right to save: your own uploads,
-                                    public domain, Creative Commons, or anything else you are permitted to keep. Downloading from YouTube may go against{" "}
+                        </details>
+                        <details>
+                            <summary>What is inside the installer</summary>
+                            <div className="detail-body">
+                                <p>
+                                    The tools that do the real work are already in the box: ffmpeg (about 98 MB), yt-dlp (17 MB) and a small JavaScript runtime (2 MB), around the app itself (5 MB). That is why
+                                    it works offline from the first launch.
+                                </p>
+                                <p>
+                                    It draws its window with the WebView your system already has, instead of carrying a second copy of Chromium, so it stays far smaller than the Electron build it replaced.
+                                </p>
+                            </div>
+                        </details>
+                        <details>
+                            <summary>Why it is an app and not a website</summary>
+                            <div className="detail-body">
+                                <p>
+                                    This used to be a web app. Two things broke under real use: YouTube blocks downloads from shared cloud IP ranges, and a small free server runs out of memory the moment two
+                                    people download at once. Both problems belong to the server, so the server is gone. Downloads now run from your own connection, which also lets sites that need a login use the
+                                    browser session you already have.
+                                </p>
+                            </div>
+                        </details>
+                        <details>
+                            <summary>Before you download</summary>
+                            <div className="detail-body">
+                                <p>
+                                    Free software, provided as is, no warranty. You are responsible for what you download with it. Keep it to content you have the right to save: your own uploads, public
+                                    domain, Creative Commons, or anything else you are permitted to keep. Downloading from YouTube may go against{" "}
                                     <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">
                                         its Terms of Service
                                     </a>
                                     . This project is not built for copyright infringement, and the authors are not liable for how it is used.
                                 </p>
                             </div>
-                        </div>
-                    </section>
-                </main>
+                        </details>
+                    </Reveal>
+                </section>
+            </main>
 
-                <footer className="wrap">
-                    <div className="site-footer">
-                        <span>yt2mp v{VERSION}</span>
-                        <span className="dot">·</span>
+            <footer className="foot">
+                <div className="foot-in wrap">
+                    <span>yt2mp {VERSION}</span>
+                    <nav className="foot-links" aria-label="Project">
                         <a href={LICENSE_URL} target="_blank" rel="noreferrer">
                             GPL-3.0-or-later
                         </a>
-                        <span className="dot">·</span>
                         <a href={REPO_URL} target="_blank" rel="noreferrer">
-                            source
+                            Source
                         </a>
-                    </div>
-                </footer>
-            </div>
+                        <a href={ISSUES_URL} target="_blank" rel="noreferrer">
+                            Issues
+                        </a>
+                    </nav>
+                </div>
+            </footer>
         </div>
     );
 }
