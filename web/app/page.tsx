@@ -211,7 +211,7 @@ export default function Home() {
                         <div className="window">
                             <Image
                                 src="/shots/app-youtube.webp"
-                                alt="The yt2mp window with a YouTube video fetched: the MP3 option at 9.8 MB and video qualities from 2160p at 1.3 GB down to 720p, each with its size"
+                                alt="The yt2mp window with a YouTube video fetched: the MP3 option at 3.3 MB and video qualities from 2160p at 345 MB down to 720p, each with its size"
                                 width={2250}
                                 height={1900}
                                 sizes="(max-width: 1100px) 100vw, 1000px"
