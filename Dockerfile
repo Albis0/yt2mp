@@ -1,15 +1,16 @@
-# Minimal image for the static landing page (Next.js, no yt-dlp/ffmpeg anymore).
-# Render is configured as a Docker service for this repo, so it needs a
-# Dockerfile at the root even though the app is now just a landing page.
+# Minimal image for the landing page (Next.js, in web/; no yt-dlp/ffmpeg).
+# Render is configured as a Docker service for this repo, so the Dockerfile
+# stays at the repo root (moving it would mean changing Render's settings) and
+# copies only web/ into the image.
 FROM oven/bun:1 AS build
 WORKDIR /app
 
 # Install dependencies first for better layer caching.
-COPY package.json bun.lock ./
+COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Build the Next.js app.
-COPY . .
+COPY web/ .
 RUN bun run build
 
 # Render injects $PORT; Next's start server binds to it.

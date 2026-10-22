@@ -17,8 +17,8 @@ What you actually ran or clicked. "Fetched a 4K YouTube video and a 30-item
 playlist on Windows" is worth more than "tested locally".
 -->
 
-- [ ] `cd app-tauri && bun run test:rust` passes
-- [ ] `cd app-tauri && bun run build` passes
+- [ ] `cd app && bun run test:rust` passes
+- [ ] `cd app && bun run build` passes
 - [ ] `bun run build` passes from the repo root (only if the landing page changed)
 - [ ] Tried it in the running app, not only in tests
 

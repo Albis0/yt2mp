@@ -53,7 +53,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: app-tauri
+        working-directory: app
 
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
       # a few minutes; cached runs are much shorter.
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: app-tauri/src-tauri
+          workspaces: app/src-tauri
           key: ${{ matrix.os }}
 
       # Tauri v2 links against WebKitGTK **4.1**, not 4.0: the webkit2gtk
@@ -116,7 +116,7 @@ jobs:
       # So it is recorded here, in the run that built it.
       - name: Record the bundled downloader version
         shell: bash
-        working-directory: app-tauri
+        working-directory: app
         run: |
           YTDLP=$(ls src-tauri/resources/yt-dlp* | head -n1)
           chmod +x "$YTDLP" || true
@@ -150,7 +150,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           WANT="${TAG#v}"
-          GOT=$(node -p "require('./app-tauri/package.json').version")
+          GOT=$(node -p "require('./app/package.json').version")
           if [ "$WANT" != "$GOT" ]; then
             echo "::error::Tag $TAG says $WANT but the app is $GOT."
             echo "::error::Run 'bun scripts/version.mjs $WANT', commit, and move the tag."
@@ -183,7 +183,7 @@ jobs:
             exit 1
           fi
 
-          echo "path=app-tauri/$FILE" >> "$GITHUB_OUTPUT"
+          echo "path=app/$FILE" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$FILE")" >> "$GITHUB_OUTPUT"
           echo "sha256=$(sha256sum "$FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "size=$(du -m "$FILE" | cut -f1)" >> "$GITHUB_OUTPUT"

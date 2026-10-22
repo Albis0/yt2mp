@@ -3,8 +3,8 @@
 // build that no longer exists.
 //
 // `scripts/version.mjs` rewrites this single line and the matching fields in
-// app-tauri/package.json, app-tauri/src-tauri/Cargo.toml and the root
-// package.json together. Do not hand-edit one of them.
+// app/package.json, app/src-tauri/Cargo.toml and web/package.json
+// together. Do not hand-edit one of them.
 export const VERSION = "0.8.1";
 
 export const REPO_URL = "https://github.com/Albis0/yt2mp";

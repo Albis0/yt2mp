@@ -21,12 +21,14 @@ Things unlikely to be accepted:
 
 ## Repository layout
 
-Two independent parts:
+Split by platform:
 
-- **Root** — the Next.js landing page, deployed to Render from the root
-  `Dockerfile`.
-- **`app-tauri/`** — the Tauri desktop app, which does all the actual work.
+- **`web/`** — the Next.js landing page, deployed to Render from the
+  `Dockerfile` at the repo root (it copies only `web/`).
+- **`app/`** — the Tauri desktop app, which does all the actual work.
   A Rust backend in `src-tauri/src/` and a React frontend in `src/`.
+- **`mobile/`** — reserved for a phone app; nothing here yet.
+- **`scripts/`**, **`branding/`** — shared by all of the above.
 
 They share nothing but a version number, kept in step by `scripts/version.mjs`.
 
@@ -39,6 +41,7 @@ for your OS.
 Landing page:
 
 ```bash
+cd web
 bun install
 bun run dev          # http://localhost:3000
 ```
@@ -46,7 +49,7 @@ bun run dev          # http://localhost:3000
 Desktop app:
 
 ```bash
-cd app-tauri
+cd app
 bun install
 bun run fetch:binaries   # downloads yt-dlp, ffmpeg and quickjs into resources/
 bun run tauri:dev
@@ -60,9 +63,9 @@ starts but cannot download anything.
 Run all three. CI runs them too, but finding out locally is faster:
 
 ```bash
-cd app-tauri && bun run test:rust   # 58 tests
-cd app-tauri && bun run build       # tsc --noEmit + vite build
-bun run build                       # the landing page (from the repo root)
+cd app && bun run test:rust   # 58 tests
+cd app && bun run build       # tsc --noEmit + vite build
+cd web && bun run build             # the landing page
 ```
 
 ## What the code expects of you
@@ -75,7 +78,7 @@ bun run build                       # the landing page (from the repo root)
   real coverage of the parts that break in the field — error classification,
   browser detection, format selection. A change to any of those should come
   with a test that would have failed before it.
-- **Never commit secrets.** `app-tauri/src-tauri/.env` holds API keys and is
+- **Never commit secrets.** `app/src-tauri/.env` holds API keys and is
   gitignored. Check `git diff --cached` before committing.
 - **One logical change per PR.** A fix plus an unrelated refactor is two PRs.
 

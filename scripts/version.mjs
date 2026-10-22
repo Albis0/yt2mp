@@ -9,7 +9,7 @@
 // re-offers an update forever or never offers one at all.
 //
 // tauri.conf.json is not in the list below: it reads "../package.json"
-// directly, so the Tauri bundler picks up app-tauri/package.json on its own.
+// directly, so the Tauri bundler picks up app/package.json on its own.
 //
 // RULE: bump the patch digit only. A release is 0.7.1, then 0.7.2 — never
 // 0.8.0, no matter how large the change feels. The project reached 0.7.0 by
@@ -28,12 +28,12 @@ const ROOT = path.join(import.meta.dirname, "..");
 // never rewritten by accident.
 const TARGETS = [
   {
-    file: "app-tauri/package.json",
+    file: "app/package.json",
     find: /("version"\s*:\s*")([^"]+)(")/,
     what: "Tauri app package.json (also feeds tauri.conf.json)",
   },
   {
-    file: "app-tauri/src-tauri/Cargo.toml",
+    file: "app/src-tauri/Cargo.toml",
     // Anchored to the [package] table: `\[package\]` then the first `version =`
     // that follows. Dependency versions live under other tables and are safe.
     find: /(\[package\][\s\S]*?\nversion\s*=\s*")([^"]+)(")/,
@@ -45,7 +45,7 @@ const TARGETS = [
     // stale the commit that bumps everything else still shows a dirty tree
     // afterwards — and it silently drifted to 0.6.4 that way once already.
     // Anchored to this package's own entry so no dependency is touched.
-    file: "app-tauri/src-tauri/Cargo.lock",
+    file: "app/src-tauri/Cargo.lock",
     // `\r?\n`, not `\n`: git checks this file out with CRLF endings on Windows,
     // and a bare `\n` silently stops matching there — the script would report
     // "not found" and refuse the bump on the one platform that builds it.
@@ -53,12 +53,12 @@ const TARGETS = [
     what: "Cargo.lock entry for this crate",
   },
   {
-    file: "package.json",
+    file: "web/package.json",
     find: /("version"\s*:\s*")([^"]+)(")/,
     what: "landing site package.json",
   },
   {
-    file: "lib/site.ts",
+    file: "web/lib/site.ts",
     find: /(export const VERSION\s*=\s*")([^"]+)(")/,
     what: "landing site (everything else on the page derives from this)",
   },

@@ -9,14 +9,14 @@ no ads.
 - Pause, resume, or stop any download mid-transfer.
 - No account, no server-side memory limits, no shared IP for YouTube to flag.
 
-This repo has two independent parts:
+This repo is split by platform:
 
-- **Root** (this directory): a small Next.js landing page, deployed to Render. It only
-  describes the project and links to the desktop app download — it does no downloading
-  itself.
-- **`app-tauri/`**: the Tauri desktop app that does the actual work. See
-  [app-tauri/README.md](app-tauri/README.md) for how it's built, what's bundled,
-  and how AI search is configured.
+- **`web/`**: a small Next.js landing page, deployed to Render. It only describes the
+  project and links to the desktop app download — it does no downloading itself.
+- **`app/`**: the Tauri desktop app that does the actual work. See
+  [app/README.md](app/README.md) for how it's built, what's bundled, and how AI
+  search is configured.
+- **`mobile/`**: reserved for a phone app; nothing here yet.
 
 ## Download
 

@@ -1,5 +1,8 @@
 node_modules
 .next
-app-tauri
+app
+mobile
+web/node_modules
+web/.next
 .git
 *.md
