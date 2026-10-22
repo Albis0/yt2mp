@@ -1,6 +1,6 @@
 /// yt2mp's own mark: the "2" of the name turning into an arrow.
 ///
-/// Drawn from branding/yt2mp-dark-small.svg and yt2mp-light-small.svg: the
+/// Drawn from app/branding/yt2mp-dark-small.svg and yt2mp-light-small.svg: the
 /// cut of the mark made for small sizes, where the full-size one's arrow
 /// shrinks to a bar with no head. Here it is always drawn at icon size.
 /// The two files are one design with the ground and the "2" swapped, so this

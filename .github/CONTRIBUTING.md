@@ -27,10 +27,10 @@ Split by platform:
   `Dockerfile` at the repo root (it copies only `web/`).
 - **`app/`** — the Tauri desktop app, which does all the actual work.
   A Rust backend in `src-tauri/src/` and a React frontend in `src/`.
-- **`mobile/`** — reserved for a phone app; nothing here yet.
-- **`scripts/`**, **`branding/`** — shared by all of the above.
+- **`apk/`** — reserved for the Android app; nothing here yet.
+- Shared pieces live inside `app/`: `app/scripts/version.mjs` and `app/branding/`.
 
-They share nothing but a version number, kept in step by `scripts/version.mjs`.
+They share nothing but a version number, kept in step by `app/scripts/version.mjs`.
 
 ## Getting set up
 
@@ -92,7 +92,7 @@ blank line, then as much explanation as the change deserves. Look at
 ## Versions and releases
 
 **Patch bumps only.** A release goes 0.7.1 → 0.7.2, never 0.8.0, regardless of
-how large the change feels. `scripts/version.mjs` enforces this and refuses a
+how large the change feels. `app/scripts/version.mjs` enforces this and refuses a
 minor or major bump unless told explicitly. Only the repo owner decides those.
 
 Contributors do not need to bump anything — releases are cut by the maintainer,

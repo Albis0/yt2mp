@@ -1,7 +1,7 @@
 node_modules
 .next
 app
-mobile
+apk
 web/node_modules
 web/.next
 .git

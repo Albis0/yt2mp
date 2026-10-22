@@ -1,7 +1,7 @@
 // Bumps the version everywhere at once.
 //
-//   bun scripts/version.mjs 0.6.1
-//   bun scripts/version.mjs            # prints what each file currently says
+//   bun app/scripts/version.mjs 0.6.1
+//   bun app/scripts/version.mjs            # prints what each file currently says
 //
 // The version used to live in four files that were edited by hand, and they
 // had already drifted: the site said 0.4.0 while the app said 0.5.0. That is
@@ -20,7 +20,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const ROOT = path.join(import.meta.dirname, "..");
+const ROOT = path.join(import.meta.dirname, "..", "..");
 
 // Each entry names one file, a regex that captures the version, and how to put
 // a new one back. The regexes are deliberately narrow — `[package]` in

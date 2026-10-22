@@ -153,11 +153,11 @@ jobs:
           GOT=$(node -p "require('./app/package.json').version")
           if [ "$WANT" != "$GOT" ]; then
             echo "::error::Tag $TAG says $WANT but the app is $GOT."
-            echo "::error::Run 'bun scripts/version.mjs $WANT', commit, and move the tag."
+            echo "::error::Run 'bun app/scripts/version.mjs $WANT', commit, and move the tag."
             exit 1
           fi
           # Everything else is checked against that one file by the script.
-          bun scripts/version.mjs
+          bun app/scripts/version.mjs
 
       - name: Run tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib

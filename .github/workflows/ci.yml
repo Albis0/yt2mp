@@ -59,7 +59,7 @@ jobs:
       # forever or never offers one at all. Run with no argument, this reports
       # and exits non-zero when they disagree.
       - name: Versions agree across every file
-        run: bun scripts/version.mjs
+        run: bun app/scripts/version.mjs
 
       - name: Install frontend dependencies
         working-directory: app

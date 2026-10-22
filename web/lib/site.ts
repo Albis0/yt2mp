@@ -2,7 +2,7 @@
 // derived from it, so a release bump can never leave a filename pointing at a
 // build that no longer exists.
 //
-// `scripts/version.mjs` rewrites this single line and the matching fields in
+// `app/scripts/version.mjs` rewrites this single line and the matching fields in
 // app/package.json, app/src-tauri/Cargo.toml and web/package.json
 // together. Do not hand-edit one of them.
 export const VERSION = "0.8.1";
