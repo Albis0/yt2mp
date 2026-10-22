@@ -370,6 +370,25 @@ pub async fn tab_go<R: Runtime>(
     }
 }
 
+/// Cookies and the cache of every site, the way "clear browsing data" does it
+/// in a browser. Sites keep their other storage, and so does the app: its own
+/// settings and history live in local storage, which this leaves alone. Done
+/// from the app's own webview, which shares the tabs' profile.
+#[tauri::command]
+pub async fn clear_browsing_data<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let main = app.get_webview("main").ok_or("The window is gone.")?;
+        win::clear_data(&main);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("The built-in browser is Windows-only for now.".into())
+    }
+}
+
 /// The WebView2 side: events Tauri doesn't surface (same-document URL
 /// changes, history, favicons, keyboard shortcuts) and the memory hint for
 /// tabs in the background.
@@ -399,6 +418,25 @@ mod win {
                     "forward" => core.GoForward(),
                     _ => core.Stop(),
                 };
+            }
+        });
+    }
+
+    pub fn clear_data<R: Runtime>(webview: &Webview<R>) {
+        let _ = webview.with_webview(move |platform| unsafe {
+            let profile = platform
+                .controller()
+                .CoreWebView2()
+                .and_then(|c| c.cast::<ICoreWebView2_13>())
+                .and_then(|c| c.Profile())
+                .and_then(|p| p.cast::<ICoreWebView2Profile2>());
+            if let Ok(profile) = profile {
+                let kinds = COREWEBVIEW2_BROWSING_DATA_KINDS(
+                    COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES.0
+                        | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE.0,
+                );
+                let done = ClearBrowsingDataCompletedHandler::create(Box::new(|_| Ok(())));
+                let _ = profile.ClearBrowsingData(kinds, &done);
             }
         });
     }

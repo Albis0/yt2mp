@@ -85,6 +85,7 @@
     "allow-tab-show",
     "allow-tab-bounds",
     "allow-tab-navigate",
-    "allow-tab-go"
+    "allow-tab-go",
+    "allow-clear-browsing-data"
   ]
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-browsing-data"
+description = "Enables the clear_browsing_data command without any pre-configured scope."
+commands.allow = ["clear_browsing_data"]
+
+[[permission]]
+identifier = "deny-clear-browsing-data"
+description = "Denies the clear_browsing_data command without any pre-configured scope."
+commands.deny = ["clear_browsing_data"]

@@ -38,6 +38,7 @@ const COMMANDS: &[&str] = &[
     "tab_bounds",
     "tab_navigate",
     "tab_go",
+    "clear_browsing_data",
 ];
 
 fn main() {

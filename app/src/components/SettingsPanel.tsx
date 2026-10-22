@@ -897,11 +897,11 @@ export default function SettingsPanel({
 
                 <div className="prefs-field">
                   <div className="prefs-field-text">
-                    <span className="prefs-field-name">Clear browsing history</span>
+                    <span className="prefs-field-name">Clear browsing data</span>
                     <span className="prefs-field-hint">
                       {browsingCleared
                         ? "Cleared."
-                        : "Forgets the pages you visited and the suggestions made from them. Starred sites stay."}
+                        : "Forgets visited pages, cookies and the cache, which signs you out of sites. Also the fix when a site (TikTok, say) shows Access denied. Starred sites stay."}
                     </span>
                   </div>
                   <button

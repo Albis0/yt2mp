@@ -203,9 +203,10 @@ export function clearVisits() {
   saveVisits([]);
 }
 
-/// Pages visited and the icons kept for them. Starred sites are a choice,
-/// not a trace, so they stay.
+/// Pages visited, the icons kept for them, and every site's cookies and
+/// cache. Starred sites are a choice, not a trace, so they stay.
 export function clearBrowsingData() {
+  invoke("clear_browsing_data").catch(() => {});
   saveVisits([]);
   icons = {};
   try {

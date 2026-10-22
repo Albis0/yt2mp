@@ -1098,7 +1098,8 @@ pub fn run() {
             tabs::tab_show,
             tabs::tab_bounds,
             tabs::tab_navigate,
-            tabs::tab_go
+            tabs::tab_go,
+            tabs::clear_browsing_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running yt2mp");
