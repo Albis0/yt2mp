@@ -407,6 +407,41 @@ export default function Home() {
                                 ) : null}
                             </div>
                         </details>
+                        <details id="signing">
+                            <summary>Code signing policy</summary>
+                            <div className="detail-body">
+                                <p>
+                                    Windows installers are not code-signed yet. We are applying for free code signing for open source projects from{" "}
+                                    <a href="https://signpath.org/" target="_blank" rel="noreferrer">
+                                        SignPath Foundation
+                                    </a>
+                                    . Once it is approved, this section will say so, and every release will be signed with the foundation&apos;s certificate after a manual approval.
+                                </p>
+                                <p>
+                                    Roles: <a href="https://github.com/Albis0">Albis0</a> is the author, reviewer and approver of every release. Releases are built from the public source by GitHub
+                                    Actions, and only from that source. The app is free software under the GPL-3.0 and carries no proprietary components.
+                                </p>
+                            </div>
+                        </details>
+                        <details id="privacy">
+                            <summary>Privacy</summary>
+                            <div className="detail-body">
+                                <p>
+                                    yt2mp has no account, no analytics and no tracking. It sends nothing to us. It talks to other services only when you ask it to, and only with what that needs:
+                                </p>
+                                <ul className="detail-list">
+                                    <li>The link you paste goes to the site it belongs to, to fetch the file.</li>
+                                    <li>
+                                        AI search sends the words you typed to Groq, and the Spotify match check sends a song title, artist and length. Nothing else, and not when you use neither.
+                                    </li>
+                                    <li>The update check asks GitHub whether a newer version exists. Tool updates come from the tools&apos; own GitHub pages.</li>
+                                    <li>
+                                        If you let it use a browser session, the cookies stay on your computer and go only to the site they belong to.
+                                    </li>
+                                </ul>
+                                <p>Downloads, history and settings are stored on your computer and nowhere else. Removing the app removes them.</p>
+                            </div>
+                        </details>
                         <details>
                             <summary>Signing in to Instagram and TikTok</summary>
                             <div className="detail-body">
