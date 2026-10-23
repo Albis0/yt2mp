@@ -147,13 +147,15 @@ export async function handle(req: NextRequest, kind: Kind): Promise<NextResponse
     const text = short(input.text, 300);
     if (text) {
       body = {
-        model: "llama-3.1-8b-instant",
+        model: "openai/gpt-oss-20b",
         messages: [
           { role: "system", content: SEARCH_PROMPT },
           { role: "user", content: text },
         ],
         temperature: 0.2,
-        max_tokens: 60,
+        // The model reasons before it answers, and the reasoning counts here.
+        max_completion_tokens: 200,
+        reasoning_effort: "low",
       };
     }
   } else if (install) {
@@ -168,13 +170,14 @@ export async function handle(req: NextRequest, kind: Kind): Promise<NextResponse
     ) {
       const numbered = list.map((c, i) => `${i + 1}. ${c}`).join("\n");
       body = {
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         messages: [
           { role: "system", content: VERIFY_PROMPT },
           { role: "user", content: `Spotify track: ${track}\n\nYouTube Music results:\n${numbered}` },
         ],
         temperature: 0,
-        max_tokens: 20,
+        max_completion_tokens: 200,
+        reasoning_effort: "low",
         response_format: { type: "json_object" },
       };
     }

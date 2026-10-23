@@ -194,22 +194,17 @@ pub fn can_verify() -> bool {
     quota::own_key().is_some() || !server_down()
 }
 
-/// Sends the smallest possible request with a key, so a mistyped or revoked
-/// key is caught when it is saved and not on the next search.
+/// Asks Groq for its model list with the key, which costs nothing and fails
+/// the same way a search would, so a mistyped or revoked key is caught when it
+/// is saved and not on the next search.
 pub async fn check_key(key: &str) -> Result<(), String> {
-    let body = json!({
-        "model": "llama-3.1-8b-instant",
-        "messages": [{ "role": "user", "content": "hi" }],
-        "max_tokens": 1
-    });
     let client = reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
     let res = client
-        .post("https://api.groq.com/openai/v1/chat/completions")
+        .get("https://api.groq.com/openai/v1/models")
         .bearer_auth(key)
-        .json(&body)
         .send()
         .await
         .map_err(|_| "Could not reach Groq. Check your connection and try again.".to_string())?;
@@ -228,7 +223,7 @@ pub async fn check_key(key: &str) -> Result<(), String> {
 /// (web/lib/ai.ts) and the two are kept the same.
 async fn call_groq(input: &str) -> Result<String, String> {
     let body = json!({
-        "model": "llama-3.1-8b-instant",
+        "model": "openai/gpt-oss-20b",
         "messages": [
             {
                 "role": "system",
@@ -237,7 +232,9 @@ async fn call_groq(input: &str) -> Result<String, String> {
             { "role": "user", "content": input }
         ],
         "temperature": 0.2,
-        "max_tokens": 60
+        // The model reasons before it answers, and the reasoning counts here.
+        "max_completion_tokens": 200,
+        "reasoning_effort": "low"
     });
     metered(Use::Search, &body, "search", json!({ "text": input })).await
 }
@@ -349,7 +346,7 @@ pub async fn verify_match(track: &str, candidates: &[String]) -> Result<Verdict,
         .collect::<Vec<_>>()
         .join("\n");
     let body = json!({
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "messages": [
             {
                 "role": "system",
@@ -367,7 +364,8 @@ pub async fn verify_match(track: &str, candidates: &[String]) -> Result<Verdict,
             }
         ],
         "temperature": 0,
-        "max_tokens": 20,
+        "max_completion_tokens": 200,
+        "reasoning_effort": "low",
         "response_format": { "type": "json_object" }
     });
 
