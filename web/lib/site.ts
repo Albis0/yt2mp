@@ -5,7 +5,7 @@
 // `app/scripts/version.mjs` rewrites this single line and the matching fields in
 // app/package.json, app/src-tauri/Cargo.toml and web/package.json
 // together. Do not hand-edit one of them.
-export const VERSION = "0.8.1";
+export const VERSION = "0.8.2";
 
 export const REPO_URL = "https://github.com/Albis0/yt2mp";
 export const LICENSE_URL = "https://github.com/Albis0/yt2mp/blob/main/LICENSE";
