@@ -432,7 +432,7 @@ export default function Home() {
                                 <ul className="detail-list">
                                     <li>The link you paste goes to the site it belongs to, to fetch the file.</li>
                                     <li>
-                                        AI search sends the words you typed to Groq, and the Spotify match check sends a song title, artist and length. Nothing else, and not when you use neither.
+                                        AI search sends the words you typed, and the Spotify match check a song title, artist and length, to this site's server, which passes them to Groq and keeps no copy. Nothing else, and not when you use neither. With your own Groq key the app talks to Groq directly.
                                     </li>
                                     <li>The update check asks GitHub whether a newer version exists. Tool updates come from the tools&apos; own GitHub pages.</li>
                                     <li>

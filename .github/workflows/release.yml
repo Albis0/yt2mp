@@ -128,16 +128,6 @@ jobs:
             echo "yt-dlp \`$VERSION\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # GROQ_KEYS powers AI search. If the secret is unset, AI search falls
-      # back to searching the raw query and the build still succeeds.
-      # GROQ_VERIFY_KEYS is the separate set that checks Spotify matches. Unset,
-      # the line is empty and the check shares the AI search keys.
-      - name: Write .env
-        run: |
-          echo "GROQ_KEYS=${{ secrets.GROQ_KEYS }}" > .env
-          echo "GROQ_VERIFY_KEYS=${{ secrets.GROQ_VERIFY_KEYS }}" >> .env
-        shell: bash
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 

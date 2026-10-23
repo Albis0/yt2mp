@@ -122,31 +122,38 @@ bun run tauri:build   # → src-tauri/target/release/bundle/nsis/yt2mp_x.y.z_x64
 
 ## AI search setup (optional)
 
-AI search needs Groq API keys, which are **never committed to source**. Create
-`src-tauri/.env`:
+The shared Groq keys are **not in the app**. They live in the environment of the
+site's server (`web/lib/ai.ts`, deployed on Render), and the app asks the site
+(`/api/ai/search`, `/api/ai/verify`). In Render, under Environment, set:
 
 ```
 GROQ_KEYS=gsk_xxx,gsk_yyy,gsk_zzz
 GROQ_VERIFY_KEYS=gsk_aaa,gsk_bbb
 ```
 
-Comma-separated: if one key is rate-limited (429) or rejected (401), the app
-rotates to the next. `GROQ_VERIFY_KEYS` is a separate set used only to check
-Spotify matches, so a busy evening of playlist downloads cannot use up the AI
-search's limit; without it the check shares `GROQ_KEYS`. If `GROQ_KEYS` is
-missing or every key fails, AI search falls back to searching your raw text
-directly instead of breaking.
+Comma-separated: a key that is rate-limited (429) or rejected (401) hands over to
+the next. `GROQ_VERIFY_KEYS` is a separate set used only to check Spotify matches,
+so a busy evening of playlist downloads cannot use up the AI search's limit;
+without it the check shares `GROQ_KEYS`. Optional: `AI_PER_ADDRESS` (default 20
+requests a day per address) and `AI_DAILY_TOTAL` (default 2500 for the whole
+service). If no key is set, the site answers 503 and the app searches your raw
+text and matches Spotify on score alone instead of breaking. Nothing about the
+keys goes through GitHub or into a release.
 
-In a release build the same two lines are written into the bundle by
-`release.yml` from the repository secrets `GROQ_KEYS` and `GROQ_VERIFY_KEYS`.
+To try the server with a dev build, run the site locally (`cd web && bun run dev`
+with the keys in the environment) and start the app with
+`YT2MP_AI_URL=http://localhost:3000`.
 
 **Daily allowance.** Each install gets 5 AI searches and, counted apart, 5
-Spotify checks per rolling 24 hours (`src-tauri/src/quota.rs`; the counter is
-`ai.json` in the app's config folder). Past it, search uses the typed words as
-they are and Spotify matches on score alone, and the window shows a warning once.
-A person who saves their own Groq key in **Settings → AI** is not counted at all.
-The counter lives on the user's machine, so it keeps an honest install honest and
-does not stop a determined one.
+Spotify checks per rolling 24 hours. The server counts them (in memory, so a
+restart or redeploy resets them; the free instance has no disk), and the app keeps
+the same count in `ai.json` in its config folder (`src-tauri/src/quota.rs`) for
+Settings to show. Past the limit, search uses the typed words as they are and
+Spotify matches on score alone, and the window shows a warning once. A person who
+saves their own Groq key in **Settings → AI** is not counted at all: that key is
+used straight from their machine and never reaches the server. The per-install id
+is made by the app, so it could be faked; the per-address and whole-service caps
+are what protect the Groq account then.
 
 ## Finding videos on a page
 
@@ -233,7 +240,7 @@ walking away mid-transfer is a real scenario.
   Unix). Nothing is buffered in memory, however long the pause lasts.
 - `src-tauri/src/binaries.rs` — resolving the three bundled binaries in dev
   vs. packaged layouts.
-- `src-tauri/src/groq.rs` — AI search with key rotation and a 6s timeout.
+- `src-tauri/src/groq.rs` — AI search and the Spotify check: asks the site's AI server (own key: Groq directly), with a timeout and a cool-off when the server is down.
 
 ### Pause is only offered above 1 GB
 

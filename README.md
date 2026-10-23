@@ -51,9 +51,11 @@ maintainers. The app talks to other services only when you ask it to, and only w
 what the request needs:
 
 - The link you paste goes to the site it belongs to, to fetch the file.
-- **AI search** sends the words you typed to [Groq](https://groq.com), and the Spotify
-  match check sends a song title, artist and length. Nothing else, and nothing at all
-  if you use neither.
+- **AI search** sends the words you typed, and the Spotify match check a song title,
+  artist and length, to this project's server, which passes them to
+  [Groq](https://groq.com) and keeps no copy. Nothing else, and nothing at all if you
+  use neither. With your own Groq key (Settings → AI) the app talks to Groq directly
+  and the server never sees it.
 - The update check asks GitHub whether a newer version exists.
 - If you let it borrow a browser session (Instagram and TikTok need one for most
   posts), the cookies stay on your computer and go only to the site they belong to.

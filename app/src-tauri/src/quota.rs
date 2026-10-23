@@ -1,18 +1,19 @@
 //! The daily allowance for the AI features, and the person's own key.
 //!
-//! The keys that ship with the app are shared by everyone who installs it, and
-//! a free Groq account only has so many tokens a day, so each install gets a
-//! small allowance of its own: five AI searches and five Spotify checks per
-//! 24 hours. A rolling 24-hour window rather than a calendar day, so there is
-//! no time zone to get wrong and no midnight where everyone's counter resets
-//! at once.
+//! The shared keys live on the project's server (web/lib/ai.ts), which is the
+//! real limit: a free Groq account only has so many tokens a day, so each
+//! install gets five AI searches and five Spotify checks per 24 hours, counted
+//! there. This file keeps the same count on the machine, which is what Settings
+//! shows and what saves a request that is bound to be refused. A rolling
+//! 24-hour window rather than a calendar day, so there is no time zone to get
+//! wrong and no midnight where everyone's counter resets at once.
 //!
 //! Someone who adds their own Groq key in Settings is not counted at all: the
 //! cost is theirs, so the limit is too.
 //!
-//! The counter lives in a file on this machine, so it can be edited. It keeps
-//! an honest install honest and does not stop a determined one; a real limit
-//! would need the keys to live on a server.
+//! The file can be edited, which changes what this side shows and nothing the
+//! server will allow. It also holds the install's id, which is how the server
+//! tells installs apart.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -33,6 +34,9 @@ pub enum Use {
 #[serde(default)]
 struct State {
     own_key: Option<String>,
+    /// Random, made on first use. Not a person's identity: it only lets the
+    /// server count one install's requests together.
+    install: String,
     window_start: u64,
     search_used: u32,
     verify_used: u32,
@@ -70,6 +74,7 @@ pub struct Usage {
 
 static STATE: Mutex<State> = Mutex::new(State {
     own_key: None,
+    install: String::new(),
     window_start: 0,
     search_used: 0,
     verify_used: 0,
@@ -158,6 +163,37 @@ pub fn refund(kind: Use) {
     save(&s);
 }
 
+/// The server said this use is spent although the count here was lower (the
+/// file was edited, or another install on the same address used it up). Brings
+/// the count in line; true the first time in a window, the moment to say so.
+pub fn exhaust(kind: Use) -> bool {
+    let mut s = STATE.lock().unwrap();
+    let first = exhaust_at(&mut s, kind, now());
+    save(&s);
+    first
+}
+
+fn exhaust_at(s: &mut State, kind: Use, now: u64) -> bool {
+    roll(s, now);
+    let (used, told) = match kind {
+        Use::Search => (&mut s.search_used, &mut s.told_search),
+        Use::Verify => (&mut s.verify_used, &mut s.told_verify),
+    };
+    *used = DAILY_LIMIT;
+    let first = !*told;
+    *told = true;
+    first
+}
+
+pub fn install_id() -> String {
+    let mut s = STATE.lock().unwrap();
+    if s.install.is_empty() {
+        s.install = uuid::Uuid::new_v4().to_string();
+        save(&s);
+    }
+    s.install.clone()
+}
+
 pub fn own_key() -> Option<String> {
     STATE.lock().unwrap().own_key.clone()
 }
@@ -225,6 +261,22 @@ mod tests {
             reserve_at(&mut s, Use::Search, 1002),
             Access::Spent { first: false }
         );
+    }
+
+    #[test]
+    fn exhausting_one_use_leaves_the_other_and_tells_once() {
+        let mut s = State::default();
+        let _ = reserve_at(&mut s, Use::Search, 1000);
+        s.search_used = DAILY_LIMIT;
+        assert_eq!(
+            reserve_at(&mut s, Use::Search, 1001),
+            Access::Spent { first: true }
+        );
+        assert_eq!(
+            reserve_at(&mut s, Use::Search, 1002),
+            Access::Spent { first: false }
+        );
+        assert_eq!(reserve_at(&mut s, Use::Verify, 1003), Access::Shared);
     }
 
     #[test]

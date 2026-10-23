@@ -1,26 +1,19 @@
-//! AI search: turns a free-text request into a clean YouTube search query.
+//! AI search and the Spotify match check, on Groq.
 //!
-//! Keys come from GROQ_KEYS (comma-separated) at runtime, never hardcoded —
-//! GitHub's push protection blocks commits containing real Groq keys even
-//! base64-encoded, and a checked-in key is a checked-in key regardless of how
-//! it is wrapped. The key file is read from the resource directory in a
-//! packaged app, or the crate directory in dev.
+//! The shared keys are not in this app. A request without a key of the
+//! person's own goes to the project's server (web/lib/ai.ts), which holds the
+//! keys, counts the allowance, and answers. A key of their own goes straight
+//! to Groq, from this machine, and is not counted.
+//!
+//! The server's address is the site's; YT2MP_AI_URL points a dev build at a
+//! local copy of it.
 
 use crate::quota::{self, Access, Use};
 use serde_json::json;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 use tauri::Emitter;
-
-static KEYS: OnceLock<Vec<String>> = OnceLock::new();
-static CURSOR: AtomicUsize = AtomicUsize::new(0);
-
-/// A second set, used only to check Spotify matches. Kept apart so a busy
-/// evening of playlist downloads cannot use up the AI search's rate limit,
-/// and the other way round.
-static VERIFY_KEYS: OnceLock<Vec<String>> = OnceLock::new();
-static VERIFY_CURSOR: AtomicUsize = AtomicUsize::new(0);
 
 /// The person's own key has no rotation to do, but `complete` wants a cursor.
 static OWN_CURSOR: AtomicUsize = AtomicUsize::new(0);
@@ -46,23 +39,99 @@ fn notice(kind: Use) {
     }
 }
 
+/// Why the server gave no answer.
+enum Remote {
+    /// This install's allowance (or its address's) is spent.
+    Limit,
+    Failed(String),
+}
+
+/// When the server last failed to answer (unix seconds, 0 for never). A site
+/// that is asleep or down would otherwise cost every track of a playlist its
+/// own wait.
+static DOWN_SINCE: AtomicU64 = AtomicU64::new(0);
+const COOL_OFF: u64 = 120;
+/// A free instance that has gone to sleep takes a while to wake; past this the
+/// feature gives up and the app carries on without it.
+const SERVER_TIMEOUT: Duration = Duration::from_secs(8);
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn server_down() -> bool {
+    let since = DOWN_SINCE.load(Ordering::Relaxed);
+    since != 0 && now().saturating_sub(since) < COOL_OFF
+}
+
+async fn ask_server(path: &str, mut payload: serde_json::Value) -> Result<String, Remote> {
+    let base =
+        std::env::var("YT2MP_AI_URL").unwrap_or_else(|_| "https://yt2mp.onrender.com".into());
+    payload["install"] = json!(quota::install_id());
+    let failed = |why: String| {
+        DOWN_SINCE.store(now(), Ordering::Relaxed);
+        Remote::Failed(why)
+    };
+    let client = reqwest::Client::builder()
+        .timeout(SERVER_TIMEOUT)
+        .build()
+        .map_err(|e| Remote::Failed(e.to_string()))?;
+    let res = client
+        .post(format!("{}/api/ai/{path}", base.trim_end_matches('/')))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| failed(e.to_string()))?;
+    match res.status().as_u16() {
+        200..=299 => {
+            let value: serde_json::Value = res.json().await.map_err(|e| failed(e.to_string()))?;
+            match value.get("text").and_then(|t| t.as_str()) {
+                Some(text) => {
+                    DOWN_SINCE.store(0, Ordering::Relaxed);
+                    Ok(text.to_string())
+                }
+                None => Err(failed("The AI server sent nothing back".into())),
+            }
+        }
+        429 => Err(Remote::Limit),
+        s => Err(failed(format!(
+            "The AI server answered with an error ({s})"
+        ))),
+    }
+}
+
 /// Runs one request under the allowance: the person's own key if they have
-/// one, otherwise the shared keys with a use set aside. `Err("limit")` means
-/// the allowance is spent and nothing was sent.
+/// one, otherwise the server with a use set aside. `Err("limit")` means the
+/// allowance is spent and nothing was sent.
 async fn metered(
     kind: Use,
-    shared: &[String],
-    cursor: &AtomicUsize,
-    body: &serde_json::Value,
+    direct: &serde_json::Value,
+    path: &str,
+    payload: serde_json::Value,
 ) -> Result<String, String> {
     match quota::reserve(kind) {
-        Access::Own(key) => complete(&[key], &OWN_CURSOR, body).await,
+        Access::Own(key) => complete(&[key], &OWN_CURSOR, direct).await,
         Access::Shared => {
-            let answer = complete(shared, cursor, body).await;
-            if answer.is_err() {
+            if server_down() {
                 quota::refund(kind);
+                return Err("The AI server is not answering".into());
             }
-            answer
+            match ask_server(path, payload).await {
+                Ok(text) => Ok(text),
+                Err(Remote::Limit) => {
+                    if quota::exhaust(kind) {
+                        notice(kind);
+                    }
+                    Err("limit".into())
+                }
+                Err(Remote::Failed(why)) => {
+                    quota::refund(kind);
+                    Err(why)
+                }
+            }
         }
         Access::Spent { first } => {
             if first {
@@ -78,12 +147,16 @@ async fn metered(
 /// instead of falling back to the raw query.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(6);
 
-/// Reads `GROQ_KEYS=a,b,c` out of a .env file. Missing file just means AI
-/// search falls back to searching the raw text.
+/// Reads the optional `YT2MP_COOKIES_FROM` browser-cookie setting that
+/// ytdlp.rs uses (Instagram in particular needs it) out of a .env file, and
+/// promotes it to the environment. Keeping `.env` the one place a person
+/// configures the app avoids a second mechanism. Groq keys are not read from
+/// it: the shared ones live on the server.
 pub fn init(resource_dir: Option<std::path::PathBuf>, config_dir: Option<std::path::PathBuf>) {
+    if std::env::var("YT2MP_COOKIES_FROM").is_ok() {
+        return;
+    }
     let mut candidates = Vec::new();
-    // The one place on an installed machine a person can put their own keys:
-    // the release does not ship any, and must not.
     if let Some(dir) = config_dir {
         candidates.push(dir.join(".env"));
     }
@@ -91,94 +164,34 @@ pub fn init(resource_dir: Option<std::path::PathBuf>, config_dir: Option<std::pa
         candidates.push(dir.join(".env"));
         candidates.push(dir.join("resources").join(".env"));
     }
-    candidates.push(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"),
-    );
+    candidates.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".env"));
     candidates.push(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join(".env.local"),
     );
 
-    let mut keys = Vec::new();
-    let mut verify = Vec::new();
-
-    // An explicit environment variable wins over any file, which keeps CI and
-    // `cargo run` overrides simple.
-    if let Ok(raw) = std::env::var("GROQ_KEYS") {
-        keys = split_keys(&raw);
-    }
-    if let Ok(raw) = std::env::var("GROQ_VERIFY_KEYS") {
-        verify = split_keys(&raw);
-    }
-
     for path in &candidates {
         let Ok(content) = std::fs::read_to_string(path) else {
             continue;
         };
-
-        if keys.is_empty() {
-            if let Some(raw) = content
-                .lines()
-                .find_map(|l| l.trim().strip_prefix("GROQ_KEYS="))
-            {
-                keys = split_keys(raw);
-            }
-        }
-        if verify.is_empty() {
-            if let Some(raw) = content
-                .lines()
-                .find_map(|l| l.trim().strip_prefix("GROQ_VERIFY_KEYS="))
-            {
-                verify = split_keys(raw);
-            }
-        }
-
-        // The same file also carries the optional browser-cookie setting that
-        // ytdlp.rs reads (Instagram in particular needs it). Promoting it to
-        // the environment here keeps .env as the single place a user
-        // configures the app, rather than adding a second mechanism.
-        if std::env::var("YT2MP_COOKIES_FROM").is_err() {
-            if let Some(raw) = content
-                .lines()
-                .find_map(|l| l.trim().strip_prefix("YT2MP_COOKIES_FROM="))
-            {
-                let value = raw.trim().trim_matches('"');
-                if !value.is_empty() {
-                    std::env::set_var("YT2MP_COOKIES_FROM", value);
-                }
+        if let Some(raw) = content
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("YT2MP_COOKIES_FROM="))
+        {
+            let value = raw.trim().trim_matches('"');
+            if !value.is_empty() {
+                std::env::set_var("YT2MP_COOKIES_FROM", value);
+                return;
             }
         }
     }
-
-    let _ = KEYS.set(keys);
-    let _ = VERIFY_KEYS.set(verify);
 }
 
-fn split_keys(raw: &str) -> Vec<String> {
-    raw.trim()
-        .trim_matches('"')
-        .split(',')
-        .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty())
-        .collect()
-}
-
-fn keys() -> &'static [String] {
-    KEYS.get().map(|v| v.as_slice()).unwrap_or(&[])
-}
-
-/// The Spotify check's own keys, or the AI search's until it has some.
-fn verify_keys() -> &'static [String] {
-    match VERIFY_KEYS.get().map(|v| v.as_slice()) {
-        Some(own) if !own.is_empty() => own,
-        _ => keys(),
-    }
-}
-
-/// Whether Spotify matches can be checked by the model at all.
+/// Whether Spotify matches are worth sending to the model: not while the
+/// server is known to be down, which would put a wait on every track.
 pub fn can_verify() -> bool {
-    quota::own_key().is_some() || !verify_keys().is_empty()
+    quota::own_key().is_some() || !server_down()
 }
 
 /// Sends the smallest possible request with a key, so a mistyped or revoked
@@ -205,10 +218,14 @@ pub async fn check_key(key: &str) -> Result<(), String> {
         401 | 403 => Err("Groq rejected that key. Check that you copied all of it.".into()),
         // A valid key that is simply busy is still a valid key.
         429 => Ok(()),
-        s => Err(format!("Groq answered with an error ({s}). Try again in a moment.")),
+        s => Err(format!(
+            "Groq answered with an error ({s}). Try again in a moment."
+        )),
     }
 }
 
+/// The prompts below are the person's-own-key copies; the server has its own
+/// (web/lib/ai.ts) and the two are kept the same.
 async fn call_groq(input: &str) -> Result<String, String> {
     let body = json!({
         "model": "llama-3.1-8b-instant",
@@ -222,7 +239,7 @@ async fn call_groq(input: &str) -> Result<String, String> {
         "temperature": 0.2,
         "max_tokens": 60
     });
-    metered(Use::Search, keys(), &CURSOR, &body).await
+    metered(Use::Search, &body, "search", json!({ "text": input })).await
 }
 
 /// Sends one chat request, rotating through `keys` until one answers.
@@ -232,7 +249,7 @@ async fn complete(
     body: &serde_json::Value,
 ) -> Result<String, String> {
     if keys.is_empty() {
-        return Err("No Groq keys configured".into());
+        return Err("No Groq key".into());
     }
 
     let client = reqwest::Client::builder()
@@ -354,7 +371,13 @@ pub async fn verify_match(track: &str, candidates: &[String]) -> Result<Verdict,
         "response_format": { "type": "json_object" }
     });
 
-    let text = metered(Use::Verify, verify_keys(), &VERIFY_CURSOR, &body).await?;
+    let text = metered(
+        Use::Verify,
+        &body,
+        "verify",
+        json!({ "track": track, "candidates": candidates }),
+    )
+    .await?;
     parse_verdict(&text, candidates.len())
 }
 
@@ -363,7 +386,10 @@ fn parse_verdict(text: &str, count: usize) -> Result<Verdict, String> {
         serde_json::from_str(text.trim()).map_err(|e| format!("Unreadable verdict: {e}"))?;
     match value.get("match") {
         Some(serde_json::Value::Null) | None => Ok(Verdict::NoneMatch),
-        Some(v) => match v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())) {
+        Some(v) => match v
+            .as_u64()
+            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        {
             Some(n) if n >= 1 && (n as usize) <= count => Ok(Verdict::Same(n as usize - 1)),
             _ => Err(format!("Verdict out of range: {text}")),
         },
@@ -378,7 +404,10 @@ mod tests {
     fn verdicts_are_read_and_bounded() {
         assert_eq!(parse_verdict(r#"{"match": 2}"#, 5), Ok(Verdict::Same(1)));
         assert_eq!(parse_verdict(r#"{"match": "1"}"#, 5), Ok(Verdict::Same(0)));
-        assert_eq!(parse_verdict(r#"{"match": null}"#, 5), Ok(Verdict::NoneMatch));
+        assert_eq!(
+            parse_verdict(r#"{"match": null}"#, 5),
+            Ok(Verdict::NoneMatch)
+        );
         assert!(parse_verdict(r#"{"match": 9}"#, 5).is_err());
         assert!(parse_verdict("not json", 5).is_err());
     }
