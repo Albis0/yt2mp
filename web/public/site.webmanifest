@@ -1,7 +1,7 @@
 {
     "name": "yt2mp — YouTube to MP3/MP4 Downloader",
     "short_name": "yt2mp",
-    "description": "Free, open-source Windows app that downloads YouTube videos as MP3 or MP4. Runs locally — no server, no account, no ads.",
+    "description": "Free, open-source app for Windows and Linux that downloads YouTube, Spotify, TikTok, Instagram, X and Twitch as MP3 or MP4. No account, no ads.",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",

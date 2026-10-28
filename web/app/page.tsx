@@ -18,7 +18,7 @@ const jsonLd = {
             softwareRequirements: "Windows 10/11 (x64) or a Linux x64 distribution",
             ...(INSTALLER_SIZE ? {fileSize: INSTALLER_SIZE} : {}),
             inLanguage: "en",
-            description: "Free, open-source desktop app that downloads video and audio from YouTube, Spotify, TikTok, Instagram, X and Twitch as MP3 or MP4, and converts files to 34 formats. Runs locally with no server, no account and no ads.",
+            description: "Free, open-source desktop app that downloads video and audio from YouTube, Spotify, TikTok, Instagram, X and Twitch as MP3 or MP4, and converts files to 34 formats. Runs on your own PC with no account and no ads.",
             url: SITE_URL,
             downloadUrl: GITHUB_URL,
             installUrl: GITHUB_URL,
@@ -28,6 +28,13 @@ const jsonLd = {
             isAccessibleForFree: true,
             offers: {"@type": "Offer", price: "0", priceCurrency: "USD"},
             author: {"@type": "Person", name: "Albis0", url: REPO_URL},
+            sameAs: [REPO_URL],
+        },
+        {
+            "@type": "WebSite",
+            name: "yt2mp",
+            alternateName: ["yt2mp downloader", "yt2mp YouTube to MP3"],
+            url: SITE_URL,
         },
         {
             "@type": "FAQPage",
@@ -45,7 +52,7 @@ const jsonLd = {
                     name: "Does yt2mp work offline or send my data anywhere?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "Downloads and conversions run entirely on your own machine and talk only to the site you are downloading from. There is no server component. The optional AI search feature is the one exception: it sends your search text to an AI service to turn it into a search query.",
+                        text: "Downloads and conversions run entirely on your own machine and talk only to the site you are downloading from. The optional AI features are the one exception: AI search sends the words you typed, and the Spotify match check a song title, artist and length, to the yt2mp server, which passes them to Groq and keeps no copy. With your own Groq key the app talks to Groq directly.",
                     },
                 },
                 {
