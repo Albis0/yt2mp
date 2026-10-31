@@ -162,6 +162,14 @@ pub struct QualityOption {
     /// no size for the streams involved (live streams, some DASH manifests).
     #[serde(rename = "estimatedBytes")]
     pub estimated_bytes: Option<u64>,
+    /// The same file as H.264 and as AV1, when YouTube offers the height in
+    /// that codec. The two differ by up to 2x on smooth footage, which is why
+    /// the card lets the person pick; `estimated_bytes` is the H.264 figure
+    /// (the download default), or whatever the site has when there is none.
+    #[serde(rename = "h264Bytes")]
+    pub h264_bytes: Option<u64>,
+    #[serde(rename = "av1Bytes")]
+    pub av1_bytes: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -542,22 +550,58 @@ fn best_audio_size(formats: &[serde_json::Value]) -> Option<u64> {
         .max()
 }
 
-/// Builds a size estimate per available height. For each height the largest
-/// video stream is taken (yt-dlp's selector prefers the best one), then the
-/// best audio stream is added since a merged MP4 carries both.
+/// Largest m4a stream: the audio half a merged MP4 really takes, since the
+/// selector asks for `bestaudio[ext=m4a]`. The overall largest (opus) is
+/// bigger and would overstate every video row.
+fn best_m4a_size(formats: &[serde_json::Value]) -> Option<u64> {
+    formats
+        .iter()
+        .filter(|f| is_audio_stream(f) && !is_video_stream(f))
+        .filter(|f| f.get("ext").and_then(|e| e.as_str()) == Some("m4a"))
+        .filter_map(format_size)
+        .max()
+        .or_else(|| best_audio_size(formats))
+}
+
+fn height_of(f: &serde_json::Value) -> Option<u32> {
+    f.get("height").and_then(|h| h.as_u64()).map(|h| h as u32)
+}
+
+/// Builds a size estimate per available height, for the file the download
+/// will actually produce. YouTube keeps every height in several codecs and the
+/// selector takes one of them, so each codec is sized on its own: the largest
+/// video-only stream of that codec at that height, plus the m4a audio. A
+/// pre-muxed stream already contains audio, so those sites are sized as
+/// before, from the largest stream, without adding audio on top.
 fn build_qualities(formats: &[serde_json::Value]) -> Vec<QualityOption> {
     let heights = extract_available_heights(formats);
-    let audio = best_audio_size(formats);
+    let audio = best_m4a_size(formats);
 
     heights
         .into_iter()
         .map(|height| {
+            let at_height = |f: &&serde_json::Value| height_of(f) == Some(height);
+            let codec_size = |prefix: &str| {
+                formats
+                    .iter()
+                    .filter(|f| is_video_stream(f) && !is_audio_stream(f))
+                    .filter(at_height)
+                    .filter(|f| {
+                        f.get("vcodec")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|v| v.starts_with(prefix))
+                    })
+                    .filter_map(format_size)
+                    .max()
+                    .map(|v| v + audio.unwrap_or(0))
+            };
+            let h264 = codec_size("avc1");
+            let av1 = codec_size("av01");
+
             let video = formats
                 .iter()
                 .filter(|f| is_video_stream(f))
-                .filter(|f| {
-                    f.get("height").and_then(|h| h.as_u64()).map(|h| h as u32) == Some(height)
-                })
+                .filter(at_height)
                 .filter_map(format_size)
                 .max();
 
@@ -565,13 +609,11 @@ fn build_qualities(formats: &[serde_json::Value]) -> Vec<QualityOption> {
             // stream on top would double-count. Those only exist at or below
             // 360p, where the threshold never triggers anyway, but the
             // estimate should still be honest.
-            let premuxed = formats.iter().any(|f| {
-                is_video_stream(f)
-                    && is_audio_stream(f)
-                    && f.get("height").and_then(|h| h.as_u64()).map(|h| h as u32) == Some(height)
-            });
+            let premuxed = formats
+                .iter()
+                .any(|f| is_video_stream(f) && is_audio_stream(f) && height_of(f) == Some(height));
 
-            let estimated_bytes = match (video, audio) {
+            let any = match (video, audio) {
                 (Some(v), Some(a)) if !premuxed => Some(v + a),
                 (Some(v), _) => Some(v),
                 _ => None,
@@ -579,7 +621,9 @@ fn build_qualities(formats: &[serde_json::Value]) -> Vec<QualityOption> {
 
             QualityOption {
                 height,
-                estimated_bytes,
+                estimated_bytes: h264.or(av1).or(any),
+                h264_bytes: h264,
+                av1_bytes: av1,
             }
         })
         .collect()
@@ -809,6 +853,51 @@ pub fn build_video_format_selector(quality: Option<u32>) -> String {
     )
 }
 
+/// Which video codec an MP4 download should take when YouTube offers both.
+///
+/// H.264 plays on everything, so it is the default. AV1 is the same picture
+/// in up to half the bytes, but older PCs stutter on it and Windows needs an
+/// extra add-on to open it at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Codec {
+    #[default]
+    H264,
+    Av1,
+}
+
+impl Codec {
+    /// What the UI sends; anything unknown is the safe default.
+    pub fn parse(name: Option<&str>) -> Self {
+        match name {
+            Some("av1") => Codec::Av1,
+            _ => Codec::H264,
+        }
+    }
+
+    fn filter(self) -> &'static str {
+        match self {
+            Codec::H264 => "[vcodec^=avc1]",
+            Codec::Av1 => "[vcodec^=av01]",
+        }
+    }
+}
+
+/// The chain above with the chosen codec tried first. The height is exact, not
+/// a cap: H.264 stops at 1080p, so a cap would hand a "1440p" button a 1080p
+/// file. Where the codec is missing at that height the chain below takes over
+/// and picks as it always did. Plain HTTPS only: the HLS copies of a height
+/// (YouTube's "Premium" streams) carry no usable size.
+fn codec_selector(quality: Option<u32>, codec: Codec) -> String {
+    let chain = build_video_format_selector(quality);
+    match quality {
+        Some(h) => format!(
+            "bestvideo[height={h}]{}[protocol=https]+bestaudio[ext=m4a]/{chain}",
+            codec.filter()
+        ),
+        None => chain,
+    }
+}
+
 /// Matches yt-dlp's `--newline` progress format, e.g.
 /// `[download]  34.5% of   29.01MiB at   20.51MiB/s ETA 00:00`
 fn parse_progress_percent(line: &str) -> Option<f64> {
@@ -952,6 +1041,7 @@ pub async fn download_to_path<F>(
     url: &str,
     format: &str,
     quality: Option<u32>,
+    codec: Codec,
     dest: &PathBuf,
     platform: crate::platform::Platform,
     control: tokio::sync::watch::Receiver<Control>,
@@ -964,7 +1054,7 @@ where
     let tag = work_tag();
     let work = dest.with_file_name(format!("{tag}.{ext}"));
 
-    let result = download_ladder(url, format, quality, &work, platform, control, on_progress).await;
+    let result = download_ladder(url, format, quality, codec, &work, platform, control, on_progress).await;
 
     let result = result.and_then(|()| {
         std::fs::rename(&work, dest)
@@ -1003,10 +1093,12 @@ fn clear_attempt(work: &std::path::Path) {
 
 /// The retry ladder behind [`download_to_path`], writing to `dest` directly.
 /// `dest` is always a working name from [`work_tag`], never the user's file.
+#[allow(clippy::too_many_arguments)]
 async fn download_ladder<F>(
     url: &str,
     format: &str,
     quality: Option<u32>,
+    codec: Codec,
     dest: &PathBuf,
     platform: crate::platform::Platform,
     control: tokio::sync::watch::Receiver<Control>,
@@ -1018,7 +1110,7 @@ where
     let selectors: Vec<String> = if format == "mp3" {
         AUDIO_FALLBACKS.iter().map(|s| s.to_string()).collect()
     } else {
-        video_format_fallbacks(quality)
+        video_format_fallbacks(quality, codec)
     };
 
     // Set when the media has to come from a fallback server (see
@@ -1127,12 +1219,12 @@ impl Drop for Rerouted {
 /// Video selectors to try in turn. Same reasoning as `AUDIO_FALLBACKS`: the
 /// first prefers mp4/m4a, the second takes whatever other container exists,
 /// the third gives up on quality to get *something*.
-fn video_format_fallbacks(quality: Option<u32>) -> Vec<String> {
+fn video_format_fallbacks(quality: Option<u32>, codec: Codec) -> Vec<String> {
     let cap = quality
         .map(|h| format!("[height<={h}]"))
         .unwrap_or_default();
     vec![
-        build_video_format_selector(quality),
+        codec_selector(quality, codec),
         format!("bestvideo{cap}[ext=webm]+bestaudio[ext=webm]/bestvideo{cap}+bestaudio"),
         format!("best{cap}/best"),
     ]
@@ -1418,6 +1510,55 @@ mod tests {
         assert!(err.contains("photos"), "{err}");
     }
 
+    /// Each codec button has to deliver the codec it sized: the file inside is
+    /// that codec, and its bytes land within a few percent of the figure the
+    /// card showed. This is the check behind "2.4 GB shown, 980 MB arrived".
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture codec_choice
+    /// ```
+    #[tokio::test]
+    #[ignore = "hits the network"]
+    async fn codec_choice_delivers_the_codec_it_sizes() {
+        assert!(crate::binaries::use_bundled_for_tests());
+        let yt = crate::platform::Platform::YouTube;
+        let url = "https://www.youtube.com/watch?v=dPI-mRFEIH0";
+        let info = get_video_info(url, yt).await.expect("the video looks up");
+        let q = info
+            .qualities
+            .iter()
+            .find(|q| q.height == 480)
+            .expect("480p is offered");
+        let dir = std::env::temp_dir().join(format!("yt2mp-codec-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        for (codec, shown, banner) in [
+            (Codec::H264, q.h264_bytes, "Video: h264"),
+            (Codec::Av1, q.av1_bytes, "Video: av1"),
+        ] {
+            let shown = shown.expect("both codecs exist at 480p") as f64;
+            let dest = dir.join(format!("{codec:?}.mp4"));
+            let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
+            download_to_path(url, "mp4", Some(480), codec, &dest, yt, rx, |_, _, _| {})
+                .await
+                .unwrap_or_else(|e| panic!("{codec:?} failed: {e}"));
+            let size = std::fs::metadata(&dest).unwrap().len() as f64;
+            let probe = std::process::Command::new(crate::binaries::ffmpeg_path())
+                .arg("-i")
+                .arg(&dest)
+                .output()
+                .unwrap();
+            let text = String::from_utf8_lossy(&probe.stderr);
+            println!("{codec:?}: card {shown:.0} bytes, file {size:.0} bytes");
+            assert!(text.contains(banner), "{codec:?}: wrong codec inside:\n{text}");
+            assert!(
+                (size - shown).abs() / shown < 0.05,
+                "{codec:?}: card said {shown}, file is {size}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     #[ignore = "hits the network"]
     async fn youtube_download_delivers_a_file() {
@@ -1445,6 +1586,7 @@ mod tests {
                 url,
                 format,
                 quality,
+                Codec::default(),
                 &dest,
                 crate::platform::Platform::YouTube,
                 rx,
@@ -1489,6 +1631,7 @@ mod tests {
             "https://www.youtube.com/watch?v=aaaaaaaaaaa",
             "mp3",
             None,
+            Codec::default(),
             &kept,
             crate::platform::Platform::YouTube,
             rx,
@@ -1661,6 +1804,69 @@ mod tests {
         assert!(build_video_format_selector(None).ends_with("/best"));
     }
 
+    /// The codec pick is an exact height, tried first, and the old chain
+    /// stays behind it. A cap here would turn a "1440p" press into 1080p
+    /// H.264, because H.264 has nothing above 1080p.
+    #[test]
+    fn codec_selector_pins_the_height_and_keeps_the_chain() {
+        let h264 = codec_selector(Some(1440), Codec::H264);
+        assert!(h264.starts_with("bestvideo[height=1440][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a]/"));
+        assert!(h264.ends_with(&build_video_format_selector(Some(1440))));
+        let av1 = codec_selector(Some(1080), Codec::Av1);
+        assert!(av1.starts_with("bestvideo[height=1080][vcodec^=av01]"));
+        // No height asked for: nothing to pin, so the chain alone.
+        assert_eq!(codec_selector(None, Codec::Av1), build_video_format_selector(None));
+    }
+
+    #[test]
+    fn codec_names_from_the_ui() {
+        assert_eq!(Codec::parse(Some("av1")), Codec::Av1);
+        assert_eq!(Codec::parse(Some("h264")), Codec::H264);
+        assert_eq!(Codec::parse(None), Codec::H264);
+        assert_eq!(Codec::parse(Some("anything")), Codec::H264);
+    }
+
+    /// One height in three codecs, as YouTube serves it. Each codec is sized
+    /// from its own video stream plus the m4a audio (not the larger opus), and
+    /// the card's headline figure is the H.264 one.
+    #[test]
+    fn sizes_are_per_codec_with_the_m4a_audio() {
+        let v = |id: &str, vcodec: &str, ext: &str, size: u64| {
+            serde_json::json!({"format_id": id, "vcodec": vcodec, "acodec": "none",
+                "ext": ext, "height": 1080, "filesize": size})
+        };
+        let a = |id: &str, ext: &str, size: u64| {
+            serde_json::json!({"format_id": id, "vcodec": "none", "acodec": "mp4a.40.2",
+                "ext": ext, "filesize": size})
+        };
+        let formats = vec![
+            v("299", "avc1.64002a", "mp4", 3_000),
+            v("303", "vp9", "webm", 2_300),
+            v("399", "av01.0.09M.08", "mp4", 2_400),
+            a("140", "m4a", 80),
+            a("251", "webm", 130),
+        ];
+        let q = &build_qualities(&formats)[0];
+        assert_eq!(q.h264_bytes, Some(3_080));
+        assert_eq!(q.av1_bytes, Some(2_480));
+        assert_eq!(q.estimated_bytes, Some(3_080));
+    }
+
+    /// 1440p has no H.264: the headline falls to AV1, which is what the
+    /// download takes there, and there is nothing to choose between.
+    #[test]
+    fn a_height_without_h264_is_sized_as_av1() {
+        let formats = vec![
+            serde_json::json!({"vcodec": "av01.0.12M.08", "acodec": "none", "ext": "mp4",
+                "height": 1440, "filesize": 6_000u64}),
+            serde_json::json!({"vcodec": "none", "acodec": "mp4a.40.2", "ext": "m4a",
+                "filesize": 80u64}),
+        ];
+        let q = &build_qualities(&formats)[0];
+        assert_eq!(q.h264_bytes, None);
+        assert_eq!(q.estimated_bytes, Some(6_080));
+    }
+
     #[test]
     fn video_selector_without_quality_has_no_height_cap() {
         let sel = build_video_format_selector(None);
@@ -1781,7 +1987,7 @@ mod tests {
         for s in AUDIO_FALLBACKS {
             assert!(seen.insert(s), "duplicate audio selector: {s}");
         }
-        let video = video_format_fallbacks(Some(1080));
+        let video = video_format_fallbacks(Some(1080), Codec::H264);
         let mut seen_v = std::collections::HashSet::new();
         for s in &video {
             assert!(seen_v.insert(s.clone()), "duplicate video selector: {s}");
@@ -1801,7 +2007,7 @@ mod tests {
     /// except the deliberate last-resort one.
     #[test]
     fn video_fallbacks_keep_the_quality_cap() {
-        let v = video_format_fallbacks(Some(720));
+        let v = video_format_fallbacks(Some(720), Codec::H264);
         assert!(v[0].contains("height<=720"));
         assert!(v[1].contains("height<=720"));
     }

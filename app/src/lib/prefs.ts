@@ -3,6 +3,7 @@
 // folder, the login source, the AI key) lives in its own settings instead.
 
 import type { TabId } from "@/components/SourceRail";
+import type { DownloadCodec } from "@/lib/api";
 
 export type SearchEngine = "google" | "duckduckgo" | "bing";
 
@@ -21,6 +22,8 @@ export interface Prefs {
   searchEngine: SearchEngine;
   /** Show the recent pages under the shortcuts on a new tab. */
   startHistory: boolean;
+  /** The picture format MP4 downloads take when YouTube offers both. */
+  videoCodec: DownloadCodec;
 }
 
 const DEFAULTS: Prefs = {
@@ -31,6 +34,7 @@ const DEFAULTS: Prefs = {
   checkOnLaunch: true,
   searchEngine: "google",
   startHistory: true,
+  videoCodec: "h264",
 };
 
 const KEY = "yt2mp.prefs.v1";

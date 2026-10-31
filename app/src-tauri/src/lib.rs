@@ -678,6 +678,7 @@ async fn start_download(
     url: String,
     format: String,
     quality: Option<u32>,
+    codec: Option<String>,
     title: String,
     into_dir: Option<String>,
 ) -> Result<String, String> {
@@ -739,6 +740,7 @@ async fn start_download(
         &url,
         &format,
         quality,
+        ytdlp::Codec::parse(codec.as_deref()),
         &dest,
         detected,
         rx,

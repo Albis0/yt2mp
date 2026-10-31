@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { formatDuration, PLATFORM_LABELS, type DownloadFormat, type VideoInfo } from "@/lib/api";
+import {
+  formatDuration,
+  PLATFORM_LABELS,
+  type DownloadCodec,
+  type DownloadFormat,
+  type VideoInfo,
+} from "@/lib/api";
+import { loadPrefs, savePrefs } from "@/lib/prefs";
 import type { ActiveDownload } from "@/App";
 import DownloadRow, { type RowState } from "@/components/DownloadRow";
 
 interface ResultCardProps {
   info: VideoInfo;
   downloads: Record<string, ActiveDownload>;
-  onDownload: (format: DownloadFormat, quality?: number) => void;
+  onDownload: (format: DownloadFormat, quality?: number, codec?: DownloadCodec) => void;
   onStop: (key: string) => void;
 }
 
@@ -35,13 +42,22 @@ function resolutionTag(height: number): string | null {
 
 export default function ResultCard({ info, downloads, onDownload, onStop }: ResultCardProps) {
   const [playing, setPlaying] = useState(false);
+  const [codec, setCodec] = useState<DownloadCodec>(() => loadPrefs().videoCodec);
   const topQualities = info.qualities.slice(0, 4);
+  // Only worth asking when some row really differs between the two.
+  const hasCodecChoice = topQualities.some((q) => q.h264Bytes != null && q.av1Bytes != null);
+  const pickCodec = (next: DownloadCodec) => {
+    setCodec(next);
+    savePrefs({ videoCodec: next });
+  };
   const canEmbed = info.canEmbed;
   const platformLabel = PLATFORM_LABELS[info.platform];
 
   const mp3Key = "mp3-auto";
   const videoRows =
-    topQualities.length > 0 ? topQualities : [{ height: 0, estimatedBytes: null }];
+    topQualities.length > 0
+      ? topQualities
+      : [{ height: 0, estimatedBytes: null, h264Bytes: null, av1Bytes: null }];
   // A YouTube Music song has no video worth saving: its picture is the cover
   // on a loop. Spotify results are audio only.
   const audioOnly = info.platform === "spotify";
@@ -107,7 +123,40 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
             />
           </div>
 
-          {audioOnly ? null : <div className="format-group-label">Video</div>}
+          {audioOnly ? null : (
+            <div className="format-group-label format-group-split">
+              <span>Video</span>
+              {hasCodecChoice ? (
+                <div className="seg seg-small" role="radiogroup" aria-label="Video format">
+                  {(
+                    [
+                      ["h264", "H.264", "Plays on every device"],
+                      ["av1", "AV1", "Smaller file; older PCs may stutter or need an add-on"],
+                    ] as const
+                  ).map(([id, label, hint]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="radio"
+                      aria-checked={codec === id}
+                      className={`seg-btn${codec === id ? " is-on" : ""}`}
+                      title={hint}
+                      onClick={() => pickCodec(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+          {hasCodecChoice && !audioOnly ? (
+            <p className="codec-hint">
+              {codec === "h264"
+                ? "H.264 plays on every device."
+                : "AV1 is smaller, but older PCs may stutter and Windows may need an add-on to open it."}
+            </p>
+          ) : null}
           <div className="dllist">
             {(audioOnly ? [] : videoRows).map((q) => {
               const h = q.height || undefined;
@@ -118,9 +167,9 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
                   key={key}
                   label={h ? `${h}p` : "Best"}
                   tags={res ? ["MP4", res] : ["MP4"]}
-                  size={q.estimatedBytes}
+                  size={codec === "av1" ? (q.av1Bytes ?? q.estimatedBytes) : q.estimatedBytes}
                   state={rowStateOf(downloads[key])}
-                  onStart={() => onDownload("mp4", h)}
+                  onStart={() => onDownload("mp4", h, codec)}
                   onCancel={() => onStop(key)}
                 />
               );

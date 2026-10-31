@@ -7,10 +7,18 @@ import { listen } from "@tauri-apps/api/event";
 
 export type DownloadFormat = "mp3" | "mp4";
 
+/** The picture format inside an MP4: H.264 plays everywhere, AV1 is smaller. */
+export type DownloadCodec = "h264" | "av1";
+
 export interface QualityOption {
   height: number;
-  /** Estimated size of the final merged file, or null if yt-dlp reported none. */
+  /** Estimated size of the final merged file, or null if yt-dlp reported none.
+   *  This is the H.264 figure where there is one: the download's default. */
   estimatedBytes: number | null;
+  /** The same file as H.264 / as AV1; null where YouTube has no such stream
+   *  at this height. Only a height with both has a choice to make. */
+  h264Bytes: number | null;
+  av1Bytes: number | null;
 }
 
 /** Sites the UI has specific handling for. "other" is anything else yt-dlp
@@ -101,6 +109,8 @@ export interface StartDownloadArgs {
   url: string;
   format: DownloadFormat;
   quality?: number;
+  /** MP4 only; left out, it is H.264. */
+  codec?: DownloadCodec;
   title: string;
   /**
    * Save straight into this folder instead of opening the save dialog. Set
@@ -126,6 +136,7 @@ export function startDownload(args: StartDownloadArgs): Promise<string> {
     url: args.url,
     format: args.format,
     quality: args.quality ?? null,
+    codec: args.codec ?? null,
     title: args.title,
     intoDir: args.intoDir ?? null,
   });

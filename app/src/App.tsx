@@ -6,6 +6,7 @@ import {
   revealFile,
   startDownload,
   stopDownload,
+  type DownloadCodec,
   type DownloadFormat,
   type DownloadProgress,
   type Mode,
@@ -411,7 +412,7 @@ export default function App() {
     }
   }
 
-  async function beginDownload(format: DownloadFormat, quality?: number) {
+  async function beginDownload(format: DownloadFormat, quality?: number, codec?: DownloadCodec) {
     if (!info) return;
     const key = `${format}-${quality ?? "auto"}`;
     const id = crypto.randomUUID();
@@ -451,6 +452,7 @@ export default function App() {
         url: videoUrl,
         format,
         quality,
+        codec,
         title: info.title,
       });
       setDownloads((d) => ({ ...d, [key]: { ...d[key], done: true, filePath } }));

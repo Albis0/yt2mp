@@ -1886,6 +1886,26 @@ button {
   padding: 14px 0 6px;
 }
 
+/* "Video" with the codec switch at the far end of the same line. */
+.format-group-split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.seg-small .seg-btn {
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.codec-hint {
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  color: var(--text-3);
+}
+
 /* The row itself is the target — a full-width hit area reads as a
    list you pick from, which is what it is. */
 .format-btn {
