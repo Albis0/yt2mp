@@ -46,6 +46,11 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
   const topQualities = info.qualities.slice(0, 4);
   // Only worth asking when some row really differs between the two.
   const hasCodecChoice = topQualities.some((q) => q.h264Bytes != null && q.av1Bytes != null);
+  // Heights YouTube serves only as AV1 (1440p and up for H.264) download as
+  // AV1 whatever is picked, so they say so.
+  const noH264 = topQualities.some((q) => q.h264Bytes == null && q.av1Bytes != null);
+  const isAv1 = (q: (typeof topQualities)[number]) =>
+    hasCodecChoice && q.av1Bytes != null && (codec === "av1" || q.h264Bytes == null);
   const pickCodec = (next: DownloadCodec) => {
     setCodec(next);
     savePrefs({ videoCodec: next });
@@ -153,7 +158,7 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
           {hasCodecChoice && !audioOnly ? (
             <p className="codec-hint">
               {codec === "h264"
-                ? "H.264 plays on every device."
+                ? `H.264 plays on every device.${noH264 ? " Higher resolutions only come as AV1." : ""}`
                 : "AV1 is smaller, but older PCs may stutter and Windows may need an add-on to open it."}
             </p>
           ) : null}
@@ -166,7 +171,7 @@ export default function ResultCard({ info, downloads, onDownload, onStop }: Resu
                 <DownloadRow
                   key={key}
                   label={h ? `${h}p` : "Best"}
-                  tags={res ? ["MP4", res] : ["MP4"]}
+                  tags={["MP4", ...(res ? [res] : []), ...(isAv1(q) ? ["AV1"] : [])]}
                   size={codec === "av1" ? (q.av1Bytes ?? q.estimatedBytes) : q.estimatedBytes}
                   state={rowStateOf(downloads[key])}
                   onStart={() => onDownload("mp4", h, codec)}

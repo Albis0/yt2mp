@@ -887,15 +887,17 @@ impl Codec {
 /// file. Where the codec is missing at that height the chain below takes over
 /// and picks as it always did. Plain HTTPS only: the HLS copies of a height
 /// (YouTube's "Premium" streams) carry no usable size.
+///
+/// With no height asked for (a playlist, a "Best" row) it is the best stream
+/// of that codec, which for H.264 means up to 1080p: those downloads favour a
+/// file that plays over the last step of resolution.
 fn codec_selector(quality: Option<u32>, codec: Codec) -> String {
     let chain = build_video_format_selector(quality);
-    match quality {
-        Some(h) => format!(
-            "bestvideo[height={h}]{}[protocol=https]+bestaudio[ext=m4a]/{chain}",
-            codec.filter()
-        ),
-        None => chain,
-    }
+    let height = quality.map(|h| format!("[height={h}]")).unwrap_or_default();
+    format!(
+        "bestvideo{height}{}[protocol=https]+bestaudio[ext=m4a]/{chain}",
+        codec.filter()
+    )
 }
 
 /// Matches yt-dlp's `--newline` progress format, e.g.
@@ -1524,38 +1526,54 @@ mod tests {
         let yt = crate::platform::Platform::YouTube;
         let url = "https://www.youtube.com/watch?v=dPI-mRFEIH0";
         let info = get_video_info(url, yt).await.expect("the video looks up");
-        let q = info
-            .qualities
-            .iter()
-            .find(|q| q.height == 480)
-            .expect("480p is offered");
         let dir = std::env::temp_dir().join(format!("yt2mp-codec-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&dir).unwrap();
-
-        for (codec, shown, banner) in [
-            (Codec::H264, q.h264_bytes, "Video: h264"),
-            (Codec::Av1, q.av1_bytes, "Video: av1"),
-        ] {
-            let shown = shown.expect("both codecs exist at 480p") as f64;
-            let dest = dir.join(format!("{codec:?}.mp4"));
-            let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
-            download_to_path(url, "mp4", Some(480), codec, &dest, yt, rx, |_, _, _| {})
-                .await
-                .unwrap_or_else(|e| panic!("{codec:?} failed: {e}"));
-            let size = std::fs::metadata(&dest).unwrap().len() as f64;
+        let codec_inside = |path: &std::path::Path| {
             let probe = std::process::Command::new(crate::binaries::ffmpeg_path())
                 .arg("-i")
-                .arg(&dest)
+                .arg(path)
                 .output()
                 .unwrap();
-            let text = String::from_utf8_lossy(&probe.stderr);
-            println!("{codec:?}: card {shown:.0} bytes, file {size:.0} bytes");
-            assert!(text.contains(banner), "{codec:?}: wrong codec inside:\n{text}");
-            assert!(
-                (size - shown).abs() / shown < 0.05,
-                "{codec:?}: card said {shown}, file is {size}"
-            );
+            String::from_utf8_lossy(&probe.stderr).into_owned()
+        };
+
+        // 1080p is the height where YouTube also lists its HLS "Premium"
+        // copy, which the old selector took and which had no usable size.
+        for height in [480, 1080] {
+            let q = info
+                .qualities
+                .iter()
+                .find(|q| q.height == height)
+                .expect("the height is offered");
+            for (codec, shown, banner) in [
+                (Codec::H264, q.h264_bytes, "Video: h264"),
+                (Codec::Av1, q.av1_bytes, "Video: av1"),
+            ] {
+                let shown = shown.expect("both codecs exist at this height") as f64;
+                let dest = dir.join(format!("{codec:?}-{height}.mp4"));
+                let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
+                download_to_path(url, "mp4", Some(height), codec, &dest, yt, rx, |_, _, _| {})
+                    .await
+                    .unwrap_or_else(|e| panic!("{codec:?} {height}p failed: {e}"));
+                let size = std::fs::metadata(&dest).unwrap().len() as f64;
+                println!("{height}p {codec:?}: card {shown:.0} bytes, file {size:.0} bytes");
+                let text = codec_inside(&dest);
+                assert!(text.contains(banner), "{codec:?} {height}p: wrong codec inside:\n{text}");
+                assert!(
+                    (size - shown).abs() / shown < 0.05,
+                    "{codec:?} {height}p: card said {shown}, file is {size}"
+                );
+                let _ = std::fs::remove_file(&dest);
+            }
         }
+
+        // No height asked for (what a playlist sends) still lands on H.264.
+        let dest = dir.join("best.mp4");
+        let (_tx, rx) = tokio::sync::watch::channel(Control::Run);
+        download_to_path(url, "mp4", None, Codec::default(), &dest, yt, rx, |_, _, _| {})
+            .await
+            .expect("an unconstrained download works");
+        assert!(codec_inside(&dest).contains("Video: h264"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1814,8 +1832,12 @@ mod tests {
         assert!(h264.ends_with(&build_video_format_selector(Some(1440))));
         let av1 = codec_selector(Some(1080), Codec::Av1);
         assert!(av1.starts_with("bestvideo[height=1080][vcodec^=av01]"));
-        // No height asked for: nothing to pin, so the chain alone.
-        assert_eq!(codec_selector(None, Codec::Av1), build_video_format_selector(None));
+        // No height asked for (playlists, "Best"): the codec alone, still
+        // ahead of the chain, so those downloads play everywhere too.
+        let any = codec_selector(None, Codec::H264);
+        assert!(any.starts_with("bestvideo[vcodec^=avc1][protocol=https]+bestaudio[ext=m4a]/"));
+        assert!(any.ends_with(&build_video_format_selector(None)));
+        assert!(!any.contains("height"));
     }
 
     #[test]
