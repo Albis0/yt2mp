@@ -158,6 +158,87 @@ img {
   font-size: 14px;
 }
 
+/* ---------- Download split ---------- */
+
+.dl {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding-right: 14px;
+  gap: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: #0a0a0b;
+  transition: background-color 260ms ease, padding 420ms cubic-bezier(0.2, 0.8, 0.2, 1), gap 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dl-main {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 8px 0 26px;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 260ms ease, padding 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dl-os {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  transition: width 420ms cubic-bezier(0.2, 0.8, 0.2, 1), height 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    margin 420ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 260ms ease, transform 120ms ease-out;
+}
+
+.dl.open {
+  gap: 10px;
+  padding-right: 0;
+  background: transparent;
+}
+
+.dl.open .dl-main {
+  padding: 0 26px;
+  background: var(--text);
+}
+
+.dl.open .dl-os {
+  width: 48px;
+  height: 48px;
+  margin-left: 0;
+  background: var(--text);
+}
+
+.dl.open .dl-os:hover,
+.dl.open .dl-main:hover {
+  background: #fff;
+}
+
+.dl.open .dl-os:active {
+  transform: scale(0.94);
+}
+
+.dl-os-inline {
+  display: inline-grid;
+  place-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dl,
+  .dl-main,
+  .dl-os {
+    transition-duration: 1ms;
+    transition-delay: 0ms !important;
+  }
+}
+
 /* ---------- Navigation ---------- */
 
 .nav {

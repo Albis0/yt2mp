@@ -1,6 +1,7 @@
 import Image from "next/image";
 import CopyCommand from "@/components/CopyCommand";
 import Reveal from "@/components/Reveal";
+import DownloadSplit from "@/components/DownloadSplit";
 import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME, ANDROID_URL, APK_NAME, APK_REPO_URL} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
@@ -221,9 +222,14 @@ export default function Home() {
                     </h1>
                     <p className="hero-dek">Download from YouTube, Spotify, TikTok, Instagram, X and Twitch, then convert to 34 formats. Free, on your own PC.</p>
                     <div className="hero-actions">
-                        <a className="btn btn-solid" href="#download">
-                            Download
-                        </a>
+                        <DownloadSplit
+                            fallbackHref="#download"
+                            targets={[
+                                {name: "Windows", href: GITHUB_URL, icon: <WindowsIcon />},
+                                {name: "Linux", href: LINUX_URL, icon: <LinuxIcon />},
+                                {name: "Android", href: ANDROID_URL, icon: <AndroidIcon />},
+                            ]}
+                        />
                         <a className="btn btn-quiet" href={REPO_URL} target="_blank" rel="noreferrer">
                             <GitHubIcon />
                             Source on GitHub
