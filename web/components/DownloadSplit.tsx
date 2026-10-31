@@ -56,6 +56,7 @@ export default function DownloadSplit({targets, fallbackHref}: {targets: Target[
                 <a
                     key={t.name}
                     className="dl-os"
+                    data-os={t.name.toLowerCase()}
                     href={t.href}
                     title={t.name}
                     aria-label={`Download for ${t.name}`}

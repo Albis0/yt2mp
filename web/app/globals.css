@@ -195,7 +195,7 @@ img {
   background: transparent;
   color: inherit;
   transition: width 420ms cubic-bezier(0.2, 0.8, 0.2, 1), height 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    margin 420ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 260ms ease, transform 120ms ease-out;
+    margin 420ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 200ms ease, color 200ms ease, transform 120ms ease-out;
 }
 
 .dl.open {
@@ -223,6 +223,22 @@ img {
 
 .dl.open .dl-os:active {
   transform: scale(0.94);
+}
+
+/* Each platform lights up in its own colour. */
+.dl.open .dl-os[data-os="windows"]:hover {
+  background: #0a84ff;
+  color: #fff;
+}
+
+.dl.open .dl-os[data-os="linux"]:hover {
+  background: #fcc624;
+  color: #1a1400;
+}
+
+.dl.open .dl-os[data-os="android"]:hover {
+  background: #3ddc84;
+  color: #04210f;
 }
 
 .dl-os-inline {
