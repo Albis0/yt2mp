@@ -212,9 +212,9 @@ afterwards.
 
 Conversions share the download path's registry and progress channel, so Stop
 works identically. There is no Pause: a local conversion is CPU-bound and
-finishes in seconds to a couple of minutes, which is not long enough for a
-control anyone would reach for — unlike a multi-gigabyte download, where
-walking away mid-transfer is a real scenario.
+finishes in seconds to a couple of minutes, and the app has no Pause for
+downloads either: Stop ends the transfer and the same row starts it again
+with one click.
 
 ## How it works
 
@@ -222,44 +222,55 @@ walking away mid-transfer is a real scenario.
   ffmpeg, parsing its `-progress` output, and turning ffmpeg's errors into
   something worth showing. No network is involved anywhere in this path.
 - `src-tauri/src/lib.rs` — the IPC commands the UI calls (`fetch_info`,
-  `start_download`, `pause_download`, `resume_download`, `stop_download`,
-  `reveal_file`), plus filename sanitising and the in-flight download registry.
+  `start_download`, `stop_download`, `reveal_file`), plus filename sanitising and
+  the in-flight download registry.
 - `src-tauri/src/platform.rs` — which site a URL belongs to and what that
   implies (embed or not, search or not, login-prone or not), plus turning
   yt-dlp's CLI-shaped errors into messages a user can act on. Notably, an
   extractor breaking against a site change is reported as such rather than as
   "check your link", which would send the user chasing a non-problem.
 - `src-tauri/src/ytdlp.rs` — argument building, process spawning, progress
-  parsing. The MP4 format-selector chain is carried over verbatim from the
-  Electron build: it walks past mp4-only and m4a-only selectors before
-  settling for the pre-muxed fallback, because a selector locked to
+  parsing, and the size estimates. The MP4 format-selector chain is carried
+  over from the Electron build: it walks past mp4-only and m4a-only selectors
+  before settling for the pre-muxed fallback, because a selector locked to
   `[ext=mp4]` skips every VP9/AV1 DASH stream and silently delivers 360p while
-  the UI claims 2160p. That bug shipped once; the test suite guards it now.
-- `src-tauri/src/suspend.rs` — pause/resume, implemented by suspending the
-  yt-dlp process at the OS level (thread suspension on Windows, SIGSTOP on
-  Unix). Nothing is buffered in memory, however long the pause lasts.
+  the UI claims 2160p. That bug shipped once; the test suite guards it now. The
+  chosen codec (see below) is tried first, ahead of that chain.
 - `src-tauri/src/binaries.rs` — resolving the three bundled binaries in dev
   vs. packaged layouts.
 - `src-tauri/src/groq.rs` — AI search and the Spotify check: asks the site's AI server (own key: Groq directly), with a timeout and a cool-off when the server is down.
 
-### Pause is only offered above 1 GB
+### Sizes, and H.264 or AV1
 
-The Electron build offered pause on every download, implemented by holding
-incoming bytes in the main process's memory while keeping the HTTP connection
-alive — which grew memory without bound the longer a download sat paused.
+YouTube stores every resolution above 360p as separate video-only streams, one
+per codec, plus separate audio: 1080p exists as H.264 (avc1), VP9 and AV1, and
+they differ a lot. On smooth footage AV1 is about half of H.264; on busy game
+footage they are within 10%. Reading yt-dlp's list naively and taking the
+largest stream per height, the card used to promise the H.264 size while the
+download took AV1 (yt-dlp ranks AV1 first among mp4 streams). A 1080p row said
+2.4 GB and a 980 MB file arrived, and AV1 in an mp4 will not open on a PC
+without the AV1 add-on.
 
-Here pause suspends the yt-dlp process instead, so nothing accumulates. It is
-shown only when the estimated file size is at least 1 GB
-(`PAUSE_THRESHOLD_BYTES` in `src/lib/api.ts`): on a three-minute MP3 that
-finishes in seconds the controls are noise, and on a multi-gigabyte 4K
-download walking away mid-transfer is a real scenario. Size estimates come
-from yt-dlp's own `filesize`/`filesize_approx`, summed across the video and
-audio streams that will be merged.
+Now the codec is a choice, and the card and the download agree:
 
-**Known limit:** YouTube's CDN can time out a stalled connection on its own. A
-pause of a few minutes resumes cleanly; one left for an hour may fail on
-resume, at which point the download reports an error and the user restarts it.
-That is inherent to pausing a live transfer.
+- `build_qualities` sizes each height per codec: the largest video-only stream
+  of that codec, plus the m4a audio the selector really takes (not the larger
+  opus). `h264Bytes` and `av1Bytes` go to the UI; `estimatedBytes` is the H.264
+  figure, or AV1 where a height has no H.264 (1440p and up), or the old
+  largest-stream sum for sites that have no such split.
+- `codec_selector` puts `bestvideo[height=N][vcodec^=avc1][protocol=https]+bestaudio[ext=m4a]`
+  (or `av01`) ahead of the chain. The height is exact, not a cap: H.264 stops
+  at 1080p, so a cap would give a "1440p" button a 1080p file. Plain HTTPS
+  only: the HLS "Premium" copies of a height carry no usable size. Without a
+  height (playlists, a "Best" row) the codec alone is used, so those play
+  everywhere too, at up to 1080p when it is H.264.
+- The result card shows the H.264 / AV1 switch only when some row has both,
+  remembers the choice (`videoCodec` in the window's preferences), and tags a row
+  "AV1" when that is what it will download.
+
+`codec_choice_delivers_the_codec_it_sizes` (`--ignored`, live) downloads 480p
+and 1080p in both codecs and checks the codec inside the file and that its size
+is within 5% of what the card showed (measured within 0.3%).
 
 ## Tests
 
@@ -267,14 +278,14 @@ That is inherent to pausing a live transfer.
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 
-91 tests covering URL validation, playlist detection, filename sanitising,
-progress-line parsing, the format-selector chain, browser detection, the MP3
+146 tests covering URL validation, playlist detection, filename sanitising,
+progress-line parsing, the format-selector chain, per-codec size estimates, browser detection, the MP3
 converter, and the page scanner's link harvesting. Two of them drive the
 bundled ffmpeg end to end — they build a fixture, convert it, and check the
 result is real audio — and skip themselves with a note when the binaries have
 not been fetched yet.
 
-Two further tests go out to the live internet and are `#[ignore]`d, so CI never
+A few further tests go out to the live internet and are `#[ignore]`d, so CI never
 fails because a site was slow or a page changed:
 
 ```bash

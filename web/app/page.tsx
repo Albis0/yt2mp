@@ -65,6 +65,14 @@ const jsonLd = {
                 },
                 {
                     "@type": "Question",
+                    name: "Should I download YouTube video as H.264 or AV1?",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "H.264 is the default because it plays on every phone, TV and PC. AV1 holds the same picture in up to half the bytes, but older computers can stutter on it and Windows may need an extra add-on to open it. yt2mp shows a switch above the quality list, and the size on each row follows the choice, so the number you see is the file you get. Resolutions above 1080p only exist as AV1 on YouTube.",
+                    },
+                },
+                {
+                    "@type": "Question",
                     name: "What can yt2mp convert?",
                     acceptedAnswer: {
                         "@type": "Answer",
@@ -249,7 +257,7 @@ export default function Home() {
                     </Reveal>
                     <Reveal delay={120}>
                         <p className="band-dek">
-                            Each site has its own tab, so you always know what the app is about to do. Every quality shows its exact size before you pick one, so a 4K download never surprises you.
+                            Each site has its own tab, so you always know what the app is about to do. Every quality shows the size of the file you will actually get, and a switch picks H.264, which plays everywhere, or AV1, which is smaller, so a big download never surprises you.
                         </p>
                     </Reveal>
                 </section>

@@ -13,7 +13,11 @@ no ads, no upload limits.
 
 - **Download.** Paste a video, a playlist, a Spotify song, album or playlist (matched
   on YouTube Music), a TikTok, a reel, a post or a Twitch VOD. Pick MP3 or a video
-  quality and go.
+  quality and go. Every quality shows the size of the file you will actually get.
+- **H.264 or AV1.** YouTube keeps each resolution in several video formats. H.264 is
+  the default: it plays on every device. AV1 is the same picture in up to half the
+  bytes, but older PCs stutter on it and Windows may need an add-on to open it. A
+  switch above the quality list picks one, and the sizes follow the switch.
 - **Convert.** Drop any video, song or picture and turn it into one of 34 formats.
   Trim, resize, change the codec, mute, normalise the volume. Everything is done
   locally with the bundled ffmpeg.
