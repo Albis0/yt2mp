@@ -27,6 +27,12 @@ const RELEASE_DOWNLOAD = `${REPO_URL}/releases/latest/download`;
 export const GITHUB_URL = `${RELEASE_DOWNLOAD}/${INSTALLER_NAME}`;
 export const LINUX_URL = `${RELEASE_DOWNLOAD}/${APPIMAGE_NAME}`;
 
+// The Android app lives in its own repo and is versioned on its own.
+export const APK_REPO_URL = "https://github.com/Albis0/yt2mp-APK";
+export const APK_VERSION = "2.0.0";
+export const APK_NAME = `yt2mp-${APK_VERSION}.apk`;
+export const ANDROID_URL = `${APK_REPO_URL}/releases/latest/download/${APK_NAME}`;
+
 // Mirror: Google Drive. Kept here but NOT linked from the page.
 //
 // This file id still serves the old 0.4.1 Electron installer. A mirror handing

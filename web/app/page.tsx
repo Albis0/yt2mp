@@ -1,7 +1,7 @@
 import Image from "next/image";
 import CopyCommand from "@/components/CopyCommand";
 import Reveal from "@/components/Reveal";
-import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME} from "@/lib/site";
+import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME, ANDROID_URL, APK_NAME, APK_REPO_URL} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
 // rich result, plus an FAQPage built from the questions the page already
@@ -84,7 +84,7 @@ const jsonLd = {
                     name: "Which operating systems does yt2mp support?",
                     acceptedAnswer: {
                         "@type": "Answer",
-                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, and on Linux x64 as a portable AppImage. yt-dlp and ffmpeg are included, so there is nothing to install separately and nothing to download the first time you open it.",
+                        text: "yt2mp runs on Windows 10 and Windows 11 (x64) as an installer, on Linux x64 as a portable AppImage, and on Android 10 and up as an APK. yt-dlp and ffmpeg are included, so there is nothing to install separately and nothing to download the first time you open it.",
                     },
                 },
             ],
@@ -99,6 +99,14 @@ function LinuxIcon() {
                 fill="currentColor"
                 d="M12.005 0C9.27 0 8.165 2.527 8.165 4.5c0 1.34.34 2.06.34 3.4 0 .9-.74 1.62-1.49 2.85-.86 1.4-1.83 3.02-1.83 5.02 0 .77.2 1.45.2 2.05 0 .67-.5 1.07-.95 1.6-.5.6-.98 1.2-.98 2.06 0 1.18 1.07 1.74 2.4 2.02 1.2.25 2.6.5 3.86.5h4.55c1.27 0 2.66-.25 3.86-.5 1.33-.28 2.4-.84 2.4-2.02 0-.86-.48-1.46-.98-2.06-.45-.53-.95-.93-.95-1.6 0-.6.2-1.28.2-2.05 0-2-.97-3.62-1.83-5.02-.75-1.23-1.49-1.95-1.49-2.85 0-1.34.34-2.06.34-3.4C15.845 2.527 14.74 0 12.005 0z"
             />
+        </svg>
+    );
+}
+
+function AndroidIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
+            <path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z" />
         </svg>
     );
 }
@@ -395,6 +403,19 @@ export default function Home() {
                                 <CopyCommand command={`chmod +x ${APPIMAGE_NAME}`} />
                                 <CopyCommand command={`./${APPIMAGE_NAME}`} />
                             </div>
+                        </Reveal>
+                        <Reveal delay={160} className="get-card">
+                            <div className="get-head">
+                                <AndroidIcon />
+                                <h3 className="get-title">Android</h3>
+                            </div>
+                            <p className="get-text">The same app on your phone: every tab, the converter, history and settings. Download it, open the file, and allow installs from your browser when Android asks.</p>
+                            <a className="btn btn-outline" href={ANDROID_URL}>
+                                Download the APK
+                            </a>
+                            <p className="get-meta">
+                                {APK_NAME}. Android 10 and up. <a href={APK_REPO_URL}>Source</a>.
+                            </p>
                         </Reveal>
                     </div>
                     <p className="get-foot">
