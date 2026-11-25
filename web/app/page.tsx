@@ -2,7 +2,7 @@ import Image from "next/image";
 import CopyCommand from "@/components/CopyCommand";
 import Reveal from "@/components/Reveal";
 import DownloadSplit from "@/components/DownloadSplit";
-import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME, ANDROID_URL, APK_NAME, APK_REPO_URL} from "@/lib/site";
+import {GITHUB_URL, LINUX_URL, REPO_URL, LICENSE_URL, ISSUES_URL, SITE_URL, VERSION, INSTALLER_NAME, INSTALLER_SHA256, INSTALLER_SIZE, APPIMAGE_NAME, ANDROID_URL, APK_NAME} from "@/lib/site";
 
 // Structured data: a SoftwareApplication node so the download surfaces as a
 // rich result, plus an FAQPage built from the questions the page already
@@ -417,7 +417,7 @@ export default function Home() {
                                 Download the APK
                             </a>
                             <p className="get-meta">
-                                {APK_NAME}. Android 10 and up. <a href={APK_REPO_URL}>Source</a>.
+                                {APK_NAME}. Android 10 and up.
                             </p>
                         </Reveal>
                     </div>

@@ -27,11 +27,14 @@ const RELEASE_DOWNLOAD = `${REPO_URL}/releases/latest/download`;
 export const GITHUB_URL = `${RELEASE_DOWNLOAD}/${INSTALLER_NAME}`;
 export const LINUX_URL = `${RELEASE_DOWNLOAD}/${APPIMAGE_NAME}`;
 
-// The Android app lives in its own repo and is versioned on its own.
-export const APK_REPO_URL = "https://github.com/Albis0/yt2mp-APK";
+// The Android app is built in its own private repo and versioned on its own.
+// Visitors cannot read a private repo's releases, so each APK is also published
+// here, on this public repo, under an `android-v*` tag. That tag must not start
+// with `v` (it would trigger release.yml) and the release is created with
+// --latest=false so `releases/latest` stays the desktop build the updater reads.
 export const APK_VERSION = "2.0.0";
 export const APK_NAME = `yt2mp-${APK_VERSION}.apk`;
-export const ANDROID_URL = `${APK_REPO_URL}/releases/latest/download/${APK_NAME}`;
+export const ANDROID_URL = `${REPO_URL}/releases/download/android-v${APK_VERSION}/${APK_NAME}`;
 
 // Mirror: Google Drive. Kept here but NOT linked from the page.
 //
